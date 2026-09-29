@@ -39,7 +39,12 @@ if [ ! -d "$MODELS_DIR" ] && { [ "${RIVER_PAYLOAD_NONE:-0}" = 1 ] || [ "${MODEL_
 	exit 0
 fi
 
-if ! "$HERE/models-fetch.sh" --check; then
+if [ "${RIVER_MODELS_IN_PAYLOAD:-0}" = 1 ]; then
+	# build/local-iso.sh found a FINISHED model payload of this very lock (an incremental pack
+	# consumed the plaintext cache): every file was checked against the lock when it was
+	# packed, and local-iso checks the payload again before the image uses it.
+	echo "50-models-manifest: the model set is in a finished payload of $LOCK; not re-checking $MODELS_DIR"
+elif ! "$HERE/models-fetch.sh" --check; then
 	echo "50-models-manifest: $MODELS_DIR does not match $LOCK." >&2
 	echo "  Fill it first: MODELS_DIR=$MODELS_DIR build/models-fetch.sh" >&2
 	# An empty or partial manifest is a silent failure: firstboot's `sha256sum -c` on an

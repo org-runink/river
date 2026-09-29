@@ -42,6 +42,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -206,6 +207,12 @@ type Manifest struct {
 	Files      int
 	Bytes      int64
 	Parts      []Part
+	// Incomplete marks the journal of an incremental pack still in progress (Append): it
+	// records the lock rows packed so far (Packed) and the parts written for them, every chunk
+	// sealed as not-last. ParseManifest refuses such a MANIFEST with ErrIncomplete, so check,
+	// unpack and a build's reuse test never accept a partial payload.
+	Incomplete bool
+	Packed     []string
 }
 
 // Part is one ciphertext file.
@@ -219,19 +226,44 @@ type Part struct {
 func (m *Manifest) Marshal() []byte {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s\n", m.format().header())
+	if m.Incomplete {
+		fmt.Fprintf(&b, "incomplete\n")
+	}
 	fmt.Fprintf(&b, "kdf pbkdf2-sha256 %d %s\n", m.Iterations, hex.EncodeToString(m.Salt))
 	fmt.Fprintf(&b, "aead aes-256-gcm %d %s\n", m.ChunkSize, hex.EncodeToString(m.Prefix))
 	fmt.Fprintf(&b, "compression zstd\n")
 	fmt.Fprintf(&b, "lock-sha256 %s\n", m.LockSHA256)
 	fmt.Fprintf(&b, "content %d %d\n", m.Files, m.Bytes)
+	if m.Incomplete {
+		for _, d := range m.Packed {
+			fmt.Fprintf(&b, "packed %s\n", d)
+		}
+	}
 	for _, p := range m.Parts {
 		fmt.Fprintf(&b, "part %s %d %s\n", p.Name, p.Size, p.SHA256)
 	}
 	return b.Bytes()
 }
 
-// ParseManifest is the inverse of Marshal, and strict: unknown lines are an error.
+// ErrIncomplete means the MANIFEST is the journal of an incremental pack that has not
+// finished: the payload does not hold the whole lock yet and must not be used.
+var ErrIncomplete = errors.New("modelpack: the payload is INCOMPLETE (an incremental pack is still in progress; finish it with `pack --append`)")
+
+// ParseManifest is the inverse of Marshal, and strict: unknown lines are an error, and so is
+// the journal of an unfinished incremental pack (ErrIncomplete).
 func ParseManifest(data []byte) (*Manifest, error) {
+	m, err := parseManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	if m.Incomplete {
+		return nil, fmt.Errorf("%w: %d of %d file(s) packed", ErrIncomplete, len(m.Packed), m.Files)
+	}
+	return m, nil
+}
+
+// parseManifest parses a complete MANIFEST or an incremental pack's journal.
+func parseManifest(data []byte) (*Manifest, error) {
 	m := &Manifest{}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	switch lines[0] {
@@ -298,12 +330,27 @@ func ParseManifest(data []byte) (*Manifest, error) {
 				return nil, bad()
 			}
 			m.Parts = append(m.Parts, Part{f[1], n, f[3]})
+		case "incomplete":
+			// Only directly under the header, so an old reader stops at the first line it
+			// does not know.
+			if len(f) != 1 || i != 0 {
+				return nil, bad()
+			}
+			m.Incomplete = true
+		case "packed":
+			if len(f) != 2 || !m.Incomplete || checkRel(f[1]) != nil || slices.Contains(m.Packed, f[1]) {
+				return nil, bad()
+			}
+			m.Packed = append(m.Packed, f[1])
 		default:
 			return nil, bad()
 		}
 		have[f[0]] = true
 	}
 	for _, k := range []string{"kdf", "aead", "compression", "lock-sha256", "content", "part"} {
+		if k == "part" && m.Incomplete {
+			continue // a journal has no part before its first file is packed
+		}
 		if !have[k] {
 			return nil, fmt.Errorf("MANIFEST: no %q line", k)
 		}
@@ -406,6 +453,9 @@ type OpenReader struct {
 	ptbuf  []byte
 	ctr    uint32
 	done   bool
+	// open reads a range of an unterminated stream (an incremental pack's journal): every
+	// chunk is full and not the last, and the range ends cleanly at a chunk boundary.
+	open bool
 }
 
 // NewOpenReader returns a reader over the plaintext of in.
@@ -424,12 +474,19 @@ func (r *OpenReader) next() error {
 	n, err := io.ReadFull(r.in, r.ct)
 	last := false
 	switch {
+	case err == io.EOF && r.open:
+		r.pt, r.done = nil, true
+		return nil
 	case err == io.EOF:
 		return errors.New("modelpack: payload truncated (no final chunk)")
+	case err == io.ErrUnexpectedEOF && r.open:
+		return errors.New("modelpack: payload truncated (partial chunk in an unfinished pack)")
 	case err == io.ErrUnexpectedEOF:
 		last = true
 	case err != nil:
 		return err
+	case r.open:
+		// a full chunk of an unterminated stream: never the last one
 	default:
 		if _, perr := r.in.Peek(1); perr == io.EOF {
 			last = true

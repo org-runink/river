@@ -153,7 +153,8 @@ case "$RIVER_PUBLIC" in
 	*) die "RIVER_PUBLIC must be 0 or 1" ;;
 esac
 case "$MODEL_PAYLOAD" in
-	auto) if [ "$SERVER" -eq 1 ] && [ -d "$MODELS_DIR" ] && [ "$RIVER_PUBLIC" = 0 ]; then MODEL_PAYLOAD=yes; else MODEL_PAYLOAD=no; fi ;;
+	auto) if [ "$SERVER" -eq 1 ] && [ "$RIVER_PUBLIC" = 0 ] && { [ -d "$MODELS_DIR" ] || [ -f "$STATE/model-payload/river-models/MANIFEST" ]; }; then
+		MODEL_PAYLOAD=yes; else MODEL_PAYLOAD=no; fi ;;
 	yes) [ "$SERVER" -eq 1 ] || die "MODEL_PAYLOAD=yes is for the server profile only" ;;
 	no) ;;
 	*) die "MODEL_PAYLOAD must be auto, yes or no" ;;
@@ -240,7 +241,18 @@ log "4/8 component packages (build/build-all.sh in $BUILDER_IMAGE, rootless)"
 # Step 5 copies every package under build/pkgbuilds/; clear the ones an earlier run left, so
 # only what makepkg builds now can reach the repository.
 find "$REPO/build/pkgbuilds" -name '*.pkg.tar.zst' -delete
-set -- -v "$REPO:/os" -w /os -e RIVER_PAYLOAD_PREBUILT="$PREBUILT" -e RIVER_GUIDE_MODEL="$GUIDE" -e MODEL_PAYLOAD="$MODEL_PAYLOAD"
+# A FINISHED model payload of this lock stands in for the plaintext cache, which an incremental
+# pack (river-modelpack pack --append --consume) deletes as it goes: step 6 checks the payload's
+# parts and passphrase before the image uses it, and repacks from a fresh fetch if they fail.
+MODELS_IN_PAYLOAD=0
+MPAY="$STATE/model-payload/river-models"
+if [ "$MODEL_PAYLOAD" = yes ] && [ -f "$MPAY/MANIFEST" ] && ! grep -qx incomplete "$MPAY/MANIFEST" \
+	&& grep -qx "lock-sha256 $(sha256sum "$LOCK" | cut -c1-64)" "$MPAY/MANIFEST"; then
+	MODELS_IN_PAYLOAD=1
+	echo "local-iso: the model set is in the finished payload $MPAY (checked at step 6)"
+fi
+set -- -v "$REPO:/os" -w /os -e RIVER_PAYLOAD_PREBUILT="$PREBUILT" -e RIVER_GUIDE_MODEL="$GUIDE" -e MODEL_PAYLOAD="$MODEL_PAYLOAD" \
+	-e RIVER_MODELS_IN_PAYLOAD="$MODELS_IN_PAYLOAD"
 # A no-model image (MODEL_PAYLOAD=no) carries no models.manifest either: a manifest would
 # describe weights that are not on the medium.
 if [ "$SERVER" -eq 1 ] && [ "$MODEL_PAYLOAD" != no ] && [ -d "$MODELS_DIR" ]; then
@@ -303,6 +315,11 @@ if [ "$MODEL_PAYLOAD" = yes ]; then
 	PAYLOAD_DIR="$STATE/model-payload/river-models"
 	want="$(sha256sum "$LOCK" | cut -c1-64)"
 	have="$(sed -n 's/^lock-sha256 //p' "$PAYLOAD_DIR/MANIFEST" 2>/dev/null || true)"
+	# An incremental pack of this lock still in progress is never reused, and never thrown away:
+	# finish it (docs/MODEL-PAYLOAD.md, "Packing a large set incrementally").
+	if [ "$have" = "$want" ] && grep -qx incomplete "$PAYLOAD_DIR/MANIFEST"; then
+		die "$PAYLOAD_DIR is an INCOMPLETE model payload of this lock ($("$MP" pending --payload "$PAYLOAD_DIR" --lock "$LOCK" | wc -l) file(s) to go); finish it with river-modelpack pack --append, or remove it to pack from scratch"
+	fi
 	if [ "$have" = "$want" ] && "$MP" check --payload "$PAYLOAD_DIR" --passphrase-file "$PASSFILE"; then
 		echo "local-iso: reusing the model payload (same lock, parts verified, passphrase opens it)"
 	else
