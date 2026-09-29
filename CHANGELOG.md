@@ -31,6 +31,41 @@ their packages, the installer and (once it has code) the RIVER runtime.
 
 None.
 
+### Added
+
+- **Incremental model payload packing** ([docs/MODEL-PAYLOAD.md](docs/MODEL-PAYLOAD.md),
+  "Packing a large set incrementally"): `river-modelpack pack --append` packs the lock rows
+  present in `--models-dir` that the payload does not hold yet, and `--consume` deletes each
+  source file once its ciphertext is written, fsynced, re-verified and recorded, so a set close
+  to the build host's free space fits in one payload. `river-modelpack pending` lists what is
+  left. The finished payload is format `river-modelpack 1` and opens with the same `unpack`; an
+  unfinished one carries an `incomplete` journal that `check`, `unpack`, `build/local-iso.sh`
+  and `build/iso-root-stage.sh` all refuse. Interrupted calls resume.
+- `build/models-fetch.sh`: `HF_TOKEN_FILE` (an upstream read token, passed to curl as a header
+  file in a private directory, never to the mirror) and `MODELS_ONLY` (fetch a subset of the
+  lock by dest path).
+- `build/iso-root-stage.sh`: `ISO_OUTDEV=/dev/disk/by-id/usb-…` with `ISO_OUTDEV_CONFIRM` writes a
+  private image with payloads straight onto a removable USB disk (guarded: whole disk,
+  removable, unmounted, large enough, confirmed), checks it with `xorriso -check_media` and
+  writes the sha256 of the image's length to `OUT_DIR/<name>.sha256`.
+- Installer step `72-models-payload`: required mode, `RUNINK_MODELS_REQUIRED=1` or an edition
+  descriptor's `"models_required": true`. No payload, a blank passphrase, an unattended install
+  without one, or a skip then FAILS the install instead of deferring the models. The step also
+  checks that the pool has room for the set before it reads the medium.
+  `river test models-required` and `river test models-fetch` (Tier 1) pin both scripts'
+  behaviour.
+- The install planner accepts **extra model tiers** (for example `imagegen`, `rerank`, `guard`):
+  a tier that is not built in is valid when `models.lock` pins a role of that name, and is
+  placed as an optional tier after the built-in ones
+  ([docs/INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md), "Model tiers").
+
+### Changed
+
+- For downstream distributions: the edition descriptor gains the optional `models_required`
+  key; `72-models-payload` reads `RUNINK_MODELS_REQUIRED` and `RUNINK_MODELS_RUNDIR`; a model
+  payload directory may now hold an unfinished journal, which every tool refuses. With none of
+  them set, behaviour is unchanged. The Tier 1 image adds `curl`.
+
 ## [runink-os-2026.09] - 2026-09-29
 
 ### Security
