@@ -5,7 +5,8 @@
 // Server install medium (docs/MODEL-PAYLOAD.md).
 //
 //	river-modelpack genpass                                   print a new random passphrase
-//	river-modelpack pack   --lock L --models-dir D --out O --passphrase-file F
+//	river-modelpack pack   --lock L --models-dir D --out O --passphrase-file F [--append] [--consume]
+//	river-modelpack pending --payload P --lock L               lock rows not in the payload yet
 //	river-modelpack check  --payload P [--passphrase-file F]   part sizes + sha256 (+ key)
 //	river-modelpack unpack --payload P --lock L --dest D --passphrase-file F
 //	river-modelpack verify --dir D --lock L                   every file against the lock
@@ -38,6 +39,8 @@ func main() {
 		err = pack(args)
 	case "check":
 		err = check(args)
+	case "pending":
+		err = pending(args)
 	case "unpack":
 		err = unpack(args)
 	case "verify":
@@ -59,6 +62,8 @@ func usage() {
   river-modelpack genpass
   river-modelpack pack   --lock FILE --models-dir DIR --out DIR --passphrase-file FILE
                          [--part-size MiB] [--zstd-level N] [--zstd-threads N]
+                         [--append] [--consume]
+  river-modelpack pending --payload DIR --lock FILE
   river-modelpack check  --payload DIR [--passphrase-file FILE]
   river-modelpack unpack --payload DIR --lock FILE --dest DIR --passphrase-file FILE|-
   river-modelpack verify --dir DIR --lock FILE
@@ -88,6 +93,8 @@ func pack(args []string) error {
 	partMiB := fs.Int64("part-size", modelpack.DefaultPartSize>>20, "part size in MiB (keep below 2048)")
 	level := fs.Int("zstd-level", 12, "zstd level")
 	threads := fs.Int("zstd-threads", 0, "zstd threads (0 = zstd default)")
+	appendMode := fs.Bool("append", false, "incremental: pack the lock rows present in --models-dir that --out does not hold yet (creates --out; the call that packs the last row finishes it)")
+	consumeSrc := fs.Bool("consume", false, "delete each source file once its ciphertext is written, fsynced, re-verified and recorded")
 	parse(fs, args, "lock", "models-dir", "out", "passphrase-file")
 	if *partMiB <= 0 || *partMiB >= 2048 {
 		return fmt.Errorf("--part-size must be between 1 and 2047 MiB")
@@ -99,6 +106,28 @@ func pack(args []string) error {
 	pass, err := modelpack.ReadPassphrase(*pf)
 	if err != nil {
 		return err
+	}
+	if *appendMode {
+		r, err := modelpack.Append(modelpack.AppendOptions{Lock: lb, ModelsDir: *dir, OutDir: *out,
+			Passphrase: pass, PartSize: *partMiB << 20, ZstdLevel: *level, ZstdThreads: *threads,
+			Consume: *consumeSrc, Log: os.Stderr})
+		if err != nil {
+			return err
+		}
+		m := r.Manifest
+		var ct int64
+		for _, p := range m.Parts {
+			ct += p.Size
+		}
+		fmt.Printf("appended %d file(s), consumed %d; %d part(s), %d bytes in %s\n",
+			len(r.Packed), len(r.Consumed), len(m.Parts), ct, *out)
+		if r.Complete {
+			fmt.Printf("payload COMPLETE: %d file(s), %d bytes\n", m.Files, m.Bytes)
+		} else {
+			fmt.Printf("payload INCOMPLETE: %d of %d file(s) packed, %d remaining\n",
+				len(m.Packed), m.Files, len(r.Remaining))
+		}
+		return nil
 	}
 	m, err := modelpack.Pack(modelpack.PackOptions{Lock: lb, ModelsDir: *dir, OutDir: *out,
 		Passphrase: pass, PartSize: *partMiB << 20, ZstdLevel: *level, ZstdThreads: *threads,
@@ -112,6 +141,36 @@ func pack(args []string) error {
 	}
 	fmt.Printf("packed %d file(s), %d bytes -> %d part(s), %d bytes (%.1f%%) in %s\n",
 		m.Files, m.Bytes, len(m.Parts), ct, 100*float64(ct)/float64(max(m.Bytes, 1)), *out)
+	if *consumeSrc {
+		// Decrypt and hash the whole payload before deleting anything.
+		if err := modelpack.VerifyPayload(*out, lb, pass, os.Stderr); err != nil {
+			return fmt.Errorf("not consuming the sources: %w", err)
+		}
+		c, err := modelpack.ConsumeSources(*dir, lb, os.Stderr)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("consumed %d source file(s)\n", len(c))
+	}
+	return nil
+}
+
+func pending(args []string) error {
+	fs := flag.NewFlagSet("pending", flag.ContinueOnError)
+	payload := fs.String("payload", "", "payload directory (may be absent: then every row is pending)")
+	lock := fs.String("lock", "", "the full lock")
+	parse(fs, args, "payload", "lock")
+	lb, err := os.ReadFile(*lock)
+	if err != nil {
+		return err
+	}
+	rows, err := modelpack.Pending(*payload, lb)
+	if err != nil {
+		return err
+	}
+	for _, d := range rows {
+		fmt.Println(d)
+	}
 	return nil
 }
 

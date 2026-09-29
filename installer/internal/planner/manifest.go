@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,13 +31,39 @@ var MandatoryTiers = []string{TierEmbedding, TierSTT, TierTTS}
 // OptionalTiers are placed after the mandatory ones, in this priority order.
 var OptionalTiers = []string{TierGeneral, TierCoder, TierVision}
 
+// knownTier reports whether t is a built-in tier.
 func knownTier(t string) bool {
-	for _, k := range append(append([]string{}, MandatoryTiers...), OptionalTiers...) {
-		if k == t {
-			return true
-		}
+	return slices.Contains(MandatoryTiers, t) || slices.Contains(OptionalTiers, t)
+}
+
+// tierNameRe is the shape of a tier name that is not built in. Such a tier (an image
+// generator, a reranker, a guard model: whatever a downstream model set adds) is accepted
+// when models.lock pins a role of that name (ApplyLock), so the lock, not a list in this
+// code, says which extra tiers exist, and a typo still fails. Extra tiers are optional: they
+// are placed after the built-in optional tiers, in the order the tiers file first names them.
+var tierNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
+// noteTier records a tier name the tiers file uses: a built-in one, or an extra one to be
+// checked against the lock.
+func (m *Manifest) noteTier(t string, ln int) error {
+	if knownTier(t) {
+		return nil
 	}
-	return false
+	if !tierNameRe.MatchString(t) {
+		return fmt.Errorf("models.tiers:%d: unknown tier %q (not a tier name)", ln, t)
+	}
+	if _, ok := m.extraLine[t]; !ok {
+		m.extraLine[t] = ln
+		m.Extra = append(m.Extra, t)
+	}
+	return nil
+}
+
+// Tiers is every tier in placement order: the mandatory ones, the built-in optional ones, then
+// the extra ones.
+func (m *Manifest) Tiers() []string {
+	out := append(append([]string{}, MandatoryTiers...), OptionalTiers...)
+	return append(out, m.Extra...)
 }
 
 // Variant is one model a tier can be served by. A tier may list several; rank 1 is the
@@ -73,6 +101,11 @@ type Manifest struct {
 	// lock again when they are installed (river-modelpack verify), so a missing row must not
 	// stop the planner — e.g. a tier re-selected in the tiers file before the lock catches up.
 	Unpinned []string
+	// Extra lists the tiers that are not built in, in the order the file first names them;
+	// ApplyLock accepts each only when models.lock pins a role of that name.
+	Extra     []string
+	extraLine map[string]int
+	lockSeen  bool
 }
 
 // ByTier returns a tier's variants in rank order.
@@ -99,7 +132,7 @@ func (m *Manifest) ByTier(t string) []Variant {
 // must not also list a variant: the file says either what serves the tier or that nothing
 // does yet, never both.
 func ParseManifest(r io.Reader) (*Manifest, error) {
-	m := &Manifest{Reserves: map[string]int64{}, Pending: map[string]bool{}}
+	m := &Manifest{Reserves: map[string]int64{}, Pending: map[string]bool{}, extraLine: map[string]int{}}
 	pendingLine := map[string]int{}
 	sc := bufio.NewScanner(r)
 	ln := 0
@@ -145,8 +178,8 @@ func ParseManifest(r io.Reader) (*Manifest, error) {
 			if len(kv) != 1 {
 				return nil, fmt.Errorf("models.tiers:%d: a pending line takes exactly pending=<tier>", ln)
 			}
-			if !knownTier(name) {
-				return nil, fmt.Errorf("models.tiers:%d: unknown tier %q", ln, name)
+			if err := m.noteTier(name, ln); err != nil {
+				return nil, err
 			}
 			if m.Pending[name] {
 				return nil, fmt.Errorf("models.tiers:%d: pending=%s declared twice", ln, name)
@@ -186,9 +219,13 @@ func ParseManifest(r io.Reader) (*Manifest, error) {
 				return nil, fmt.Errorf("models.tiers:%d: %s: %v", ln, k, err)
 			}
 		}
+		if v.Tier == "" {
+			return nil, fmt.Errorf("models.tiers:%d: tier= is required", ln)
+		}
+		if err := m.noteTier(v.Tier, ln); err != nil {
+			return nil, err
+		}
 		switch {
-		case !knownTier(v.Tier):
-			return nil, fmt.Errorf("models.tiers:%d: unknown tier %q", ln, v.Tier)
 		case v.Name == "":
 			return nil, fmt.Errorf("models.tiers:%d: variant= is required", ln)
 		case v.Rank < 1:
@@ -240,6 +277,7 @@ var lockRoleAlias = map[string]string{"voice": TierSTT, "embed": TierEmbedding}
 // variant states resident_mib, and is an error only when its size can come from nothing else.
 func (m *Manifest) ApplyLock(r io.Reader) error {
 	sizes := map[string]int64{} // role|repo -> bytes
+	roles := map[string]bool{}  // every role the lock pins (aliases applied)
 	sc := bufio.NewScanner(r)
 	ln := 0
 	for sc.Scan() {
@@ -261,6 +299,7 @@ func (m *Manifest) ApplyLock(r io.Reader) error {
 			role = a
 		}
 		sizes[role+"|"+fs[1]] += n
+		roles[role] = true
 	}
 	if err := sc.Err(); err != nil {
 		return err
@@ -296,11 +335,31 @@ func (m *Manifest) ApplyLock(r io.Reader) error {
 			return fmt.Errorf("models.tiers:%d: resident_mib missing and not derivable", v.Line)
 		}
 	}
+	// An extra tier exists when the lock pins its role (its own name, or a variant's lock_role).
+	for _, t := range m.Extra {
+		ok := roles[t]
+		for _, v := range m.ByTier(t) {
+			role := v.LockRole
+			if a, found := lockRoleAlias[role]; found {
+				role = a
+			}
+			ok = ok || (role != "" && roles[role])
+		}
+		if !ok {
+			return fmt.Errorf("models.tiers:%d: unknown tier %q (not a built-in tier, and models.lock pins no role %q)", m.extraLine[t], t, t)
+		}
+	}
+	m.lockSeen = true
 	return nil
 }
 
-// Resolve fails when a variant still needs the lock to know its size.
+// Resolve fails when a variant still needs the lock to know its size, and when a tier that is
+// not built in was not accepted by ApplyLock.
 func (m *Manifest) Resolve() error {
+	if len(m.Extra) > 0 && !m.lockSeen {
+		t := m.Extra[0]
+		return fmt.Errorf("models.tiers:%d: unknown tier %q (not a built-in tier; pass --lock models.lock to accept a tier whose role it pins)", m.extraLine[t], t)
+	}
 	for _, v := range m.Variants {
 		if v.ResidentMiB < 0 {
 			return fmt.Errorf("models.tiers:%d: %s/%s has no resident_mib; pass --lock models.lock to derive it", v.Line, v.Tier, v.Name)

@@ -102,6 +102,32 @@ is 1 for the final chunk, else 0) and the associated data `"river-modelpack/1\0"
 The plaintext is a zstd stream of a PAX tar archive whose entries are regular files named by
 the lock's `dest` column, in lock order, mode 0644, mtime 0.
 
+A payload packed incrementally (`pack --append`, below) is the same format and opens with the
+same `unpack`. Its archive entries are in the order they were packed (extraction does not
+depend on the order), and its zstd stream is several concatenated frames, one per `--append`
+call; each call but the last ends with a zstd *skippable frame* that pads its plaintext to a
+whole number of 4 MiB chunks, so every chunk it seals is full and not the last one and the
+chunk counter continues in the next call. zstd decodes concatenated frames as one stream and
+ignores skippable frames.
+
+While an incremental pack is unfinished, the directory holds a **journal** in place of the
+MANIFEST, marked on its second line:
+
+```
+river-modelpack 1
+incomplete
+kdf ... / aead ... / compression zstd / lock-sha256 <sha256 of the FULL lock>
+content <files> <bytes>          (of the full lock)
+packed <dest>                    (one line per row packed so far)
+part models.rmp.000 <size> <sha256>
+...
+```
+
+Every reader refuses it (`river-modelpack check` and `unpack` fail with "the payload is
+INCOMPLETE"; an older reader fails on the unknown line), `build/local-iso.sh` never reuses it
+and `build/iso-root-stage.sh` never attaches it. The call that packs the last row replaces it
+with an ordinary MANIFEST.
+
 ## Building it
 
 `build/local-iso.sh` does it for the server profile when `MODELS_DIR` holds the fetched set
@@ -124,6 +150,95 @@ records (El Torito, the hybrid MBR and the appended EFI partition) and the volum
 The payload is never in the live rootfs, so it costs the live system no RAM and
 `20-clone-rootfs` never copies it.
 
+### Packing a large set incrementally
+
+A one-shot `pack` needs the whole plaintext set on disk next to the whole payload: about twice
+the set's size. For a set close to the build host's free space, fetch and pack a few files at a
+time into the same payload, and let the packer delete each source file once it is safely in:
+
+```sh
+LOCK=models.lock OUT=~/.cache/river-build/local-iso/model-payload/river-models
+PASS=~/.cache/river-build/secrets/models-passphrase MODELS=~/.cache/river-build/models
+todo=$(mktemp)
+while river-modelpack pending --payload "$OUT" --lock "$LOCK" > "$todo" && [ -s "$todo" ]; do
+	head -n 1 "$todo" > "$todo.one"                        # one file (or a few) at a time
+	MODELS_ONLY="$todo.one" MODELS_DIR="$MODELS" MODELS_LOCK="$LOCK" build/models-fetch.sh || exit 1
+	river-modelpack pack --append --consume --lock "$LOCK" --models-dir "$MODELS" \
+		--out "$OUT" --passphrase-file "$PASS"
+done
+river-modelpack check --payload "$OUT" --passphrase-file "$PASS"
+```
+
+- `river-modelpack pack --append` (always with the FULL lock) creates the payload in an absent
+  or empty `--out`, and on each call packs the lock rows the payload does not hold yet whose
+  files are in `--models-dir` with the pinned size and sha256 (a file of the right size with
+  the wrong bytes is reported and skipped; a file still downloading is not the pinned size and
+  waits). The call that packs the last row writes the final chunk and the ordinary MANIFEST:
+  `lock-sha256` is the sha256 of the full lock, and `check`, `verify` and `unpack` behave as for
+  a one-shot pack. On a finished payload of the same lock `--append` does nothing.
+- `--consume` deletes each source file only after its ciphertext is written, fsynced, read back,
+  decrypted, decompressed and hashed against the lock, and recorded in the journal or MANIFEST.
+  A source left behind by an interrupted call is deleted by the next `--consume` call once its
+  row is recorded. `--consume` on a one-shot `pack` verifies the whole payload the same way
+  first. Without `--consume` nothing is deleted.
+- `river-modelpack pending --payload DIR --lock LOCK` lists, in lock order, the dests the payload
+  does not hold yet (every row for an absent directory, none for a finished payload), in the
+  format `MODELS_ONLY` reads.
+- Crash safety: the journal is only replaced atomically (written, fsynced, renamed, directory
+  fsynced) after the parts it names are written and verified. An interrupted call leaves the
+  previous journal; the next call truncates the last recorded part back to its recorded size,
+  removes parts the journal does not name, and continues. The payload directory is locked
+  (`flock`) while a call runs, so two calls never interleave. A call re-authenticates the
+  payload's first chunk before it appends, so a different passphrase is refused.
+- The chunks an interrupted call sealed are sealed again, with the same counters and the same
+  key, by the next call. The discarded ciphertext only ever existed on the build host (it is
+  truncated off before anything else is written), never on a medium.
+- Parts stay below 2 GiB (`--part-size`, default 1900 MiB): a call continues the last part
+  until it is full, then starts the next one.
+
+`build/local-iso.sh` treats the payload directory the same way: it reuses a finished payload of
+the lock (without the plaintext cache: the image's `models.manifest` is written from the lock,
+and the payload's parts and passphrase are checked before it is used), refuses to start while
+an incremental pack of the same lock is unfinished (it never deletes one), and with
+`MODEL_PAYLOAD=auto` counts a finished payload as the model set being there.
+
+### Fetching: a token and a subset
+
+`build/models-fetch.sh` reads two optional variables besides `MODELS_DIR`, `MODELS_LOCK`,
+`RIVER_MODELS_UPSTREAM` and `RIVER_MODELS_MIRROR`:
+
+- `HF_TOKEN_FILE`: a file whose first line is a read token for the upstream (a gated or private
+  repository). The script writes it into a curl header file in a private temporary directory
+  (umask 077, under `$XDG_RUNTIME_DIR` when set, removed on exit) and passes it as
+  `curl -H @file`, so the token is never on a command line or in a log. It is sent to
+  `RIVER_MODELS_UPSTREAM` only, never to `RIVER_MODELS_MIRROR`, and curl drops it on a redirect
+  to another host (the upstream's CDN).
+- `MODELS_ONLY`: a file of dest paths (one per line, `#` comments). Only those rows are fetched
+  and checked; the others are left alone. A name that is not a dest of the lock fails.
+
+### Writing the image straight onto a USB disk (`ISO_OUTDEV`)
+
+An image with a payload of the size of the build host's free space cannot also exist as a
+file. `build/iso-root-stage.sh` can write the final image, in the same xorriso pass that adds
+the payloads, straight onto a removable USB disk:
+
+```sh
+sudo ISO_OUTDEV=/dev/disk/by-id/usb-<id> ISO_OUTDEV_CONFIRM=usb-<id> \
+     sh build/iso-root-stage.sh ~/.cache/river-build/local-iso/root-stage-<profile>-<variant>.env
+```
+
+It refuses, with a message, unless the path is under `/dev/disk/by-id/usb-*` and resolves to a
+whole disk (not a partition), `/sys/block/<dev>/removable` is 1, nothing on the disk is mounted,
+used as swap or held by device-mapper, RAID or a pool, the disk is at least the base ISO plus
+the payloads plus slack (1% + 64 MiB), the image is a private one with a payload, and
+`ISO_OUTDEV_CONFIRM` repeats the by-id basename. The checks run before the build and again right
+before writing. It then wipes every signature on the disk's partitions and on the disk
+(`wipefs -a`), writes the image with xorriso (`-outdev stdio:<disk>`), counts the payload
+MANIFESTs on it, reads every block back (`xorriso -check_media`), and hashes exactly the image's
+length (its ISO 9660 volume space size, `isosize`, which covers the appended boot partition):
+the hash and the image name go to `OUT_DIR/<name>.sha256` and are printed. **The whole disk is
+erased.** Without `ISO_OUTDEV` the step writes the ISO file as before.
+
 ## Installing from it
 
 Step `72-models-payload` (server installer, after `50-runink-user`) finds `/river-models` on
@@ -137,6 +252,17 @@ and unpacks into it:
   tmpfs). Without the option an unattended install defers the models.
 - A pool that already has `<pool>/models` (re-install into an imported pool) is verified
   against the lock and kept; a mismatch stops the step and leaves the dataset untouched.
+- The pool must have room for the set the MANIFEST declares (`content`, plus 2%); otherwise the
+  step fails before it reads the medium.
+- **Required mode.** `RUNINK_MODELS_REQUIRED=1` makes a node that must carry its models never
+  install without them: the step FAILS, instead of deferring, when the boot medium has no model
+  payload, when the passphrase is blank, when an unattended install has no passphrase source,
+  and when `RUNINK_SKIP_MODELS=1` asks to skip it. A downstream edition turns it on with
+  `"models_required": true` in its descriptor ([INSTALL.md](INSTALL.md)): the graphical
+  installer then also requires the medium passphrase on its account screen. Unset, nothing
+  changes.
+- The payload is read from the boot medium itself, however large (the parts stay below 2 GiB,
+  so a single ISO 9660 image holds a set of well over 100 GB).
 - Afterwards: `river-modelpack verify --dir /var/lib/core/models/shared --lock
   /usr/local/share/runink/models.lock` re-checks the set on the node at any time.
 

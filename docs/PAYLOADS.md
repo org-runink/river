@@ -99,7 +99,9 @@ nonce prefix.
 
 - `72-models-payload` unpacks `/river-models` into `<pool>/models` (optional: a blank answer,
   or `runink-autoinstall` without `--models-passphrase-file`, defers the models;
-  `--skip-models` skips the step).
+  `--skip-models` skips the step). In required mode (`RUNINK_MODELS_REQUIRED=1`, or an edition
+  descriptor's `"models_required": true`) each of those FAILS the install instead, as does a boot
+  medium without a model payload ([MODEL-PAYLOAD.md](MODEL-PAYLOAD.md), "Installing from it").
 - `73-downstream-payloads` **does not open** the downstream payloads and deploys nothing. It
   creates `<pool>/payloads` (encryption inherited, compression off), mounted at
   `/var/lib/runink/payloads`, and runs

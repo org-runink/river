@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -40,6 +41,10 @@ type Edition struct {
 	DefaultRole string `json:"default_role,omitempty"`
 	// FirstbootUI: the installed machine starts with the graphical first boot.
 	FirstbootUI bool `json:"firstboot_ui"`
+	// ModelsRequired: the install fails unless the medium's model payload is unpacked (the
+	// account screen then requires the medium passphrase; 72-models-payload gets
+	// RUNINK_MODELS_REQUIRED=1). A downstream edition whose nodes must carry their models sets it.
+	ModelsRequired bool `json:"models_required,omitempty"`
 	// Defaults for the name-and-admin screen.
 	Hostname  string `json:"hostname"`
 	AdminUser string `json:"admin_user"`
@@ -90,6 +95,9 @@ func (e *Edition) Validate() error {
 	}
 	if validUsername(e.AdminUser) != "" {
 		return fmt.Errorf("bad admin_user %q", e.AdminUser)
+	}
+	if e.ModelsRequired && !slices.Contains(e.Steps, "72-models-payload") {
+		return fmt.Errorf("models_required without the 72-models-payload step")
 	}
 	if e.Icon != "" && !iconOK(e.Icon) {
 		return fmt.Errorf("bad icon %q (an absolute .svg, .png or .ico under /usr/share)", e.Icon)

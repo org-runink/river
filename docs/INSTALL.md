@@ -119,7 +119,10 @@ the network the installer used already set up. Nothing else is left to do.
   (`label=` on the kernel command line); another descriptor is offered when a volume with its
   label is present (a stick that carries both images). `roles` are optional; the choice reaches
   the node as `/etc/runink/role` and the first-boot hooks as `RIVER_ROLE`. `icon` (optional)
-  is the edition's own mark, used as the UI's favicon and header logo.
+  is the edition's own mark, used as the UI's favicon and header logo. `models_required`
+  (optional, default false; needs the `72-models-payload` step) makes the account screen require
+  the medium passphrase and the model step fail rather than defer the models
+  ([MODEL-PAYLOAD.md](MODEL-PAYLOAD.md), "Installing from it").
 - **Display.** The server medium draws the UI with WPE WebKit's MiniBrowser straight through
   KMS/DRM, with no X server and no compositor (`river-kiosk`, as the unprivileged
   `river-kiosk` user, in private mode, with a content filter that allows only the loopback).

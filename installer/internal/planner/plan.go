@@ -11,6 +11,7 @@ package planner
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -465,8 +466,8 @@ func placeTiers(pl *Plan, m *Manifest, avail int64) int64 {
 		v   Variant
 	}
 	var order []placed
-	for _, tier := range append(append([]string{}, MandatoryTiers...), OptionalTiers...) {
-		mandatory := tier == TierEmbedding || tier == TierSTT || tier == TierTTS
+	for _, tier := range m.Tiers() {
+		mandatory := slices.Contains(MandatoryTiers, tier)
 		tp := TierPlan{Tier: tier, Mandatory: mandatory, Status: "disabled"}
 		if m.Pending[tier] {
 			tp.Status = "pending"

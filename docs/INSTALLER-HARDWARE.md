@@ -80,7 +80,7 @@ each desktop minimum.
 | Input | Decision |
 |---|---|
 | physical cores `P` | reserved = `clamp(P/8, 2, 8)`; inference threads `I = P - reserved` |
-| general, coder, vision | `RAYON_NUM_THREADS = I` |
+| general, coder, vision, any extra tier | `RAYON_NUM_THREADS = I` |
 | stt | `clamp(I/2, 2, 8)` |
 | embedding | `clamp(I/2, 1, 4)` |
 | tts | `clamp(I, 1, 2)` |
@@ -108,10 +108,16 @@ headroom ≤ total, and the tests check it.
 ### Model tiers
 
 Tiers are generic capability roles: `embedding`, `stt`, `tts` (mandatory) and `general`,
-`coder`, `vision` (optional).
+`coder`, `vision` (optional) are built in. A model set may add **extra tiers** (an image
+generator, a reranker, a guard model: `imagegen`, `rerank`, `guard`, or any lower-case name of
+up to 32 characters): the planner accepts a tier that is not built in when `models.lock` pins
+a role of that name (or the role a variant's `lock_role` names), so the lock, not a list in
+the planner, says which tiers exist, and a misspelt tier still fails. Without `--lock` an extra
+tier is refused. Extra tiers are optional; they are placed after `vision`, in the order the
+manifest first names them.
 
 1. **Placement at minimum context.** Mandatory tiers are placed first, then the optional tiers
-   in the order general → coder → vision. Each tier takes the best-ranked variant that fits at
+   in the order general → coder → vision → the extra tiers. Each tier takes the best-ranked variant that fits at
    its `ctx_min`. If rank 1 does not fit, the next rank is tried. **A fallback is reported**:
    the tier is `degraded`, and its `reasons` list the variant that did not fit, the MiB it
    needed, the MiB that was left, and the variant chosen instead.
@@ -208,12 +214,14 @@ whitespace-separated `key=value` fields, `#` comments. Unknown keys are an error
 ```
 reserve=<os|k0s|platform> mib=<n>
 
-tier=<general|coder|vision|stt|embedding|tts> variant=<id> rank=<n>
+tier=<general|coder|vision|stt|embedding|tts|extra> variant=<id> rank=<n>
      resident_mib=<n> kv_mib_per_1k=<n> ctx_min=<n> ctx_max=<n>
      [threads_max=<n>] [lock_role=<role>] [lock_repo=<org/name>]
 
-pending=<general|coder|vision|stt|embedding|tts>
+pending=<general|coder|vision|stt|embedding|tts|extra>
 ```
+
+`extra` is a tier that is not built in, accepted when `models.lock` pins its role (above).
 
 | Field | Meaning |
 |---|---|

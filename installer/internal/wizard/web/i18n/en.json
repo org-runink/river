@@ -195,6 +195,7 @@
   "err.password.mismatch": "The two passwords are different.",
   "err.sshkey.invalid": "That does not look like an SSH public key.",
   "err.passphrase.invalid": "That passphrase cannot be used.",
+  "err.passphrase.required": "This medium carries its models encrypted: enter the medium passphrase to install them.",
   "err.recovery.ack": "Tick the box once you have written the key down.",
   "err.usb.list": "Could not list the USB drives.",
   "err.usb.device": "That drive is not available any more.",
