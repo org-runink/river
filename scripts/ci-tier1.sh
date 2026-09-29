@@ -112,6 +112,10 @@ run "$RIVER" test external-profile --repo .
 # 9b. a profile's installed-system checks (tests/installed.d) under qemu-gui-test: the contract,
 #     against fake hooks in a scratch directory (build/qemu-hooks.sh).
 run "$RIVER" test installed-hooks --repo .
+# 9c. the model payload step's required mode (installer/lib/72-models-payload.sh), with fake zfs.
+run "$RIVER" test models-required --repo .
+# 9d. build/models-fetch.sh: a subset (MODELS_ONLY) and the upstream token (HF_TOKEN_FILE), locally.
+run "$RIVER" test models-fetch --repo .
 
 # 10. bpfdoc (build/tools/bpfdoc), the Go port of the kernel's scripts/bpf_doc.py that lets
 #     linux-runink build without python: output byte-identical to upstream bpf_doc.py's for the

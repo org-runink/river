@@ -41,6 +41,8 @@ func init() {
 			simpleCmd(v, "firstboot-hooks", "the first-boot hook contract (river-firstboot-hooks), in a scratch root", FirstbootHooks),
 			simpleCmd(v, "external-profile", "a profile outside this repository: described, staged, linted", ExternalProfile),
 			simpleCmd(v, "installed-hooks", "the profile-hook contract of qemu-gui-test (build/qemu-hooks.sh), without a VM", InstalledHooks),
+			simpleCmd(v, "models-required", "the model payload step's required mode (72-models-payload), with fake zfs", ModelsRequired),
+			simpleCmd(v, "models-fetch", "build/models-fetch.sh: MODELS_ONLY and HF_TOKEN_FILE, against a local upstream", ModelsFetch),
 			sddmThemeCmd(v),
 		)
 		return c

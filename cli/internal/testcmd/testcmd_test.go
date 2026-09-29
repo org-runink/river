@@ -193,3 +193,46 @@ func TestFirstbootHooksNoRunner(t *testing.T) {
 		t.Fatalf("err=%v stderr=%q", err, errb.String())
 	}
 }
+
+func TestModelsRequiredPasses(t *testing.T) {
+	needSh(t)
+	var out, errb bytes.Buffer
+	if err := ModelsRequired(context.Background(), repoRoot(t), &out, &errb); err != nil {
+		t.Fatalf("%v\n%s%s", err, out.String(), errb.String())
+	}
+}
+
+// A step whose required mode still defers must fail the check.
+func TestModelsRequiredCatchesADeferringStep(t *testing.T) {
+	needSh(t)
+	dir := t.TempDir()
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "installer/lib/72-models-payload.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := strings.Replace(string(b), `REQUIRED="${RUNINK_MODELS_REQUIRED:-0}"`, `REQUIRED=0`, 1)
+	if broken == string(b) {
+		t.Fatal("the step no longer reads RUNINK_MODELS_REQUIRED as this test expects")
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "installer/lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "installer/lib/72-models-payload.sh"), []byte(broken), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if err := ModelsRequired(context.Background(), dir, &out, &errb); err == nil {
+		t.Fatal("a step that ignores RUNINK_MODELS_REQUIRED passed")
+	}
+}
+
+func TestModelsFetchPasses(t *testing.T) {
+	needSh(t)
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl (Tier 1 runs `river test models-fetch` where it is installed)")
+	}
+	var out, errb bytes.Buffer
+	if err := ModelsFetch(context.Background(), repoRoot(t), &out, &errb); err != nil {
+		t.Fatalf("%v\n%s%s", err, out.String(), errb.String())
+	}
+}

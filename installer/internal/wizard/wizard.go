@@ -713,6 +713,8 @@ func (w *Wizard) SetAccount(in AccountInput) (map[string]string, error) {
 	}
 	if len(in.Passphrase) > 1024 || strings.ContainsAny(in.Passphrase, "\n\r\x00") {
 		errs["passphrase"] = "err.passphrase.invalid"
+	} else if w.self.ModelsRequired && in.Passphrase == "" && !w.hasPass() {
+		errs["passphrase"] = "err.passphrase.required"
 	}
 	if len(errs) > 0 {
 		return errs, APIError{"err.form"}
@@ -1135,6 +1137,10 @@ func (w *Wizard) installEnv(planEnv map[string]string, confirmed []string) ([]st
 		// The installed machine starts with the graphical first boot (77-firstboot-ui).
 		env = append(env, "RUNINK_FIRSTBOOT_UI=1")
 	}
+	if w.self.ModelsRequired {
+		// 72-models-payload fails instead of deferring the models.
+		env = append(env, "RUNINK_MODELS_REQUIRED=1")
+	}
 	if w.st.Role != "" {
 		env = append(env, "RUNINK_ROLE="+w.st.Role)
 	}
@@ -1187,4 +1193,11 @@ func sortedKeys[V any](m map[string]V) []string {
 		}
 	}
 	return out
+}
+
+// hasPass reports whether the operator already gave the medium passphrase.
+func (w *Wizard) hasPass() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.pass != ""
 }

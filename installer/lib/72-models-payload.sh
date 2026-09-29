@@ -14,6 +14,16 @@
 # step says so and succeeds, and nothing is written. RUNINK_SKIP_MODELS=1
 # (runink-autoinstall --skip-models) skips the step outright.
 #
+# REQUIRED mode (RUNINK_MODELS_REQUIRED=1: an edition descriptor's "models_required", or set by a
+# downstream's own front end): a node that must carry its models never installs without them.
+# The step then FAILS, instead of deferring, when the boot medium carries no model payload,
+# when the passphrase is blank or an unattended install has no passphrase source, and when
+# RUNINK_SKIP_MODELS=1 asks to skip it. The default (unset) is unchanged.
+#
+# The payload is read from the boot medium itself, however large it is (a single ISO can carry
+# a model set of well over 100 GB: parts stay below 2 GiB, so ISO 9660 holds them). Before
+# unpacking, the pool must have room for the set the MANIFEST declares.
+#
 # The dataset inherits the pool's aes-256-gcm encryption root (never encryption=off), so the
 # weights are encrypted at rest under the node's own key from the first byte written.
 # river-modelpack authenticates every 4 MiB chunk (AES-256-GCM), checks each ciphertext part
@@ -32,6 +42,16 @@ MODELS_MP="/var/lib/core/models/shared"
 DS="$POOL/models"
 
 log() { echo "models-payload: $*"; }
+REQUIRED="${RUNINK_MODELS_REQUIRED:-0}"
+# required_or_defer MESSAGE: in required mode, fail with it; otherwise defer the models.
+required_or_defer() {
+	if [ "$REQUIRED" = 1 ]; then
+		log "REQUIRED (RUNINK_MODELS_REQUIRED=1): $1; this node must carry its models, so the install stops" >&2
+		exit 1
+	fi
+	log "$1; models DEFERRED, nothing written"
+	exit 0
+}
 
 # --- find the payload on the medium ----------------------------------------------------
 # The live stack decides where the medium is mounted (it differs between initramfs
@@ -50,14 +70,19 @@ find_payload() {
 }
 
 if [ "${RUNINK_SKIP_MODELS:-0}" = 1 ]; then
+	[ "$REQUIRED" = 1 ] && required_or_defer "RUNINK_SKIP_MODELS=1 asks to skip the model payload"
 	log "skipped (RUNINK_SKIP_MODELS=1): no model set written; enrollment can still sync them"
 	exit 0
 fi
 if ! PAYLOAD="$(find_payload)"; then
+	[ "$REQUIRED" = 1 ] && required_or_defer "no model payload (river-models/MANIFEST) on the boot medium"
 	log "no model payload on the install medium; the models arrive at enrollment (MODEL_STORE_URL)"
 	exit 0
 fi
-log "model payload found at $PAYLOAD"
+# content <files> <bytes> of the MANIFEST: what the unpack writes.
+SET_BYTES="$(awk '$1 == "content" { print $3 }' "$PAYLOAD/MANIFEST")"
+case "$SET_BYTES" in ''|*[!0-9]*) log "$PAYLOAD/MANIFEST has no content line" >&2; exit 1 ;; esac
+log "model payload found at $PAYLOAD ($(awk '$1 == "content" { print $2 }' "$PAYLOAD/MANIFEST") file(s), $SET_BYTES bytes)"
 command -v river-modelpack >/dev/null 2>&1 || { log "river-modelpack missing from the live image" >&2; exit 1; }
 [ -f "$LOCK" ] || { log "no $LOCK on the live image: cannot verify the payload, refusing" >&2; exit 1; }
 
@@ -74,9 +99,10 @@ if zfs list -H "$DS" >/dev/null 2>&1; then
 fi
 
 # --- the passphrase ----------------------------------------------------------------------
-# Held in a file on tmpfs that only root can read, removed on exit. river-modelpack reads it
+# Held in a file on tmpfs that only root can read, removed on exit (RUNINK_MODELS_RUNDIR, default
+# /run, only moves it for the contract test). river-modelpack reads it
 # once; it never reaches the target or the medium.
-PASSDIR="$(mktemp -d /run/river-models.XXXXXX)"
+PASSDIR="$(mktemp -d "${RUNINK_MODELS_RUNDIR:-/run}/river-models.XXXXXX")"
 chmod 0700 "$PASSDIR"
 PASS="$PASSDIR/passphrase"
 cleanup() { rm -rf "$PASSDIR"; }
@@ -89,14 +115,24 @@ if [ -n "${RUNINK_MODELS_PASSPHRASE_FILE:-}" ]; then
 elif [ -t 0 ]; then
 	attempts=3
 else
-	log "no passphrase (unattended, no RUNINK_MODELS_PASSPHRASE_FILE): models DEFERRED, nothing written"
-	exit 0
+	required_or_defer "no passphrase (unattended, no RUNINK_MODELS_PASSPHRASE_FILE)"
+fi
+if [ -n "${RUNINK_MODELS_PASSPHRASE_FILE:-}" ] && [ -z "$(tr -d '\r\n' < "$PASS")" ]; then
+	# A blank first line is no passphrase: say so, rather than a failed unpack.
+	required_or_defer "the passphrase file is blank"
 fi
 
 # --- the dataset ---------------------------------------------------------------------------
 enc="$(zfs get -H -o value encryption "$POOL")"
 if [ "$enc" = off ]; then
 	log "pool $POOL is not encrypted; refusing to put the model set on it in the clear" >&2
+	exit 1
+fi
+# Room for the whole set (plus 2%), checked before hours of reading rather than after.
+avail="$(zfs get -Hp -o value available "$POOL")"
+case "$avail" in ''|*[!0-9]*) log "cannot read the free space of $POOL" >&2; exit 1 ;; esac
+if [ "$avail" -lt $((SET_BYTES + SET_BYTES / 50)) ]; then
+	log "pool $POOL has $avail bytes free; the model set needs $SET_BYTES (+2%); nothing written" >&2
 	exit 1
 fi
 zfs create -o mountpoint="$MODELS_MP" -o com.sun:auto-snapshot=false -o atime=off \
@@ -118,19 +154,22 @@ while :; do
 	n=$((n + 1))
 	if [ -z "${RUNINK_MODELS_PASSPHRASE_FILE:-}" ]; then
 		stty -echo 2>/dev/null || true
-		printf 'Model payload passphrase (blank = defer the models): ' >&2
+		if [ "$REQUIRED" = 1 ]; then
+			printf 'Model payload passphrase (required): ' >&2
+		else
+			printf 'Model payload passphrase (blank = defer the models): ' >&2
+		fi
 		IFS= read -r _p || _p=""
 		stty echo 2>/dev/null || true
 		printf '\n' >&2
 		if [ -z "$_p" ]; then
 			zfs destroy -r "$DS"
-			log "models DEFERRED at the operator's request; nothing written"
-			exit 0
+			required_or_defer "a blank passphrase"
 		fi
 		( umask 077; printf '%s\n' "$_p" > "$PASS" )
 		unset _p
 	fi
-	log "unpacking into $DS (this reads the whole payload; about 20 GB)"
+	log "unpacking into $DS (this reads the whole payload from the medium: $SET_BYTES bytes before compression)"
 	rc=0
 	river-modelpack unpack --payload "$PAYLOAD" --lock "$LOCK" --dest "$DEST" --passphrase-file "$PASS" || rc=$?
 	[ "$rc" -eq 0 ] && break

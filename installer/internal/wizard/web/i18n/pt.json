@@ -195,6 +195,7 @@
   "err.password.mismatch": "As duas senhas são diferentes.",
   "err.sshkey.invalid": "Isso não parece uma chave pública SSH.",
   "err.passphrase.invalid": "Essa frase secreta não pode ser usada.",
+  "err.passphrase.required": "Esta mídia traz seus modelos criptografados: digite a frase secreta da mídia para instalá-los.",
   "err.recovery.ack": "Marque a caixa depois de anotar a chave.",
   "err.usb.list": "Não foi possível listar as unidades USB.",
   "err.usb.device": "Essa unidade não está mais disponível.",

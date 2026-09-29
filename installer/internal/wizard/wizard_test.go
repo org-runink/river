@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -441,5 +442,49 @@ func TestPeerUID(t *testing.T) {
 	}
 	if _, err := peerUID(dir, local, mustAddr("[::1]:40002")); err == nil {
 		t.Fatal("an unknown peer resolved")
+	}
+}
+
+// TestModelsRequired: an edition with models_required refuses the account screen without the
+// medium passphrase, and its steps get RUNINK_MODELS_REQUIRED=1 (72-models-payload then fails
+// instead of deferring the models).
+func TestModelsRequired(t *testing.T) {
+	eds := DemoEditions()
+	eds[0].ModelsRequired = true
+	eds[0].Steps = append([]string{}, eds[0].Steps...)
+	eds[0].Steps = slices.Insert(eds[0].Steps, 8, "72-models-payload")
+	if err := eds[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+	bad := eds[0]
+	bad.Steps = []string{"00-preflight", "90-export"}
+	if err := bad.Validate(); err == nil {
+		t.Error("models_required without the models step validated")
+	}
+	r := newRig(t, &FakeSystem{EditionsIn: eds, USB: []USBDrive{{Dev: "/dev/sdx", Model: "Stick", SizeGB: 16}}})
+	r.post("/api/welcome", map[string]any{})
+	r.post("/api/edition", map[string]string{"edition": "server"})
+	r.waitView("network", func(v View) bool { return v.Net.Status == "done" })
+	r.post("/api/network/continue", map[string]bool{"offline": false})
+	v := r.waitView("plan", func(v View) bool { return v.Machine.Status == "done" })
+	var serials []string
+	for _, d := range v.Machine.Disks {
+		serials = append(serials, d.Serial)
+	}
+	r.post("/api/machine/confirm", map[string]any{"word": "ERASE", "disks": serials})
+	in := AccountInput{Hostname: "node-a", Username: "admin", Password: pw, Password2: pw}
+	code, m := r.call(http.MethodPost, "/api/account", in)
+	if code != 422 || !strings.Contains(fmt.Sprint(m), "err.passphrase.required") {
+		t.Fatalf("account without the passphrase: %d %v", code, m)
+	}
+	in.Passphrase = strings.Repeat("ab", 32)
+	r.post("/api/account", in)
+	r.post("/api/recovery/ack", map[string]bool{"written": true})
+	r.waitView("done", func(v View) bool { return v.Screen == "done" })
+	env := strings.Join(r.sys.envOf("72-models-payload"), "\n")
+	for _, want := range []string{"RUNINK_MODELS_REQUIRED=1", "RUNINK_MODELS_PASSPHRASE_FILE="} {
+		if !strings.Contains(env, want) {
+			t.Errorf("72-models-payload env lacks %q", want)
+		}
 	}
 }

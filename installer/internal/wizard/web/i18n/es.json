@@ -195,6 +195,7 @@
   "err.password.mismatch": "Las dos contraseñas no coinciden.",
   "err.sshkey.invalid": "Eso no parece una clave pública SSH.",
   "err.passphrase.invalid": "Esa frase de acceso no se puede usar.",
+  "err.passphrase.required": "Este medio lleva sus modelos cifrados: introduzca la frase de acceso del medio para instalarlos.",
   "err.recovery.ack": "Marca la casilla cuando hayas apuntado la clave.",
   "err.usb.list": "No se han podido mostrar las memorias USB.",
   "err.usb.device": "Esa memoria ya no está disponible.",

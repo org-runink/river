@@ -195,6 +195,7 @@
   "err.password.mismatch": "Les deux mots de passe sont différents.",
   "err.sshkey.invalid": "Cela ne ressemble pas à une clé publique SSH.",
   "err.passphrase.invalid": "Cette phrase secrète ne peut pas être utilisée.",
+  "err.passphrase.required": "Ce support contient ses modèles chiffrés : saisissez la phrase secrète du support pour les installer.",
   "err.recovery.ack": "Cochez la case une fois la clé notée.",
   "err.usb.list": "Impossible d’afficher les clés USB.",
   "err.usb.device": "Cette clé n’est plus disponible.",
