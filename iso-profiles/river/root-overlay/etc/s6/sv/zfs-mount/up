@@ -1,0 +1,18 @@
+#!/bin/execlineb -P
+# Mount every ZFS dataset of the imported pool(s). The initramfs `zfs` hook mounts only the
+# boot environment (and its children); the pool's other datasets are its SIBLINGS
+# (<pool>/home, <pool>/state at /var/lib/core, <pool>/containers at /var/lib/k0s,
+# <pool>/models; 10-disk-zfs), and nothing else mounts them: the first installed server
+# booted with all four unmounted, so k0s and the platform wrote into the BE underneath.
+# They inherit the pool root's encryption key, which the initramfs already loaded.
+#
+# mount-filesystems depends on this (mount-filesystems/dependencies.d/zfs-mount), so
+# everything that waits for the filesystems waits for these too. It is enabled like any
+# service (profile.yaml live-session services; 80-enable-s6 on the target): s6 refuses to
+# commit a set in which an enabled service depends on a disabled one. Its own dependencies are
+# mount-filesystems' others (udevadm, modules, mount-tmpfs), NOT remount-root, which
+# depends on mount-filesystems itself (a cycle s6-rc-compile rejects). Mounting onto the
+# existing mountpoints does not need a writable root. On the live medium no pool is imported
+# and this mounts nothing. A dataset that fails to mount is reported and does
+# not stop the boot: the node must stay reachable to be repaired.
+/bin/sh -c "zfs mount -a || echo 'zfs-mount: some ZFS datasets did not mount (zfs mount -a failed)' >&2; exit 0"

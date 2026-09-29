@@ -1,0 +1,8 @@
+#!/bin/execlineb -P
+# Load the host firewall (inet runink_fw) at boot, on EVERY node, before NetworkManager and
+# sshd start (their dependencies.d/runink-fw): the base default-deny posture on an
+# unenrolled node, the private one once enrollment armed it. Enabled with `s6 set enable`
+# (profile.yaml live-session services; 80-enable-s6 on the target). Never fails the boot
+# (a failure would keep NetworkManager and sshd down): runink-fw logs and this exits 0.
+foreground { /usr/local/bin/runink-fw apply }
+exit 0

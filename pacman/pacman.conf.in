@@ -1,0 +1,39 @@
+# pacman.conf.in — rendered by scripts/build-iso.sh (@LOCALREPO@ -> absolute path).
+# Pinned repos for a reproducible golden-image build. Artix repos first (s6 world),
+# then our local [runink] repo for the built runink-* packages (incl. linux-runink,
+# runink-zfs and runink-zfs-utils). NO Arch [community]/[extra] desktop repos are enabled beyond what
+# Artix's system/world provide.
+
+[options]
+Architecture = x86_64
+CheckSpace
+SigLevel = Required DatabaseOptional
+LocalFileSigLevel = Optional
+# Pin mirror snapshot for reproducibility (see pacman/mirrorlist.pin).
+# artools copies the mirrorlist into place; this Include points at the pinned one.
+ParallelDownloads = 5
+
+# --- Artix (s6 flavour) ---
+[system]
+Include = /etc/pacman.d/mirrorlist-artix
+
+[world]
+Include = /etc/pacman.d/mirrorlist-artix
+
+[galaxy]
+Include = /etc/pacman.d/mirrorlist-artix
+
+# --- Arch (for the few packages Artix mirrors from Arch; NOT the kernel) ---
+# Artix overlays these; keep them AFTER the Artix repos so s6/openrc-free variants win.
+[extra]
+Include = /etc/pacman.d/mirrorlist-arch
+
+# --- ZFS: NOT a separate repo any more ---
+# [archzfs] was removed 2026-09-22. It supplied zfs-utils (2.3.3) against the 2.4.4
+# runink-zfs modules; the userland is now runink-zfs-utils from [runink], built from the
+# same signed OpenZFS tarball. Nothing in either profile comes from archzfs.
+
+# --- Our built packages ---
+[runink]
+SigLevel = Optional TrustAll
+Server = file://@LOCALREPO@

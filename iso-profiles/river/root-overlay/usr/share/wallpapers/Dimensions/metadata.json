@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "rkstrdee@gmail.com",
+                "Name": "Dharam Dhurandhar"
+            }
+        ],
+        "Id": "Dimensions",
+        "License": "GPL-3.0",
+        "Name": "Dimensions",
+        "Description": "CachyOS Emerald wallpaper (GPL-3.0), JPEG derivative vendored by RIVER"
+    }
+}

@@ -1,0 +1,306 @@
+/* Runink Business DNA Custom Styling for River Docs */
+
+:root {
+  /* Business DNA Color Palette */
+  --rk-dark-bg: #0c0f13;
+  --rk-card-bg: #141a20;
+  --rk-accent-gold: #d4af37;
+  --rk-accent-olive: #8b9a5f;
+  --rk-text-primary: #e6ecf0;
+  --rk-text-secondary: #a8b3ba;
+  --rk-border: #2a3038;
+  --rk-signal: #3ddc97;
+
+  /* Override geekdocs defaults */
+  --color-primary: var(--rk-accent-gold);
+  --color-secondary: var(--rk-accent-olive);
+}
+
+/* Dark mode (default for River) */
+body {
+  background-color: var(--rk-dark-bg);
+  color: var(--rk-text-primary);
+}
+
+/* Card styling */
+.gdoc-card,
+.gdoc-container,
+.content {
+  background-color: var(--rk-card-bg);
+  border-color: var(--rk-border);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--rk-text-primary);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--rk-border);
+  padding-bottom: 0.5rem;
+}
+
+h2 {
+  font-size: 1.875rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--rk-accent-gold);
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Links */
+a {
+  color: var(--rk-accent-gold);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  border-bottom-color: var(--rk-accent-gold);
+  color: var(--rk-accent-olive);
+}
+
+/* Code blocks */
+pre {
+  background-color: #0a0c0f;
+  border: 1px solid var(--rk-border);
+  border-radius: 0.5rem;
+}
+
+code {
+  color: var(--rk-signal);
+  font-family: 'Fira Code', monospace;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--rk-accent-gold);
+  padding-left: 1rem;
+  color: var(--rk-text-secondary);
+  font-style: italic;
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+th {
+  background-color: var(--rk-border);
+  color: var(--rk-accent-gold);
+  font-weight: 700;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+td {
+  border-bottom: 1px solid var(--rk-border);
+  padding: 0.75rem;
+  color: var(--rk-text-primary);
+}
+
+tr:hover {
+  background-color: rgba(212, 175, 55, 0.05);
+}
+
+/* Navigation */
+.gdoc-nav {
+  background-color: var(--rk-dark-bg);
+  border-right: 1px solid var(--rk-border);
+}
+
+.gdoc-nav a {
+  color: var(--rk-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.gdoc-nav a:hover,
+.gdoc-nav a.active {
+  color: var(--rk-accent-gold);
+  background-color: rgba(212, 175, 55, 0.1);
+}
+
+/* Breadcrumbs */
+.gdoc-breadcrumb {
+  color: var(--rk-text-secondary);
+  border-bottom: 1px solid var(--rk-border);
+  padding-bottom: 1rem;
+}
+
+.gdoc-breadcrumb a {
+  color: var(--rk-accent-gold);
+}
+
+/* Callouts / Alerts */
+.gdoc-hint,
+.gdoc-warning,
+.gdoc-danger,
+.gdoc-tip {
+  border-left: 4px solid;
+  padding: 1rem;
+  margin: 1rem 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 0.25rem;
+}
+
+.gdoc-hint {
+  border-color: var(--rk-signal);
+}
+
+.gdoc-warning {
+  border-color: var(--rk-accent-gold);
+}
+
+.gdoc-danger {
+  border-color: #e5484d;
+}
+
+.gdoc-tip {
+  border-color: var(--rk-accent-olive);
+}
+
+/* Custom Business DNA section styling */
+.biz-dna-section {
+  background-color: var(--rk-card-bg);
+  border: 1px solid var(--rk-border);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 2rem 0;
+}
+
+.biz-dna-section h3 {
+  color: var(--rk-accent-gold);
+  margin-top: 0;
+}
+
+.biz-dna-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.biz-dna-value {
+  background-color: rgba(212, 175, 55, 0.1);
+  border: 1px solid var(--rk-border);
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  color: var(--rk-accent-gold);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Release badge styling */
+.release-badge {
+  display: inline-block;
+  background-color: var(--rk-border);
+  border: 1px solid var(--rk-accent-olive);
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.release-badge.stable {
+  border-color: var(--rk-signal);
+  color: var(--rk-signal);
+}
+
+.release-badge.beta {
+  border-color: var(--rk-accent-gold);
+  color: var(--rk-accent-gold);
+}
+
+.release-badge.security {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
+/* Feature request / issue tracking section */
+.issue-tracking-section {
+  background-color: rgba(139, 154, 95, 0.1);
+  border: 1px solid var(--rk-accent-olive);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 2rem 0;
+}
+
+.issue-tracking-section h3 {
+  color: var(--rk-accent-olive);
+  margin-top: 0;
+}
+
+.issue-template-link {
+  display: inline-block;
+  background-color: var(--rk-accent-olive);
+  color: var(--rk-dark-bg);
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  transition: all 0.2s ease;
+}
+
+.issue-template-link:hover {
+  background-color: var(--rk-accent-gold);
+  border-bottom: none;
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--rk-border);
+  color: var(--rk-text-secondary);
+  padding-top: 2rem;
+  margin-top: 3rem;
+}
+
+footer a {
+  color: var(--rk-accent-gold);
+}
+
+/* Print styles */
+@media print {
+  body {
+    background-color: white;
+    color: black;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: black;
+  }
+
+  a {
+    color: #0066cc;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  .biz-dna-values {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}

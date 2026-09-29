@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# gitleaks configuration for the release gate's image secret scan. The gate scans only the
+# files the image's authors add or change (`archaudit ownfiles`), with gitleaks' default
+# rules. Every exception below names ONE generated file and says why it is not a secret;
+# add one only with that evidence, in review.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "generated files that contain secret-looking signatures, not secrets"
+paths = [
+  # shared-mime-info's compiled magic database (update-mime-database, at install time): it
+  # holds the byte signatures used to RECOGNISE files, including "-----BEGIN PRIVATE KEY".
+  '''(^|/)usr/share/mime/magic$''',
+]

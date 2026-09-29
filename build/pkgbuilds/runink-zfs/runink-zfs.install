@@ -1,0 +1,36 @@
+# Rebuild the module dependency graph for the linux-runink kernel(s) after (un)install so the
+# freshly-placed spl.ko/zfs.ko in extra/ are resolvable by the initramfs + modprobe at boot.
+_depmod_runink() {
+  local d
+  for d in /usr/lib/modules/*-runink; do
+    [ -d "$d" ] || continue
+    depmod "$(basename "$d")" 2>/dev/null || true
+  done
+}
+
+# Report the userland/module version pair.
+#
+# This package ships MODULES ONLY; runink-zfs-utils (split from the same PKGBUILD, built
+# from the same signed OpenZFS tarball) supplies the userland and the `zfs` initcpio hook.
+# depends=(runink-zfs-utils=<pkgver>) makes a mismatch impossible through pacman's
+# resolver; it is still possible with -dd/--nodeps, and the expensive way to discover
+# that is a pool that will not import. So say both versions out loud.
+_report_versions() {
+  local mod util
+  mod="$(find /usr/lib/modules/*-runink/extra -name 'zfs.ko*' 2>/dev/null | head -1)"
+  util="$(pacman -Q runink-zfs-utils 2>/dev/null | awk '{print $2}')"
+  echo "runink-zfs: modules  ${mod:-none} (OpenZFS ${1%-*})"
+  echo "runink-zfs: userland runink-zfs-utils ${util:-ABSENT}"
+  if [ -z "$util" ]; then
+    echo "runink-zfs: WARNING — runink-zfs-utils is NOT installed. It supplies the zfs" >&2
+    echo "runink-zfs:           initcpio hook; without it 'mkinitcpio -P' fails with" >&2
+    echo "runink-zfs:           \"Hook 'zfs' cannot be found\" and the image will not boot a ZFS root." >&2
+  elif [ "${util%-*}" != "${1%-*}" ]; then
+    echo "runink-zfs: WARNING — userland ${util%-*} != modules ${1%-*}; OpenZFS does not" >&2
+    echo "runink-zfs:           support mixed pairings. Install the matching runink-zfs-utils." >&2
+  fi
+}
+
+post_install() { _depmod_runink; _report_versions "$1"; }
+post_upgrade() { _depmod_runink; _report_versions "$1"; }
+post_remove()  { _depmod_runink; }

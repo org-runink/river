@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Runink"
+            }
+        ],
+        "Id": "River",
+        "License": "CC-BY-4.0",
+        "Name": "Runink River",
+        "Description": "Runink River: river lines and the community mark, on the dark and light grounds"
+    }
+}

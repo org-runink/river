@@ -1,0 +1,33 @@
+# skalibs — skarnet.org's general-purpose C library. Foundation of execline and s6.
+#
+# Built STATIC ONLY (--disable-shared). execline and s6 link it statically (their default
+# --enable-allstatic), so skalibs is a build-time dependency and never part of the installed
+# runtime closure: one fewer shared object on the node, and no ABI coupling between the
+# three packages on upgrade. Upstream recommends exactly this for single-purpose systems.
+pkgname=skalibs
+pkgver=2.15.1.0
+pkgrel=1
+pkgdesc="skarnet.org general-purpose C library (static; build-time dependency of execline and s6)"
+url="https://skarnet.org/software/skalibs/"
+license="ISC"
+depends=""
+makedepends=""
+sources="skalibs"
+
+build() {
+	cd "skalibs-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysdepdir=/usr/lib/skalibs/sysdeps \
+		--disable-shared \
+		--enable-static \
+		--with-default-path=/usr/bin
+	make
+}
+
+package() {
+	cd "skalibs-${pkgver}"
+	make DESTDIR="${pkgdir}" install
+	install -Dm644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+}

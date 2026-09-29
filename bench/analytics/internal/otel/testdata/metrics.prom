@@ -1,0 +1,15 @@
+# HELP target_info Target metadata (the OpenTelemetry resource)
+# TYPE target_info gauge
+target_info{os_type="linux",river_bench_smoke="true",service_name="riverbench"} 1
+# HELP river_bench_compression_ratio Uncompressed bytes / compressed bytes
+# TYPE river_bench_compression_ratio gauge
+river_bench_compression_ratio{river_bench_block_size="131072",river_bench_layer="zfs",river_bench_setting="zstd-3"} 3.25
+# HELP river_bench_compression_throughput_bytes_per_second Single-core codec throughput
+# TYPE river_bench_compression_throughput_bytes_per_second gauge
+river_bench_compression_throughput_bytes_per_second{river_bench_block_size="131072",river_bench_direction="compress",river_bench_layer="zfs",river_bench_setting="zstd-3"} 5.125e+08
+# HELP process_cpu_time_seconds_total CPU time of the measured process
+# TYPE process_cpu_time_seconds_total counter
+process_cpu_time_seconds_total{cpu_mode="user",river_bench_note="a \"quoted\"\\value",river_bench_weight="0.5"} 1.5
+# HELP system_paging_operations_total Pages swapped
+# TYPE system_paging_operations_total counter
+system_paging_operations_total{system_paging_direction="in"} 42

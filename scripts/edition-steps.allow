@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# edition-steps.allow — installer steps that no in-tree step list runs, on purpose
+# (`river lint edition-steps`, cli/internal/lint/editionsteps.go).
+#
+# One entry per line:   step | reason
+# The reason is required. An entry for a step that is gone, or that a step list now runs,
+# fails the lint: delete it. A step the in-tree image ships and should run is never listed
+# here; it goes in the edition descriptor and runink-install instead.
+
+12-cloud-disk          | cloud images only (docs/CLOUD-IMAGES.md): the unencrypted, autoexpanding pool a downstream cloud image builds in place of 10-disk-zfs
+72-models-payload      | downstream editions only: unpacks a model payload, and this image carries no models
+73-downstream-payloads | downstream editions only: copies a private medium's encrypted payloads (docs/PAYLOADS.md); this image has none
+74-cloud-payload       | cloud images only (docs/CLOUD-IMAGES.md): the cloud counterpart of 72-models-payload
+76-setup-answers       | downstream scripted installs only: runink-autoinstall --setup-answers (docs/PAYLOADS.md, "First-boot hand-off")
+77-firstboot-ui        | downstream server editions only: the first-boot kiosk; the workstation boots to its desktop login
+78-cloud-target        | cloud images only (docs/CLOUD-IMAGES.md): serial console, initramfs drivers, NIC and SSH for a cloud VM
+85-cloud-finalize      | cloud images only (docs/CLOUD-IMAGES.md): cloud services in the boot database, identity cleared

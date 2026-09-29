@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Runink"
+            }
+        ],
+        "Category": "",
+        "Description": "Runink River: Breeze Dark with the Runink River wallpaper, splash and launcher mark",
+        "Id": "org.runink.river.desktop",
+        "License": "GPLv2+",
+        "Name": "Runink River",
+        "Website": "https://runink.org"
+    }
+}

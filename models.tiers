@@ -1,0 +1,43 @@
+# models.tiers — what each pinned model costs in RAM, for the install planner (river-plan).
+#
+# Format: docs/INSTALLER-HARDWARE.md ("The models manifest"). Every lock_repo/lock_role pair
+# names a models.lock row. Written from the models.lock set on 2026-09-24.
+#
+# mistral.rs is the only inference engine (decided 2026-09-27). Every figure below was
+# measured on it.
+#
+# resident_mib is MEASURED: RssAnon + RssFile of the serving process after load and after
+# a few small requests (so the KV cache is near empty), on an 8-core / 25 GiB x86-64 host,
+# CPU only, mistral.rs 0.9.2. Load-time peaks are higher and are NOT what the planner budgets:
+#   coder  peak 19542 MiB (VmHWM) while loading, 12036 MiB serving
+#   stt    peak 12943 MiB (VmHWM) while quantizing bf16 -> q4k at load, 7079 MiB serving
+# kv_mib_per_1k is computed from each model's config at the f16 KV-cache dtype the engine
+# uses on CPU: 2 x layers x kv_heads x head_dim x 2 bytes x 1024 tokens.
+#   coder      Qwen3-14B      40 layers, 8 KV heads, head_dim 128   -> 160
+#   stt        Voxtral 4B RT  26 layers, 8 KV heads, head_dim 128   -> 104 (80 ms of audio per token)
+#
+# general is not listed: it is the coder process (one Qwen3-14B serves both roles).
+# tts: the piper voices are pinned in models.lock (role tts), and its figure
+# is NOT measured here: it is the planner fixture's value until someone measures it.
+
+reserve=os       mib=1024
+reserve=k0s      mib=2048
+reserve=platform mib=6144
+
+# Mandatory tiers.
+# embedding: PENDING. No engine: mistral.rs is the only engine, and the previously pinned
+# embedding model does not load in it. The embedding model is being re-selected for one
+# mistral.rs serves; its output dimension must match the vector indexes (768). Until then
+# the planner reports the tier as "pending", places and budgets nothing for it, and does not
+# refuse the install. Replace this line with a tier= row (and its models.lock row) once the
+# model is chosen and measured.
+pending=embedding
+tier=stt       variant=voxtral-mini-4b-rt-isq-q4k   rank=1 resident_mib=7079  kv_mib_per_1k=104 ctx_min=4096  ctx_max=16384 lock_role=stt lock_repo=mistralai/Voxtral-Mini-4B-Realtime-2602
+tier=tts       variant=piper                        rank=1 resident_mib=256   kv_mib_per_1k=0   ctx_min=0     ctx_max=0     threads_max=2 lock_role=tts lock_repo=rhasspy/piper-voices
+
+# Optional tiers.
+tier=coder     variant=qwen3-14b-q4_k_m             rank=1 resident_mib=12036 kv_mib_per_1k=160 ctx_min=16384 ctx_max=32768 lock_role=coder lock_repo=Qwen/Qwen3-14B-GGUF
+# vision: Qwen3-VL-2B-Instruct Q4_K_M + mmproj Q8_0 (mistral.rs 0.9.2, --max-seq-len 16384).
+# resident_mib excludes the KV cache (measured peak 7.19 GiB at the validation context);
+# kv_mib_per_1k: 28 layers, 8 KV heads, head_dim 128 -> 112.
+tier=vision    variant=qwen3-vl-2b-instruct-q4_k_m  rank=1 resident_mib=7000  kv_mib_per_1k=112 ctx_min=8192  ctx_max=16384 lock_role=vision lock_repo=Qwen/Qwen3-VL-2B-Instruct-GGUF

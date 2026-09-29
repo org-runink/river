@@ -1,0 +1,170 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "os.type",
+            "value": {
+              "stringValue": "linux"
+            }
+          },
+          {
+            "key": "river.bench.smoke",
+            "value": {
+              "boolValue": true
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "riverbench"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "riverbench/compress",
+            "version": "1"
+          },
+          "metrics": [
+            {
+              "name": "river.bench.compression.ratio",
+              "description": "Uncompressed bytes / compressed bytes",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "river.bench.block_size",
+                        "value": {
+                          "intValue": "131072"
+                        }
+                      },
+                      {
+                        "key": "river.bench.layer",
+                        "value": {
+                          "stringValue": "zfs"
+                        }
+                      },
+                      {
+                        "key": "river.bench.setting",
+                        "value": {
+                          "stringValue": "zstd-3"
+                        }
+                      }
+                    ],
+                    "timeUnixNano": "1700000060000000500",
+                    "asDouble": 3.25
+                  }
+                ]
+              }
+            },
+            {
+              "name": "river.bench.compression.throughput",
+              "description": "Single-core codec throughput",
+              "unit": "By/s",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "river.bench.block_size",
+                        "value": {
+                          "intValue": "131072"
+                        }
+                      },
+                      {
+                        "key": "river.bench.direction",
+                        "value": {
+                          "stringValue": "compress"
+                        }
+                      },
+                      {
+                        "key": "river.bench.layer",
+                        "value": {
+                          "stringValue": "zfs"
+                        }
+                      },
+                      {
+                        "key": "river.bench.setting",
+                        "value": {
+                          "stringValue": "zstd-3"
+                        }
+                      }
+                    ],
+                    "timeUnixNano": "1700000060000000500",
+                    "asDouble": 512500000
+                  }
+                ]
+              }
+            },
+            {
+              "name": "process.cpu.time",
+              "description": "CPU time of the measured process",
+              "unit": "s",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "cpu.mode",
+                        "value": {
+                          "stringValue": "user"
+                        }
+                      },
+                      {
+                        "key": "river.bench.note",
+                        "value": {
+                          "stringValue": "a \"quoted\"\\value"
+                        }
+                      },
+                      {
+                        "key": "river.bench.weight",
+                        "value": {
+                          "doubleValue": 0.5
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1700000000000000000",
+                    "timeUnixNano": "1700000060000000500",
+                    "asDouble": 1.5
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "system.paging.operations",
+              "description": "Pages swapped",
+              "unit": "{operation}",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "system.paging.direction",
+                        "value": {
+                          "stringValue": "in"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1700000000000000000",
+                    "timeUnixNano": "1700000060000000500",
+                    "asDouble": 42
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

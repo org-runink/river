@@ -1,0 +1,50 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-core — the downstream platform tree, installed at /usr/local/share/runink/core.
+#
+# RIVER itself ships no platform: this package carries whatever a downstream payload
+# (RIVER_PAYLOAD_DIR, see build/config.env) staged in $RUNINK_OUT/core-tree. First-boot
+# enrollment runs core-tree/deploy on a controller and sources core-tree/enroll.d/*.sh;
+# core-tree/firstboot.d/* are installed to /usr/local/lib/runink/firstboot.d/ and run once
+# after k0s is up, with or without enrollment (river-firstboot-hooks).
+#
+# A BASE image (no payload; build-all.sh exports RIVER_PAYLOAD_NONE=1) gets an empty tree
+# plus a PAYLOAD-NONE marker, so enrollment can tell "no platform by design" from "the
+# payload build failed and this package shipped hollow". The second case must never
+# package: an earlier version checked only that the directory existed, shipped an empty
+# tree, and the node came up as a bare substrate while enrollment reported success.
+pkgname=runink-core
+pkgver=2026.07
+pkgrel=1
+pkgdesc="RIVER downstream platform tree (payload-supplied; empty on a base image)"
+arch=('x86_64')
+url="https://github.com/org-runink/river"
+license=('MIT')  # the packaging; a payload's own licence travels with the payload
+depends=('glibc' 'runink-k0s')
+options=('!strip')
+
+package() {
+	local out="${RUNINK_OUT:?set RUNINK_OUT to build/artifacts}"
+	local tree="$out/core-tree"
+	local dest="$pkgdir/usr/local/share/runink/core"
+	install -d "$dest"
+	if [ "${RIVER_PAYLOAD_NONE:-0}" = 1 ]; then
+		printf 'This RIVER image was built without a downstream payload.\n' > "$dest/PAYLOAD-NONE"
+		return 0
+	fi
+	# Verify the PAYLOAD, not the container.
+	[ -d "$tree" ] || { echo "runink-core: $tree missing — the payload build staged nothing" >&2; return 1; }
+	[ -x "$tree/deploy" ] || { echo "runink-core: $tree/deploy missing or not executable — refusing to package a hollow platform tree" >&2; return 1; }
+	cp -a "$tree/." "$dest/"
+	chmod 755 "$dest/deploy"
+	# Optional first-boot hooks (docs/PAYLOADS.md): core-tree/firstboot.d/* are run by
+	# river-firstboot-hooks after the k0s API is up, each until it has succeeded once. Every
+	# entry must be an executable regular file; anything else is a broken payload.
+	if [ -d "$tree/firstboot.d" ]; then
+		local h
+		for h in "$tree/firstboot.d"/*; do
+			[ -e "$h" ] || continue
+			[ -f "$h" ] && [ -x "$h" ] || { echo "runink-core: $h is not an executable file" >&2; return 1; }
+			install -Dm755 "$h" "$pkgdir/usr/local/lib/runink/firstboot.d/$(basename "$h")"
+		done
+	fi
+}

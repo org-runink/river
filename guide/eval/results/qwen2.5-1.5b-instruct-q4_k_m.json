@@ -1,0 +1,176 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct-GGUF@91cad51170dc346986eccefdc2dd33a9da36ead9 qwen2.5-1.5b-instruct-q4_k_m.gguf",
+  "server": "mistral.rs v0.9.4 CPU release",
+  "threads": 4,
+  "note": "shared 16-thread laptop CPU, another model server running concurrently",
+  "passed": 15,
+  "total": 15,
+  "mean_seconds": 13.6206954772,
+  "results": [
+    {
+      "q": "What CPU does Runink River need?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#probe-the-hardware"
+      ],
+      "seconds": 16.023036852,
+      "answer": "Runink River requires an x86-64-v3 CPU level.\n\nSource: [river#probe-the-hardware]",
+      "expected": "answer"
+    },
+    {
+      "q": "How much RAM is required?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#hardware-requirements"
+      ],
+      "seconds": 15.384593901,
+      "answer": "The minimum required RAM is 16 GB (15360 MiB).\n\nSource: [river#hardware-requirements]",
+      "expected": "answer"
+    },
+    {
+      "q": "Does Runink River support legacy BIOS boot?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#hardware-requirements"
+      ],
+      "seconds": 29.755925883,
+      "answer": "No, Runink River does not support legacy BIOS boot. Legacy BIOS boot is not supported: the installer writes a UEFI removable-media boot loader (`EFI/BOOT/BOOTX64.EFI`), so the node boots without a firmware boot entry.\n\nSource: [river#hardware-requirements]",
+      "expected": "answer"
+    },
+    {
+      "q": "What command installs Runink River onto the disk?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#run-the-installer"
+      ],
+      "seconds": 13.893917349,
+      "answer": "```sh\nsudo runink-install\n```\n\nSource: [river#run-the-installer]",
+      "expected": "answer"
+    },
+    {
+      "q": "Will river-guide run the installer for me?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#run-the-installer"
+      ],
+      "seconds": 17.828948212,
+      "answer": "No, river-guide will not run the installer for you. You need to switch to the second console (Alt+F2) and run the following command:\n\n```sh\nsudo runink-install\n```\n\nSource: [river#run-the-installer]",
+      "expected": "answer"
+    },
+    {
+      "q": "How many times is the recovery key shown, and is it saved anywhere?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#prepare-to-record-the-recovery-key"
+      ],
+      "seconds": 8.882919386,
+      "answer": "The recovery key is shown once during the installation process, and it is saved in the encrypted ZFS pool.\n\nSource: [river#prepare-to-record-the-recovery-key]",
+      "expected": "answer"
+    },
+    {
+      "q": "Can I install onto my existing unencrypted ZFS pool?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#the-installer-refuses-the-pool"
+      ],
+      "seconds": 15.9404364,
+      "answer": "Yes, you can install onto your existing unencrypted ZFS pool. Use the `zfs send` and `zfs receive` commands to copy datasets across from an existing importable pool.\n\nSource: [river#the-installer-refuses-the-pool]",
+      "expected": "answer"
+    },
+    {
+      "q": "How do I check every dataset is encrypted after install?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#verify-the-node"
+      ],
+      "seconds": 11.402164524,
+      "answer": "To check every dataset is encrypted after the install, run the following command:\n\n```sh\nzfs get -r encryption,keystatus zriver\n```\n\nSource: [river#verify-the-node]",
+      "expected": "answer"
+    },
+    {
+      "q": "GitHub is unreachable on my IPv6-only network, what do I do?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#github-is-unreachable-on-an-ipv6-only-network"
+      ],
+      "seconds": 16.570294882,
+      "answer": "If GitHub is unreachable on your IPv6-only network, you need to provide NAT64/DNS64 on the network or use an HTTPS proxy with the `river.guide.proxy=` kernel command line option. Without either, the remote channel and platform bundles are unavailable and everything else works offline.\n\nSource: [river#github-is-unreachable-on-an-ipv6-only-network]",
+      "expected": "answer"
+    },
+    {
+      "q": "Can a remote collaborator run the disk wipe from an issue comment?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#remote-observation-and-questions"
+      ],
+      "seconds": 22.00797931,
+      "answer": "No, a remote collaborator cannot run the disk wipe from an issue comment. Only the operator who initiated the remote observation can approve a read-only check step.\n\nSource: [river#remote-observation-and-questions]",
+      "expected": "answer"
+    },
+    {
+      "q": "Does the install need internet access?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#network-requirements"
+      ],
+      "seconds": 10.631151046,
+      "answer": "No, the install does not need internet access. It can run without network, as the installer copies the running live system to the disk.\n\nSource: [river#network-requirements]",
+      "expected": "answer"
+    },
+    {
+      "q": "What is a platform guide bundle?",
+      "mode": "model",
+      "pass": true,
+      "cites": [
+        "river#platform-guide-bundles"
+      ],
+      "seconds": 15.461432023,
+      "answer": "A platform guide bundle is a private, signed guide bundle that a downstream platform can publish on Runink River. The install medium carries only the bundle's location and public verification key, never its content. The steps for the guide bundle follow the Runink River steps. If no bundle is available, the guide says \"no platform guide bundle loaded\" and continues with the Runink River steps alone.\n\nSource: [river#platform-guide-bundles]",
+      "expected": "answer"
+    },
+    {
+      "q": "How do I configure a RAID controller's write cache?",
+      "mode": "not-found",
+      "pass": true,
+      "cites": null,
+      "seconds": 0.000100107,
+      "answer": "The loaded guide does not cover that. Try `steps`, or rephrase with the component name (disk, pool, network, firmware, ...).",
+      "expected": "not-found"
+    },
+    {
+      "q": "What is the recommended Kubernetes ingress controller for my web shop?",
+      "mode": "not-found",
+      "pass": true,
+      "cites": null,
+      "seconds": 0.00008518,
+      "answer": "The loaded guide does not cover that. Try `steps`, or rephrase with the component name (disk, pool, network, firmware, ...).",
+      "expected": "not-found"
+    },
+    {
+      "q": "How do I install Windows alongside Runink River?",
+      "mode": "not-found",
+      "pass": true,
+      "cites": [
+        "river#runink-river-install-guide",
+        "river#platform-guide-bundles",
+        "river#confirm-the-live-session",
+        "river#run-the-installer"
+      ],
+      "seconds": 10.527447103,
+      "note": "the guide model found no answer in the guide; closest sections follow",
+      "answer": "Runink River install guide [river#runink-river-install-guide]\nThis guide installs a Runink River server from the Runink River install medium: an s6-init,\nZFS-root Linux appliance whose whole root pool is encrypted at rest and whose network is\nIPv6-only. It is the knowledge `river-guide` answers from, and its steps are the steps\n`river-guide` walks you through.\n\nPlatform guide bundles [river#platform-guide-bundles]\nA downstream platform that runs on Runink River may publish its own installation guide as a\nprivate, signed guide bundle. The install medium carries only the bundle's location and\npublic verification key, never its content. After you sign in to GitHub (`login`),\n`river-guide` fetches the bundle if your GitHub identity can read it, verifies its\nsignature, and keeps it in memory only. Its steps then follow the Runink River steps. If no\nbundle is available, the guide says \"no platform guide bundle loaded\" and continues with the\nRunink River steps alone.\n\nSee also: [river#confirm-the-live-session] [river#run-the-installer]",
+      "expected": "not-found"
+    }
+  ]
+}

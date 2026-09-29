@@ -1,0 +1,245 @@
+#!/bin/sh
+# runink-install — the Runink River text-mode installer (runs in the live ISO session; the
+# graphical installer, river-installer, is what the live desktop opens).
+#
+# Network first, then the hardware plan, serial confirmation of every disk it erases, and the
+# ordered steps. It plans with the planner's workstation profile (desktop minimums, no model
+# tiers) and runs no payload step.
+#
+# A thin dialog-driven driver over the ordered installer/lib/NN-*.sh steps. Each step is
+# idempotent-ish and echoes what it does; a failure stops the run with the failing step
+# named. Config (pool name, hostname) is collected up front and exported to the steps as
+# RUNINK_* env vars.
+#
+# HARDWARE-ADAPTIVE (docs/INSTALLER-HARDWARE.md). Before any question is asked the machine
+# is probed (river-hwprobe) and an install plan is made (river-plan): model tiers, RAM
+# budget, threads and the ZFS layout (single / mirror / raidz1 / raidz2, special vdev). The
+# plan is SHOWN, a REFUSED plan stops here, and every disk the plan will erase must be
+# confirmed by typing its serial. The target disks come from the plan — the live boot
+# medium can never be one of them. The plan is written to /etc/runink/install-plan.json on
+# the installed node (step 75).
+#
+# NETWORK FIRST (step 0, docs/INSTALL.md "Network first"): before the probe, river-netsetup
+# sets up the network (or keeps what the live session already has) and records online,
+# lan-only or offline in /run/river/net-state.json. Every outcome continues: the install
+# copies the live system and needs no network.
+#
+#   runink-install [--plan-file FILE] [--lab] [--net-config FILE | --skip-network]
+#                  [--mode local|target|operator]
+#     --plan-file FILE  use a plan made earlier (river-plan --json) instead of planning now;
+#                       its disks are re-resolved by serial against a fresh probe
+#     --lab             waive the documented minimums (VMs and test rigs ONLY; recorded in
+#                       the plan)
+#     --net-config FILE step 0 applies this river-netsetup config instead of asking
+#     --skip-network    step 0 records the network as it is and asks nothing
+#     --mode MODE       skip the first menu: local (install this machine), target (let
+#                       another machine on this LAN install this one) or operator (install
+#                       other machines on this LAN); see docs/INSTALL.md, "LAN installs".
+#                       The LAN entries are offered only when their tools are on this image.
+#
+# On the built ISO these steps live at /usr/local/lib/runink-install/; in-repo they are
+# under installer/lib/. LIBDIR resolves whichever exists.
+set -eu
+
+for d in /usr/local/lib/runink-install "$(dirname "$0")/../../../../installer/lib" ./installer/lib; do
+	[ -d "$d" ] && { LIBDIR="$d"; break; }
+done
+: "${LIBDIR:?runink-install: cannot locate installer step library}"
+
+PLAN_IN=""
+LAB=""
+NET_CONFIG=""
+NET_SKIP=""
+MODE=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--plan-file) PLAN_IN="${2:?--plan-file needs a file}"; shift 2 ;;
+		--plan-file=*) PLAN_IN="${1#*=}"; shift ;;
+		--lab) LAB="--lab"; shift ;;
+		--net-config) NET_CONFIG="${2:?--net-config needs a file}"; shift 2 ;;
+		--net-config=*) NET_CONFIG="${1#*=}"; shift ;;
+		--skip-network) NET_SKIP=1; shift ;;
+		--mode) MODE="${2:?--mode needs local, target or operator}"; shift 2 ;;
+		--mode=*) MODE="${1#*=}"; shift ;;
+		-h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "runink-install: unknown argument $1" >&2; exit 2 ;;
+	esac
+done
+
+have_dialog() { command -v dialog >/dev/null 2>&1; }
+
+ask() { # ask VAR "prompt" "default"
+	_v="$1"; _p="$2"; _d="${3:-}"
+	if have_dialog; then
+		_ans="$(dialog --stdout --inputbox "$_p" 8 70 "$_d")" || exit 1
+	else
+		printf '%s [%s]: ' "$_p" "$_d" >&2; read -r _ans || true
+		[ -z "$_ans" ] && _ans="$_d"
+	fi
+	eval "$_v=\$_ans"
+}
+
+show_file() { # show_file TITLE FILE
+	if have_dialog; then
+		dialog --title "$1" --exit-label "Continue" --textbox "$2" 0 0 || true
+		clear 2>/dev/null || true
+	else
+		cat "$2"
+	fi
+}
+
+echo "=== Runink River installer ($(cat /etc/runink-os-version 2>/dev/null || echo dev)) ==="
+
+# --- Step 0: network first ---------------------------------------------------
+# The first thing the installer does, as it is the first thing the live session does
+# (river-guide-tty runs river-netsetup --auto before the guide). Keep or redo the setup; any
+# outcome continues. Later steps read /run/river/net-state.json (RUNINK_NET_STATE_FILE).
+if command -v river-netsetup >/dev/null 2>&1; then
+	if [ -n "$NET_CONFIG" ]; then
+		river-netsetup --config "$NET_CONFIG" || echo "runink-install: network config not applied; continuing" >&2
+	elif [ -n "$NET_SKIP" ]; then
+		river-netsetup --check || true
+	else
+		river-netsetup --installer || echo "runink-install: network setup did not finish; continuing (the install needs no network)" >&2
+	fi
+else
+	echo "runink-install: river-netsetup is not on this image; step 0 (network) skipped" >&2
+fi
+RIVER_NET_STATE="unknown" RIVER_NET_HOSTNAME=""
+# shellcheck disable=SC1091
+[ -r /run/river/net.env ] && . /run/river/net.env
+echo "Network: $RIVER_NET_STATE"
+export RUNINK_NET_STATE="$RIVER_NET_STATE" RUNINK_NET_STATE_FILE="/run/river/net-state.json"
+
+# --- What is this session for? (LAN installs: docs/INSTALL.md) ----------------------------
+# The network step, when the image has one, runs before this menu: pairing needs a link.
+# shellcheck source=installer/lib/pair-menu.sh
+. "$LIBDIR/pair-menu.sh"
+pair_menu "${MODE:-${PLAN_IN:+local}}" "$LAB"
+
+# --- Probe + plan -----------------------------------------------------------
+# The workstation planner profile (river-plan --profile workstation): desktop minimums
+# (x86-64-v3, 2 physical cores, 8 GB, one eligible disk of 64 GiB, UEFI), no model tiers and
+# no k0s/platform reserve. hwplan.sh passes it; docs/INSTALLER-HARDWARE.md, "Profiles".
+export RUNINK_PLAN_PROFILE=workstation
+# shellcheck source=installer/lib/hwplan.sh
+. "$LIBDIR/hwplan.sh"
+hwplan_init
+PROBE="$HWPLAN_DIR/probe.json"
+PLAN="$HWPLAN_DIR/plan.json"
+hwplan_probe "$PROBE"
+if [ -n "$PLAN_IN" ]; then
+	[ -z "$LAB" ] || { echo "runink-install: --lab applies when planning; the plan in $PLAN_IN is already made" >&2; exit 2; }
+	cp "$PLAN_IN" "$PLAN"
+else
+	rc=0
+	# shellcheck disable=SC2086 # $LAB is empty or the single word --lab
+	hwplan_make "$PROBE" "$PLAN" $LAB || rc=$?
+	[ "$rc" -eq 0 ] || [ "$rc" -eq 3 ] || { echo "runink-install: planning failed (river-plan exit $rc)" >&2; exit 1; }
+fi
+verdict=0
+river-plan --plan-file "$PLAN" > "$HWPLAN_DIR/plan.txt" || verdict=$?
+[ "$verdict" -eq 0 ] || [ "$verdict" -eq 3 ] || { echo "runink-install: cannot read the plan (river-plan exit $verdict)" >&2; exit 1; }
+show_file "RIVER install plan" "$HWPLAN_DIR/plan.txt"
+if [ "$verdict" -eq 3 ]; then
+	echo "runink-install: this machine is below the documented minimums — REFUSED (see the plan above)." >&2
+	echo "  docs/INSTALLER-HARDWARE.md lists them. For a VM or test rig only: runink-install --lab" >&2
+	exit 1
+fi
+
+# --- Confirm every disk the plan erases, by serial ----------------------------
+# The serial is printed on the drive label and in the BMC / RAID-controller inventory:
+# check it there, not just on this screen. A mistyped serial asks again; three misses abort.
+river-plan --plan-file "$PLAN" --list-disks > "$HWPLAN_DIR/disks.tsv"
+[ -s "$HWPLAN_DIR/disks.tsv" ] || { echo "runink-install: the plan selects no disk" >&2; exit 1; }
+CONFIRMED=""
+TAB="$(printf '\t')"
+while IFS="$TAB" read -r _name _id _gib _kind _role _model <&3; do
+	_tries=0
+	while :; do
+		_prompt="ERASE $_name ($_role, $_kind, ${_gib} GiB, $_model)? Type its serial [$_id] to confirm"
+		if have_dialog; then
+			_ans="$(dialog --stdout --inputbox "$_prompt" 9 90 "")" || exit 1
+		else
+			printf '%s: ' "$_prompt" >&2; read -r _ans || exit 1
+		fi
+		if [ "$_ans" = "$_id" ]; then
+			CONFIRMED="$CONFIRMED$_id
+"
+			break
+		fi
+		_tries=$((_tries + 1))
+		echo "  serial does not match $_name" >&2
+		[ "$_tries" -lt 3 ] || { echo "runink-install: $_name not confirmed — aborted, nothing was written." >&2; exit 1; }
+	done
+done 3< "$HWPLAN_DIR/disks.tsv"
+
+hwplan_resolve "$PLAN" "$PROBE" "$HWPLAN_DIR/plan.env" "$CONFIRMED" \
+	|| { echo "runink-install: the plan does not resolve on this machine — aborted, nothing was written." >&2; exit 1; }
+# shellcheck disable=SC1091
+. "$HWPLAN_DIR/plan.env"
+
+# --- Collect config -------------------------------------------------------
+# Pool name: NEW installs default to "zriver". An EXISTING pool keeps its name — if one is
+# importable (e.g. a node being reinstalled), it becomes the default instead, so pressing
+# Enter on a reinstall imports it rather than repartitioning the disk for a fresh "zriver".
+_pool_default="zriver"
+modprobe zfs 2>/dev/null || true
+_pool_found="$(zpool import 2>/dev/null | sed -n 's/^ *pool: *//p' | head -1)"
+if [ -n "$_pool_found" ]; then
+	echo "Found an importable ZFS pool: $_pool_found (defaulting to it; it keeps its name)."
+	_pool_default="$_pool_found"
+fi
+ask RUNINK_POOL      "ZFS pool name (created or imported)"             "$_pool_default"
+ask RUNINK_HOSTNAME  "Hostname for this node"                         "${RIVER_NET_HOSTNAME:-runink}"
+ask RUNINK_BE        "Boot-environment name"                          "runink-$(cat /etc/runink-os-version 2>/dev/null | sed 's/[^0-9.]//g' || echo 1)"
+ask RUNINK_ENROLL    "Path to enrollment.env (models+secrets), or blank to defer" ""
+# ZFS native encryption (every dataset, aes-256-gcm). 'generated' = a random 64-hex key,
+# shown ONCE as the recovery key and typed at the console on each boot until a key
+# provider is installed; 'own' = type a passphrase during step 10. Ignored on import.
+ask RUNINK_ZFS_KEY   "ZFS encryption key: generated | own"              "generated"
+
+export RUNINK_DISK RUNINK_POOL RUNINK_HOSTNAME RUNINK_BE RUNINK_ENROLL RUNINK_ZFS_KEY
+export RUNINK_POOL_TOPOLOGY RUNINK_POOL_DISKS RUNINK_POOL_VDEV_WIDTH RUNINK_SPECIAL_DISKS
+# The plan's memory sizes (30-target-config applies them; installer/lib/memtune.sh).
+export RUNINK_ZFS_ARC_MAX RUNINK_ZRAM_SIZE
+export RUNINK_PLAN_FILE="$PLAN" RUNINK_CONFIRMED_IDS="$CONFIRMED"
+export RUNINK_TARGET="/mnt"
+export RUNINK_OVERLAY_SRC="${RUNINK_OVERLAY_SRC:-/run/archiso/bootmnt/runink/root-overlay}"
+export RUNINK_ARTIFACTS="${RUNINK_ARTIFACTS:-/run/archiso/bootmnt/runink/artifacts}"
+
+echo
+echo "About to install: pool $RUNINK_POOL ($RUNINK_POOL_TOPOLOGY on $RUNINK_POOL_DISKS${RUNINK_SPECIAL_DISKS:+, special mirror $RUNINK_SPECIAL_DISKS}), boot disk $RUNINK_DISK, BE $RUNINK_BE."
+echo "THIS WILL DESTROY DATA ON THOSE DISKS unless an existing pool is being imported."
+echo "The new pool is ENCRYPTED; its recovery key is shown once during step 10 — have a way to record it."
+echo "An existing UNENCRYPTED pool is refused (ZFS cannot encrypt in place — see docs/ENCRYPTION.md)."
+printf 'Type YES to proceed: '; read -r confirm
+[ "$confirm" = "YES" ] || { echo "aborted."; exit 1; }
+
+# --- Run ordered steps ----------------------------------------------------
+for step in \
+	00-preflight \
+	05-hwplan-verify \
+	10-disk-zfs \
+	20-clone-rootfs \
+	30-target-config \
+	35-pacman-keyring \
+	40-boot-grub-zfs \
+	50-runink-user \
+	60-load-artifacts \
+	70-secrets-models \
+	75-install-plan \
+	80-enable-s6 \
+	90-export
+do
+	f="$LIBDIR/$step.sh"
+	[ -f "$f" ] || { echo "installer: missing step $f" >&2; exit 1; }
+	echo; echo "===> $step"
+	# shellcheck disable=SC1090
+	sh "$f" || { echo "installer: step $step FAILED" >&2; exit 1; }
+done
+
+echo
+echo "=== install complete — reboot into Runink River ==="
+echo "First boot runs enrollment (models sync + secrets) if enrollment.env was provided."
+echo "The hardware plan is at /etc/runink/install-plan.json on the installed machine."

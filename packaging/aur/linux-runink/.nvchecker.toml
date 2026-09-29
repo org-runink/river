@@ -1,0 +1,11 @@
+# nvchecker (https://github.com/lilydjwg/nvchecker) configuration, as Arch package repos
+# carry. It reports new zen-kernel releases of the pinned 7.2 series in pkgver form
+# (v7.2.8-zen1 -> 7.2.8.zen1). A bump is not automatic: it needs a matching Runink River tag
+# for the config files and an OpenZFS range check (see PUBLISHING.md).
+[linux-runink]
+source = "github"
+github = "zen-kernel/zen-kernel"
+use_max_tag = true
+include_regex = 'v7\.2\.\d+-zen\d+'
+from_pattern = 'v(\d+\.\d+\.\d+)-zen(\d+)'
+to_pattern = '\1.zen\2'

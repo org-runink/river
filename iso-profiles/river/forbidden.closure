@@ -1,0 +1,36 @@
+# forbidden.closure — packages that must NOT appear anywhere in the resolved dependency
+# closure of Packages-Root.
+#
+# THIS LIST IS DELIBERATELY SHORT. A developer workstation needs mesa, xorg, cairo, pango,
+# pipewire and base-devel: KDE Plasma is built on them. Padding this list with
+# plausible-looking entries would fail legitimate builds.
+#
+# So this bans only what is genuinely wrong on Runink River (items 1-2 here, item 3
+# at the end of the file):
+#
+#   1. A SECOND KERNEL. The profile installs exactly one (see Packages-Root). Two kernels
+#      means two module trees, two ZFS DKMS builds, and an initramfs that can silently boot
+#      the wrong one. `linux-runink` is the one; plain `linux` or `linux-lts` must not arrive
+#      alongside it.
+#
+#   2. NON-SOVEREIGN CLOUD/AI CLIs. The whole platform's premise is that inference and
+#      infrastructure are self-hosted. A workstation that ships a vendor CLI invites the
+#      exact dependency the architecture exists to avoid, and it is far easier to keep them
+#      out of the image than to remove them from muscle memory later. This mirrors, at the
+#      OS layer, the guardrail against third-party AI SDKs and telemetry in the tree
+#      (AGENTS.md).
+#
+# Anything not listed here is allowed. If you are about to add an entry, be able to say
+# what breaks if it ships — "it feels heavy" is not a reason, and a check that fails
+# legitimate work gets disabled, taking the real bans down with it.
+
+linux
+aws-cli aws-cli-v2
+google-cloud-cli google-cloud-sdk
+azure-cli
+
+#   3. AN APP STORE / SANDBOXED-APP RUNTIME (owner decision 2026-09-24). Runink River is
+#      updated by pacman from the pinned repos; it needs no store, and Flatpak is a second, unpinned software supply chain beside pacman. The
+#      Plasma list in Packages-Root replaces plasma-meta precisely to keep these out.
+#      (kuserfeedback is NOT listed: plasma-workspace, dolphin and kate hard-depend on it.)
+flatpak flatpak-kcm discover packagekit packagekit-qt6

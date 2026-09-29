@@ -1,0 +1,26 @@
+#!/usr/sbin/nft -f
+# runink-firewall-base.nft — the host firewall, loaded on every Runink River machine from
+# the first boot (s6 oneshot runink-fw, before NetworkManager and sshd), both families.
+#
+# Default-deny INPUT: loopback, established/related, ICMPv6 and ICMPv4 essentials, DHCPv4 and
+# DHCPv6 client replies, mDNS, and the ports opened on purpose (open_tcp/open_udp, the live
+# medium's pairing ports). Nothing else: SSH is CLOSED by default although sshd runs; open it
+# with a "tcp 22" line in /etc/runink/fw-open (or `runink-fw open tcp 22` until the next
+# boot). OUTBOUND is open, and its replies come back as established: a laptop keeps its LAN,
+# its Wi-Fi and its DHCP lease. Default-deny FORWARD: see runink-fw-common.nft.
+#
+# Only OUR table is replaced (never `flush ruleset`), so the tables another tool adds (a
+# container engine, a VM manager) are untouched.
+table inet runink_fw
+delete table inet runink_fw
+
+table inet runink_fw {
+	include "/usr/local/lib/runink-net/runink-fw-common.nft"
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		jump common_in
+
+		log prefix "runink-fw drop: " level info flags all limit rate 5/minute
+	}
+}

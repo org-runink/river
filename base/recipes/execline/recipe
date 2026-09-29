@@ -1,0 +1,32 @@
+# execline — skarnet.org's non-interactive scripting language. s6-rc service definitions and
+# s6-linux-init's stage scripts are execline, so it is a RUNTIME dependency of s6.
+#
+# Links skalibs statically (upstream default --enable-allstatic), dynamically against libc.
+# libexecline.a and its headers ship in this package because s6 links them at build time;
+# splitting them into a -dev package is a recipe-format follow-up (docs/OWN-BASE.md), not
+# something this scaffold does.
+pkgname=execline
+pkgver=2.9.9.2
+pkgrel=1
+pkgdesc="skarnet.org non-interactive scripting language (s6-rc and s6-linux-init scripts)"
+url="https://skarnet.org/software/execline/"
+license="ISC"
+depends="glibc"
+makedepends="skalibs"
+sources="execline"
+
+build() {
+	cd "execline-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/execline \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps
+	make
+}
+
+package() {
+	cd "execline-${pkgver}"
+	make DESTDIR="${pkgdir}" install
+	install -Dm644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+}

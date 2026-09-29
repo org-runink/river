@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# s6 longrun: the graphical installer's backend on the IPv6 loopback (live medium only). The
+# kiosk on tty1 (river-installer-tty) shows it. s6 restarts it if it dies; its UI reconnects
+# and resumes from /run/river-installer/state.json. On an installed node (the clone excludes
+# this service and 80-enable-s6 disables it) it marks itself "do not restart" and stays down.
+exec 2>&1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
+if ! grep -qw 'overlay=livefs' /proc/cmdline 2>/dev/null || ! command -v river-installer >/dev/null 2>&1; then
+	s6-svc -O .
+	exit 0
+fi
+exec river-installer serve --listen '[::1]:47660' --kiosk-user river-kiosk --desktop-user runink

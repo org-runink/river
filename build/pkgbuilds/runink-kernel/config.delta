@@ -1,0 +1,160 @@
+# config.delta — Runink sovereign-kernel overrides applied on top of config.base.
+#
+# config.base is the linux-zen config (the 7.1.5 one linux-runink shipped before river#84),
+# ported to zen-kernel 7.2.7-zen1 by `make olddefconfig` in a patched 7.2.7 tree. The README
+# lists every difference versus the 6.18.53 config it replaces. Each line below is fed to the
+# kernel `scripts/config` tool in prepare(), so we track ONLY our deltas, never a hand-edited
+# 12k-line file that silently drifts from upstream.
+#
+# config.delta says what we CHANGE. config.require says what must be TRUE afterwards; the
+# build fails if the final .config breaks any line there.
+#
+# Format: one `scripts/config` directive per line (--set-val / --enable / --disable /
+# --module / --set-str).
+
+# --- Identity: this is OUR kernel -----------------------------------------------------------
+# NOTE: do NOT set CONFIG_LOCALVERSION here — the PKGBUILD already appends "-runink"
+# via localversion.20-pkgname (${pkgbase#linux}). Setting it here too doubled the suffix
+# (7.1.5-zen1-1-runink-runink) once, so `package()` — which resolves the module dir from the
+# single-suffix `version` file — failed with "rm: cannot remove '.../build'". prepare() now
+# also refuses any kernelrelease other than the pinned one. (Do not try `--set-str LOCALVERSION ""`
+# here either: prepare() word-splits each line, so the value becomes a literal `""`.)
+--disable LOCALVERSION_AUTO
+
+# --- Module signing (the ZFS-lockdown unlock) -------------------------------------------
+# Sign ALL modules (incl. the OOT ZFS module, signed with the same key in the zfs package)
+# so lockdown=integrity is viable. The embedded signing key is generated per-build.
+--enable MODULE_SIG
+--enable MODULE_SIG_ALL
+--enable MODULE_SIG_SHA512
+--disable MODULE_SIG_SHA1
+--set-str MODULE_SIG_HASH sha512
+# NOTE: MODULE_SIG_FORCE + lockdown=integrity are staged — enabled only AFTER a boot test
+# proves the signed-ZFS chain loads (see README). Enabling them blind would brick the boot.
+--enable SECURITY_LOCKDOWN_LSM
+--enable SECURITY_LOCKDOWN_LSM_EARLY
+
+# --- Memory-safety hardening (config-level; complements the grub cmdline flags) ----------
+--enable INIT_ON_ALLOC_DEFAULT_ON
+--enable INIT_ON_FREE_DEFAULT_ON
+--enable RANDOMIZE_KSTACK_OFFSET_DEFAULT
+--disable SLAB_MERGE_DEFAULT
+--enable RANDOMIZE_BASE
+--enable RANDOMIZE_MEMORY
+--enable STACKPROTECTOR
+--enable STACKPROTECTOR_STRONG
+--enable FORTIFY_SOURCE
+--enable HARDENED_USERCOPY
+--enable STRICT_KERNEL_RWX
+--enable STRICT_MODULE_RWX
+--enable DEBUG_WX
+--enable BUG_ON_DATA_CORRUPTION
+--disable DEVMEM
+--disable PROC_KCORE
+--disable LEGACY_PTYS
+--enable SECURITY_DMESG_RESTRICT
+--enable SECCOMP
+# (DEVKMEM was dropped from this list: the symbol left the kernel in 5.13.)
+
+# --- Trim clear attack surface this appliance never uses (conservative; NOT a full strip;
+#     leave all Meteor Lake HW + fs + net drivers from the base intact so the box still boots) -
+--disable KEXEC
+--disable KEXEC_FILE
+# KEXEC_HANDOVER `select`s KEXEC_FILE, so with it on the line above silently did nothing
+# (true in the zen build too). CRASH_DUMP only matters with a kexec capture kernel.
+--disable KEXEC_HANDOVER
+--disable CRASH_DUMP
+--disable HIBERNATION
+
+# --- ISA: generic x86-64-v3 --------------------------------------------------------------
+# The old line here, `--enable MNATIVE_INTEL`, named a zen-only symbol that 7.x zen had
+# already renamed away, so it silently did nothing. zen 7.2 has no ISA-level Kconfig (only
+# upstream's X86_NATIVE_CPU, which would bind the image to the build host), so the PKGBUILD
+# passes KCFLAGS=-march=x86-64-v3 instead. v3 = AVX2/FMA/F16C/MOVBE/BMI2 — safe on Meteor
+# Lake (no AVX-512).
+--disable X86_NATIVE_CPU
+
+# --- Drop in-kernel Rust: we ship no Rust modules and it drags a version-pinned
+#     rust/rust-bindgen/rust-src toolchain that's a frequent build-breaker. ----------------
+--disable RUST
+
+# --- eBPF floor ---------------------------------------------------------------------------
+# All of these were on in the zen base, but only by inheritance; nothing asserted them.
+# They are set explicitly here AND checked in config.require.
+--enable BPF_SYSCALL
+--enable BPF_JIT
+--enable BPF_JIT_ALWAYS_ON
+--enable DEBUG_INFO_BTF
+--enable DEBUG_INFO_BTF_MODULES
+--enable BPF_LSM
+--enable CGROUP_BPF
+--enable BPF_EVENTS
+--enable XDP_SOCKETS
+--module NET_CLS_BPF
+--module NET_ACT_BPF
+--enable SCHED_CLASS_EXT
+--set-str LSM landlock,lockdown,yama,integrity,bpf
+
+# --- User namespaces (bubblewrap, werf's rootless buildah) --------------------------------
+# zen carries the Debian-origin USER_NS_UNPRIVILEGED option: it is the boot-time default of
+# the kernel.unprivileged_userns_clone sysctl. river-sandbox (bwrap, unprivileged, not setuid)
+# needs unprivileged user namespaces, so the default is pinned ON here rather than inherited
+# from zen's Kconfig default, asserted in config.require, and sysctl.d/99-runink.conf sets
+# the sysctl to 1 explicitly as well (see the README "User namespaces" note).
+--enable USER_NS
+--enable USER_NS_UNPRIVILEGED
+
+# --- Analytics / throughput profile ---------------------------------------------------------
+# config.base is zen's DESKTOP-latency tuning. Runink River is a server OS for data pipelines
+# and analytics, so the defaults below trade interactive latency for throughput. Every line is
+# justified, with its citation, in docs/KERNEL.md ("Analytics profile"); config.require asserts
+# the result. What stays a RUNTIME choice (boot parameter or sysctl) is listed there as well:
+# a latency-sensitive node boots the same kernel with `preempt=full`, no second flavour.
+#
+# zen's interactivity bundle off: restores upstream's block-elevator defaults (mq-deadline for
+# single-queue, none for multi-queue NVMe, instead of bfq/kyber), upstream EEVDF base slice
+# (0.7 ms, not 0.4) and migration cost (0.5 ms, not 0.3), nr_migrate 32 (not 8), swap-in
+# readahead (page-cluster 3, not 0), unevictable compaction on, THP defrag back to upstream's
+# `madvise`, and split-lock mitigation back ON (zen turns it off). Source: the ZEN_INTERACTIVE
+# Kconfig help in the zen patch, which lists exactly these values.
+--disable ZEN_INTERACTIVE
+# Preemption: x86 in 7.2 no longer offers PREEMPT_NONE/VOLUNTARY (they depend on
+# !ARCH_HAS_PREEMPT_LAZY); PREEMPT_LAZY is upstream's default and its Kconfig help describes
+# it as recovering "some of the performance gains seen from using Voluntary preemption".
+# PREEMPT_DYNAMIC stays, so `preempt=full` remains a boot-time switch.
+--disable PREEMPT
+--enable PREEMPT_LAZY
+--enable PREEMPT_DYNAMIC
+# Tick: 1000 Hz is "the preferred choice for desktop systems"; 250 Hz is upstream's default and
+# "a good compromise choice allowing server performance" (kernel/Kconfig.hz). NO_HZ_FULL stays
+# built in (inherited), active only with `nohz_full=`.
+--disable HZ_1000
+--enable HZ_250
+# THP: `always` → `madvise`. Engines that want huge pages (JVM -XX:+UseTransparentHugePages,
+# jemalloc thp:always, DuckDB/ClickHouse allocators) ask via madvise(MADV_HUGEPAGE); everything
+# else avoids khugepaged/compaction stalls and RSS bloat (admin-guide/mm/transhuge.rst).
+# Still switchable at runtime in /sys/kernel/mm/transparent_hugepage/enabled.
+--disable TRANSPARENT_HUGEPAGE_ALWAYS
+--enable TRANSPARENT_HUGEPAGE_MADVISE
+# Congestion control and qdisc: BBR (upstream, v1) built in and default, fq as the default
+# qdisc. The in-kernel default also covers every container network namespace. zen's
+# out-of-tree BBRv3 stays available as a module (TCP_CONG_BBR3=m) for opt-in via sysctl.
+--enable TCP_CONG_BBR
+--disable DEFAULT_CUBIC
+--enable DEFAULT_BBR
+--set-str DEFAULT_TCP_CONG bbr
+--enable NET_SCH_FQ
+--enable NET_SCH_DEFAULT
+--disable DEFAULT_FQ_CODEL
+--enable DEFAULT_FQ
+# Autogroup "optimizes the scheduler for common desktop workloads" by grouping per session
+# (init/Kconfig); on a server it only makes `nice` ineffective across sessions. Workloads are
+# grouped by cgroup v2 (k0s/kubelet) instead.
+--disable SCHED_AUTOGROUP
+# Per-cpu workqueues "show better performance thanks to cache locality"; power-efficient mode
+# trades that for power "at the cost of small performance overhead" (kernel/power/Kconfig).
+# Still available at boot as `workqueue.power_efficient=1`.
+--disable WQ_POWER_EFFICIENT_DEFAULT
+# Kept as inherited (asserted in config.require, no change here): NUMA_BALANCING default on,
+# MGLRU (LRU_GEN_ENABLED), zswap default on, PSI on, IO_URING, HUGETLBFS, SCHED_CLASS_EXT,
+# CPU_MITIGATIONS. Mitigations are never disabled here or on the command line.

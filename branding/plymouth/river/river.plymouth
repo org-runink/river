@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Runink River
+Description=Runink River: three currents flowing under the community mark and wordmark.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/river
+ScriptFile=/usr/share/plymouth/themes/river/river.script

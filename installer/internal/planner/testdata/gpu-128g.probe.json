@@ -1,0 +1,156 @@
+{
+  "schema": "river.hwprobe/v1",
+  "probed_at": "2026-09-24T00:00:00Z",
+  "host": {
+    "vendor": "ExampleVendor",
+    "product": "gpu-24c-128g",
+    "virtual": false
+  },
+  "firmware": {
+    "uefi": true,
+    "secure_boot": false
+  },
+  "cpu": {
+    "vendor": "AuthenticAMD",
+    "model": "Example EPYC 24C",
+    "psabi_level": 4,
+    "psabi": "x86-64-v4",
+    "sockets": 1,
+    "physical_cores": 24,
+    "threads": 48,
+    "avx2": true,
+    "avx512f": true,
+    "avx512_bf16": true,
+    "avx512_vnni": true,
+    "avx_vnni": false,
+    "amx_tile": false,
+    "amx_bf16": false,
+    "amx_int8": false
+  },
+  "memory": {
+    "total_bytes": 135100000000,
+    "available_bytes": 121590000000,
+    "swap_total_bytes": 0
+  },
+  "gpus": [
+    {
+      "pci_address": "0000:41:00.0",
+      "vendor_id": "0x10de",
+      "device_id": "0x2331",
+      "vendor": "nvidia",
+      "integrated": false,
+      "vram_bytes": 0,
+      "vram_known": false
+    },
+    {
+      "pci_address": "0000:c1:00.0",
+      "vendor_id": "0x1002",
+      "device_id": "0x744c",
+      "vendor": "amd",
+      "driver": "amdgpu",
+      "integrated": false,
+      "vram_bytes": 25753026560,
+      "vram_known": true
+    }
+  ],
+  "disks": [
+    {
+      "name": "sda",
+      "path": "/dev/sda",
+      "by_id": "/dev/disk/by-id/ata-Example_SATA_SSD_1.92T_SSG000a",
+      "size_bytes": 1920383410176,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "sata",
+      "kind": "ssd",
+      "model": "Example SATA SSD 1.92T",
+      "serial": "SSG000a",
+      "confirm_id": "SSG000a",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "sdb",
+      "path": "/dev/sdb",
+      "by_id": "/dev/disk/by-id/ata-Example_SATA_SSD_1.92T_SSG000b",
+      "size_bytes": 1920383410176,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "sata",
+      "kind": "ssd",
+      "model": "Example SATA SSD 1.92T",
+      "serial": "SSG000b",
+      "confirm_id": "SSG000b",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "sdc",
+      "path": "/dev/sdc",
+      "by_id": "/dev/disk/by-id/ata-Example_SATA_SSD_1.92T_SSG000c",
+      "size_bytes": 1920383410176,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "sata",
+      "kind": "ssd",
+      "model": "Example SATA SSD 1.92T",
+      "serial": "SSG000c",
+      "confirm_id": "SSG000c",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "sdd",
+      "path": "/dev/sdd",
+      "by_id": "/dev/disk/by-id/usb-Example_USB_Stick_USBBOOT1",
+      "size_bytes": 31004295168,
+      "rotational": true,
+      "removable": true,
+      "read_only": false,
+      "transport": "usb",
+      "kind": "hdd",
+      "model": "Example USB Stick",
+      "serial": "USBBOOT1",
+      "confirm_id": "USBBOOT1",
+      "boot_media": true,
+      "in_use": true,
+      "zfs_member": false,
+      "eligible": false,
+      "ineligible_reasons": [
+        "boot medium of this installer",
+        "sdz mounted as the live medium at /run/archiso/bootmnt",
+        "USB-attached",
+        "removable media"
+      ]
+    }
+  ],
+  "nics": [
+    {
+      "name": "enp65s0",
+      "mac": "02:00:00:00:10:01",
+      "driver": "example",
+      "physical": true,
+      "wireless": false,
+      "operstate": "up",
+      "carrier": true,
+      "speed_mbps": 100000,
+      "ipv6_enabled": true,
+      "ipv6_link_local": true,
+      "ipv6_global": true
+    }
+  ],
+  "tpm": {
+    "present": true,
+    "version": "2.0",
+    "device": "tpm0"
+  }
+}

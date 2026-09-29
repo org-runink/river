@@ -1,0 +1,22 @@
+# CachyOS Emerald KDE wallpapers, vendored into RIVER as JPEG derivatives. Written by derive.sh.
+# upstream: https://github.com/CachyOS/CachyOS-Emerald-KDE @ d61d1dd01c1b186f9732c586fe238b8e25da02c2
+#   (tree path wallpapers/; commit off-branch since upstream cbe7396, still served by SHA;
+#    == CachyOS package cachyos-emerald-kde-theme-git r25.d61d1dd, byte-identical)
+# author: Dharam Dhurandhar <rkstrdee@gmail.com>; license: GPL-3.0 (metadata.desktop: GPLv3)
+# transform: alpha flattened onto black, metadata stripped, downscale-only to the listed
+#   geometry, JPEG 4:2:0 progressive at the listed quality; metadata.desktop -> metadata.json;
+#   upstream screenshots dropped (Plasma renders its own preview).
+# id | upstream path | upstream sha256 | quality/geometry | derived path | derived sha256
+Abstract | wallpapers/Abstract/contents/images/3840x2160.png | 2faf0fc6093fa3019c490983784583d35269b44a4dfa4c0c6e947326b92b892d | q85/3840x2160 | Abstract/contents/images/960x540.jpg | 16d98ca3d1edbae421ecb84c4a656a4513ef892d666aaf6e19a3917042784b97
+BlueFeathers | wallpapers/BlueFeathers/contents/images/3840x2160.png | f89b0a45b88f346bcc6527695a74d84ca555a006bb15c81e52bee56399b65032 | q85/3840x2160 | BlueFeathers/contents/images/1000x563.jpg | b2ee475c8a16a40504834b81152c6f93402879b8cc253d5c1da8ef87e4122ae8
+DarkStreaks | wallpapers/DarkStreaks/contents/images/3840x2160.png | a00a95a9fa14a77844a0081cb28810376076191a93cf9dbd5bb9871f45c423c4 | q85/3840x2160 | DarkStreaks/contents/images/960x540.jpg | ae22bf7d14829907962388bee29c0bc53722885f5d1b27bd9e9abccc17802fec
+Dimensions | wallpapers/Dimensions/contents/images/3840x2160.png | 8d824a64c4504738a3ee08225936e08cbc280dd5ed536e366e5c2a7a3f19164a | q90/3840x2160 | Dimensions/contents/images/3840x2160.jpg | 5f5eac4853ba3168bfcb224608708010e5d01034b2e58e5544cebeeb52d1aecb
+GreenFeathers | wallpapers/GreenFeathers/contents/screenhot.png | c4a2ff4e40ea2cafec5a87b6bc77cd4b51d90a0b0402f4869cafb06540436140 | q85/3840x2160 | GreenFeathers/contents/images/960x540.jpg | 37af2cbf4b005cb744aed53cf5e7b5099b9631d1ee44b7303a8a4a7c7afa6346
+Lines | wallpapers/Lines/contents/images/3840x2160.png | c9929e5971e0be64f36c1eeb48c7612f2b1d26bfcdbbe180233c98cfaf554ae2 | q82/2560x1440 | Lines/contents/images/2560x1440.jpg | d5081a655f0014c7f9028ad0acea5f7b9de7af53dc4ae380c8f330a080c7203d
+Liquid | wallpapers/Liquid/contents/images/3840x2160.png | 08cb50ab13da411cfe6b273460b810a8b3babb2d31a6034a6b770e1e72bfc695 | q88/2560x1440 | Liquid/contents/images/2560x1440.jpg | 68e0d2b86ec71e98496def863df63a9e0eab49363c892cba88c6e4ed6638cb8c
+Metal | wallpapers/Metal/contents/images/3840x2160.png | 5f72f3bd9f5b8daa559dc1882a16527a5807fe4cda65fdde0fb763b406ae9aa6 | q85/3840x2160 | Metal/contents/images/3840x2160.jpg | 5dd215c792bf90267c12d16804a552b1e51c8dbf17f9825e3945e3b854f6ca32
+OrangeFeathers | wallpapers/OrangeFeathers/contents/screenshot.png | cb4075eafc144148f2833177728ca60884436589b0e1be0fa0522cef0a64ea12 | q85/3840x2160 | OrangeFeathers/contents/images/960x540.jpg | 5d8042febd2781129502213eccc25d9f303b6eb7e19d8c2f2fbead2814356380
+paper | wallpapers/paper/contents/images/3840x2160.png | b7351cab32ad15a722db5de6d451d77afd2798804347ca8a77a6a37e33690ffa | q85/3840x2160 | paper/contents/images/3840x2160.jpg | 1d3bd8a1947572642aa830b53d28c6c23625870e4dd4671cad601fd7699eb61f
+PurpleFeathers | wallpapers/PurpleFeathers/contents/images/feathers7680x4320.png | 011d5abc8e35259f3d7fc056e99cd7678cfd3ecd9ce70b85904c211461567dfc | q85/3840x2160 | PurpleFeathers/contents/images/2000x1125.jpg | efc6a43ecdfd356f3999b1683498f599dee329ead7efc87862b81f82e06ec55c
+Skyscraper | wallpapers/Skyscraper/contents/images/3840x2160.png | 0fed6c95bac4a165a2571af3535540fa57c9b2c1f754e5619f93271bfc37a7a4 | q78/3840x2160 | Skyscraper/contents/images/3840x2160.jpg | fb978219ded0a18d6b3673e5ab1a9035baa26f00fa6f4df461306ef6f3ffaf5c
+Spectrum | wallpapers/Spectrum/contents/images/3840x2160.png | 711162dd6ad8ecd0f6c60b0b39851eb11905eb6225c198f7a84049e0b37ae509 | q90/3840x2160 | Spectrum/contents/images/3840x2160.jpg | 5b4ba29f6db8c76d9829bd08f00a46f08954da3c4d488a16d4fd623211e69a0e

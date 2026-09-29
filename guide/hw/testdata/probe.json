@@ -1,0 +1,27 @@
+{
+  "schema": "river.hwprobe/v1",
+  "probed_at": "2026-09-24T12:00:00Z",
+  "host": {"vendor": "ExampleCorp", "product": "EX-1000", "virtual": false},
+  "firmware": {"uefi": true, "secure_boot": false},
+  "cpu": {"vendor": "GenuineIntel", "model": "Intel(R) Core(TM) Ultra 7 155H", "psabi_level": 3, "psabi": "x86-64-v3",
+          "sockets": 1, "physical_cores": 16, "threads": 22, "avx2": true, "avx512f": false},
+  "memory": {"total_bytes": 99857989632, "available_bytes": 90000000000, "swap_total_bytes": 0},
+  "gpus": [{"pci_address": "0000:00:02.0", "vendor_id": "0x8086", "device_id": "0x7d55", "vendor": "intel", "driver": "i915", "integrated": true, "vram_bytes": 0, "vram_known": false}],
+  "disks": [
+    {"name": "nvme0n1", "path": "/dev/nvme0n1", "by_id": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7KHNJ0W123456X",
+     "size_bytes": 2000398934016, "rotational": false, "removable": false, "read_only": false, "transport": "nvme", "kind": "nvme",
+     "model": "Samsung SSD 990 PRO 2TB", "serial": "S7KHNJ0W123456X", "wwn": "eui.0025384b41a2b3c4", "confirm_id": "S7KHNJ0W123456X",
+     "boot_media": false, "in_use": false, "zfs_member": true, "eligible": true},
+    {"name": "sda", "path": "/dev/sda", "by_id": "/dev/disk/by-id/usb-Netac_OnlyDisk_AA00000000011542-0:0",
+     "size_bytes": 62008590336, "rotational": false, "removable": true, "read_only": false, "transport": "usb", "kind": "ssd",
+     "serial": "AA00000000011542", "confirm_id": "AA00000000011542", "boot_media": true, "in_use": true, "eligible": false,
+     "ineligible_reasons": ["install medium"]}
+  ],
+  "nics": [
+    {"name": "enp86s0", "mac": "48:21:0b:5a:9c:01", "driver": "igc", "physical": true, "wireless": false, "operstate": "up", "carrier": true,
+     "speed_mbps": 2500, "ipv6_enabled": true, "ipv6_link_local": true, "ipv6_global": true},
+    {"name": "wlan0", "mac": "c8:5e:a9:12:34:56", "physical": true, "wireless": true, "operstate": "down", "carrier": false, "speed_mbps": -1}
+  ],
+  "tpm": {"present": true, "version": "2.0", "device": "tpm0"},
+  "warnings": []
+}

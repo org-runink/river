@@ -1,0 +1,56 @@
+// SPDX-FileCopyrightText: 2026 The RIVER Authors
+// SPDX-License-Identifier: MIT
+//
+// Runink River: the system summary fish prints at every interactive start
+// (/etc/fish/conf.d/runink-greeting.fish). System-wide default; a user's own
+// ~/.config/fastfetch/config.jsonc replaces it.
+//
+// Every module reads this machine only. Nothing here touches the network (no PublicIp,
+// Weather or update checks): invariant 5, no telemetry.
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    // branding/fastfetch/river-mark.ansi, rendered by branding/render.sh: the community
+    // mark in truecolor half blocks, 44 columns x 22 rows. Printed as is.
+    "type": "file-raw",
+    "source": "/usr/share/runink/fastfetch/river-mark.ansi",
+    "width": 44,
+    "height": 22,
+    "padding": { "top": 1, "left": 2, "right": 4 }
+  },
+  "display": {
+    "separator": ": ",
+    // The palette's accent (sage, branding/palette.md) for the keys and the title.
+    "color": { "keys": "38;2;192;204;124", "title": "38;2;192;204;124" }
+  },
+  "modules": [
+    "title",
+    "separator",
+    "os",
+    "host",
+    "kernel",
+    { "type": "initsystem", "key": "Init" },
+    "uptime",
+    "packages",
+    "shell",
+    "display",
+    "de",
+    "wm",
+    "wmtheme",
+    "theme",
+    "icons",
+    "font",
+    "cursor",
+    "terminal",
+    "cpu",
+    "gpu",
+    "memory",
+    "swap",
+    "disk",
+    "localip",
+    "battery",
+    "locale",
+    "break",
+    "colors"
+  ]
+}

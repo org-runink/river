@@ -1,0 +1,5 @@
+# DuckDB CLI release pinned for the TPC-H suite (fetch-duckdb.sh reads this file).
+# sha256 is GitHub's asset digest for the release asset, re-checked after download.
+DUCKDB_VERSION=1.5.5
+DUCKDB_ASSET=duckdb_cli-linux-amd64.gz
+DUCKDB_SHA256=c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885

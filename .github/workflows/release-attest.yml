@@ -1,0 +1,236 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# release-attest: SBOM + SHA256SUMS + SLSA provenance for the assets of an EXISTING GitHub
+# Release (the RIVER ISO and its checksum files). Its outputs are UNSIGNED.
+#
+# PUBLISHING A RELEASE: use release-gate.yml instead. It verifies the offline signature, scans
+# the image (vulnerabilities, baked secrets), attests, and is the only thing that turns a
+# draft into a public release. This workflow stays for re-attesting an existing release.
+#
+# SIGNING IS NOT DONE HERE, by design. River releases and packages are signed with the
+# dedicated "Runink River Release Engineering" OpenPGP key (docs/RELEASE-SIGNING.md),
+# offline, by a release maintainer, with the `river-sign` script. This
+# workflow NEVER holds a signing key and must never be given one: no GPG secret, no
+# cosign private key. The maintainer downloads SHA256SUMS from the run or release, verifies it,
+# signs it locally (SHA256SUMS.asc), and uploads the detached signature. See
+# docs/governance/OPENSSF-BEST-PRACTICES.md "Signed releases" for the verification steps.
+#
+# cosign keyless (Sigstore, OIDC identity, no key) is OPTIONAL and ADDITIVE only: off by
+# default (input `cosign`), never a substitute for the owner's GPG signature.
+#
+# WHERE IT SITS IN THE RELEASE FLOW. The ISO is built by the maintainers in a privileged
+# builder (`make iso-in-builder`, see docs/BUILD.md), not in a CI job. This workflow is the stage AFTER the assets are attached to a release. It
+# does not build and does not modify the existing workflows. Dispatch it with the
+# release tag.
+#
+# HONEST SLSA LEVEL. Because the ISO is not built in this job, the provenance attests
+# "these exact digests were observed by this workflow at this commit". That is SLSA
+# Build L1 with signed provenance, NOT L3. Reaching L3 means building the ISO inside an
+# isolated, ephemeral, attested builder and attesting in the SAME job (see
+# docs/governance/OPENSSF-BEST-PRACTICES.md).
+#
+# HARMLESS WHILE PRIVATE, by construction:
+#   * trigger is workflow_dispatch only;
+#   * SBOM + checksums always run and are kept as a run artifact (nothing leaves GitHub);
+#   * artifact attestations on a private repo need GitHub Enterprise Cloud, and optional
+#     cosign keyless signing writes an entry to the PUBLIC Rekor transparency log. Both
+#     are gated on the repository being public (cosign also on `cosign: true`);
+#   * uploading anything to the release needs `publish: true` AND a public repository.
+#
+# syft is pinned by index digest (anchore/syft v1.51.1).
+name: release attest (SBOM + checksums + provenance, unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing release tag whose assets to attest (e.g. runink-os-2026.07)"
+        required: true
+      publish:
+        description: "upload SBOMs and SHA256SUMS (unsigned) back to the release (public repo only)"
+        required: false
+        type: boolean
+        default: false
+      cosign:
+        description: "ALSO add cosign keyless (Sigstore) bundles. Optional, additive to the owner's GPG signature; public repo only"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-attest-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  SYFT_IMAGE: docker.io/anchore/syft:v1.51.1@sha256:95fe0835e5bebc6f8b1f8acef68d47d63d594ef4c0f25c097ff853b23cbac74c
+
+jobs:
+  attest:
+    # workflow_dispatch only, so no pull-request code reaches it. GitHub-hosted ubuntu-latest
+    # (a fresh VM per job; it holds contents: write). It needs apt and passwordless sudo
+    # (libarchive-tools, squashfs-tools, unsquashfs as root), docker (syft), gh, outbound
+    # HTTPS, and ~20 GB of disk, the ISO plus its unpacked root (the reclaim step below
+    # makes room).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write       # gh release download / upload (upload gated below)
+      id-token: write       # OIDC identity for provenance (and optional cosign); NOT a signing key
+      attestations: write   # actions/attest-build-provenance
+    env:
+      TAG: ${{ inputs.tag }}
+      PUBLISH: ${{ inputs.publish }}
+      IS_PUBLIC: ${{ github.event.repository.visibility == 'public' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: src
+
+      # A standard hosted runner leaves ~14 GB free on /; this job holds the ISO, its unpacked
+      # root filesystem and the SBOMs, ~20 GB. Remove the preinstalled toolchains no step here
+      # uses (docker and gh are part of the base image and stay), then check.
+      - name: Reclaim disk (preinstalled toolchains this job never uses)
+        run: |
+          set -eu
+          echo "== before"; df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell \
+            /opt/microsoft /opt/google /usr/local/lib/node_modules
+          sudo docker system prune -af >/dev/null 2>&1 || true
+          sudo mkdir -p "$RUNNER_TOOL_CACHE"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TOOL_CACHE"
+          echo "== after"; df -h /
+          free_kb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')
+          [ "$free_kb" -ge $((20 * 1024 * 1024)) ] \
+            || { echo "::error::$((free_kb / 1024 / 1024)) GB free; this job needs about 20 GB"; exit 1; }
+
+      - name: Download the release assets
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+          ls -l dist
+          # Verify any checksum files the release already carries before attesting.
+          cd dist
+          for sums in *.sha256 SHA256SUMS; do
+            [ -f "$sums" ] || continue
+            echo "verifying $sums"
+            sha256sum -c --ignore-missing "$sums"
+          done
+
+      - name: SBOM of the source tree (SPDX + CycloneDX)
+        run: |
+          set -eu
+          mkdir -p sbom
+          docker run --rm -v "$PWD/src:/src:ro" -v "$PWD/sbom:/out" "$SYFT_IMAGE" \
+            scan dir:/src --source-name "river-source-${TAG}" \
+            -o spdx-json=/out/river-source.spdx.json \
+            -o cyclonedx-json=/out/river-source.cdx.json
+
+      - name: SBOM of each ISO's root filesystem (pacman package database)
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libarchive-tools squashfs-tools >/dev/null
+          found=0
+          for iso in dist/*.iso; do
+            [ -f "$iso" ] || continue
+            found=1
+            name=$(basename "$iso" .iso)
+            work="work/$name"
+            mkdir -p "$work/iso" "$work/rootfs"
+            bsdtar -xf "$iso" -C "$work/iso"
+            # The live rootfs is a squashfs image inside the ISO; unpack every one found.
+            find "$work/iso" -type f \( -name '*.img' -o -name '*.sfs' -o -name '*.squashfs' \) \
+              | while read -r img; do
+                  if unsquashfs -s "$img" >/dev/null 2>&1; then
+                    echo "unsquashing $img"
+                    sudo unsquashfs -f -q -d "$work/rootfs" "$img" >/dev/null
+                  fi
+                done
+            if [ ! -d "$work/rootfs/var/lib/pacman/local" ]; then
+              echo "::warning::no pacman database found inside $iso; its SBOM covers files only"
+            fi
+            sudo docker run --rm -v "$PWD/$work/rootfs:/rootfs:ro" -v "$PWD/sbom:/out" "$SYFT_IMAGE" \
+              scan dir:/rootfs --source-name "$name" \
+              -o spdx-json="/out/${name}.spdx.json" \
+              -o cyclonedx-json="/out/${name}.cdx.json"
+            sudo rm -rf "$work"
+          done
+          [ "$found" -eq 1 ] || echo "::warning::release ${TAG} has no .iso asset; only the source SBOM was produced"
+
+      - name: Checksums over assets + SBOMs
+        run: |
+          set -eu
+          cp sbom/*.json dist/
+          cd dist
+          # Owner signatures (*.asc) and any previous SHA256SUMS are not checksummed.
+          find . -maxdepth 1 -type f ! -name '*.asc' ! -name SHA256SUMS -printf '%P\0' \
+            | sort -z | xargs -0 sha256sum -- > "${RUNNER_TEMP}/SHA256SUMS"
+          mv "${RUNNER_TEMP}/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Keep SBOMs and checksums as a run artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-attest-${{ inputs.tag }}
+          path: |
+            dist/*.json
+            dist/SHA256SUMS
+          retention-days: 30
+
+      - name: SLSA build provenance (GitHub artifact attestation, public repo only)
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      - name: Install cosign (optional, public repo only)
+        if: inputs.cosign && github.event.repository.visibility == 'public'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: cosign keyless bundles, additive (optional, public repo only)
+        if: inputs.cosign && github.event.repository.visibility == 'public'
+        run: |
+          set -eu
+          cd dist
+          for f in *; do
+            case "$f" in *.sigstore.json|*.asc) continue ;; esac
+            cosign sign-blob --yes --bundle "${f}.sigstore.json" "$f" >/dev/null
+            echo "signed $f"
+          done
+          echo "verify with:"
+          echo "  cosign verify-blob --bundle <file>.sigstore.json \\"
+          echo "    --certificate-identity-regexp '^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-attest.yml@' \\"
+          echo "    --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>"
+
+      - name: Upload SBOMs, SHA256SUMS (and optional cosign bundles) to the release
+        if: inputs.publish && github.event.repository.visibility == 'public'
+        run: |
+          set -eu
+          cd dist
+          # Never replace a SHA256SUMS the owner has already signed.
+          if [ -f SHA256SUMS.asc ]; then
+            echo "::error::release $TAG already has SHA256SUMS.asc (owner-signed); refusing to overwrite SHA256SUMS. Delete the .asc first if a re-sign is intended."
+            exit 1
+          fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            ./*.json SHA256SUMS
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### release attest: \`${TAG}\`"
+            echo "- repository public: \`${IS_PUBLIC}\` · publish requested: \`${PUBLISH}\`"
+            if [ "$IS_PUBLIC" != "true" ]; then
+              echo "- private repository: SBOMs + SHA256SUMS kept as a run artifact only; provenance, signing and release upload skipped by design."
+            fi
+            echo "- **Unsigned.** A release maintainer signs SHA256SUMS offline with the release key (river-sign) and uploads SHA256SUMS.asc."
+          } >> "$GITHUB_STEP_SUMMARY"

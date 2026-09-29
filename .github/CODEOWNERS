@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Code owners for Runink River. Mirrors MAINTAINERS.md: when a maintainer joins or becomes
+# emeritus, change both in the same pull request. Emeritus maintainers are listed in
+# MAINTAINERS.md, not here.
+*       @paesdan

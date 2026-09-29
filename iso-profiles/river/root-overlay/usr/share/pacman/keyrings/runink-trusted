@@ -1,0 +1,3 @@
+# runink-trusted — the key pacman-key --populate runink trusts for [runink] (docs/REPOSITORY.md).
+# The Runink River release key: the same fingerprint as KEYS and base/keys/owner/fingerprint.
+95C0A7B97D547413E42660DDB06FE75626F15BF3:4:

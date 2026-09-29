@@ -1,0 +1,14 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 The RIVER Authors
+SPDX-License-Identifier: MIT
+
+Link to a file or directory of the Runink River repository on its main branch.
+
+  {{< repo "docs/INSTALL.md" >}}                  -> docs/INSTALL.md, as code
+  {{< repo path="docs/KERNEL.md" text="KERNEL.md" >}}
+*/ -}}
+{{- $path := .Get "path" | default (.Get 0) -}}
+{{- $text := .Get "text" | default (.Get 1) -}}
+{{- $url := printf "https://github.com/org-runink/river/blob/main/%s" $path -}}
+<a href="{{ $url }}">{{ with $text }}{{ . }}{{ else }}<code>{{ $path }}</code>{{ end }}</a>
+{{- /* no trailing newline */ -}}

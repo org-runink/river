@@ -1,0 +1,71 @@
+# runink-fw-common.nft — the shared part of `inet runink_fw`. INCLUDED inside the table block
+# by runink-firewall-base.nft; not loaded on its own. `river lint firewall` checks the
+# properties below (forward default-drop, the pairing ports link-local and live-only).
+
+	# Ports opened to everyone, seeded from /etc/runink/fw-open by `runink-fw apply`;
+	# `runink-fw open|close <tcp|udp> <port>` changes them at runtime.
+	set open_tcp { type inet_service; }
+	set open_udp { type inet_service; }
+
+	# LAN-install pairing ports (docs/INSTALL.md, "LAN installs"), accepted from IPv6 link-local
+	# sources only (the rules at the end of common_in). On the LIVE medium `runink-fw apply`
+	# fills them from /usr/local/lib/river-pair/fw-pair: udp 47653 (announcements, heard by an
+	# operator), tcp 47654 (pairing) and tcp 47655 (the restricted sshd), which only listen
+	# while a target session runs. Empty, and never filled, on an installed machine: the file is
+	# live-overlay only and runink-fw also checks it runs from the live medium.
+	set pair_tcp { type inet_service; }
+	set pair_udp { type inet_service; }
+
+	# Interfaces the machine may route for, seeded from /etc/runink/fw-forward (one interface
+	# name per line, e.g. a container bridge or a VM network) by `runink-fw apply`. Empty by
+	# default: a fresh machine routes nothing.
+	set forward_if { type ifname; }
+
+	# What the input chain lets in. Jumped to first from `input`.
+	chain common_in {
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+
+		# ICMPv6, all of it: NDP, RA, MLD, PMTU (packet-too-big). Always allowed.
+		meta l4proto ipv6-icmp accept
+		# ICMPv4 essentials: PMTU (destination-unreachable carries frag-needed), traceroute,
+		# ping. Redirects and the rest stay out.
+		meta l4proto icmp icmp type { echo-request, echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept
+
+		# DHCP client replies: DHCPv4 (server 67 -> client 68) and DHCPv6 (-> client 546).
+		udp sport 67 udp dport 68 accept
+		udp dport 546 accept
+
+		# mDNS (printers, other machines on the LAN announcing themselves): multicast replies are
+		# not "established" to conntrack, so they need their own rule.
+		udp dport 5353 accept
+
+		# Guests behind an interface the machine routes for (a container bridge, a VM network)
+		# reach the host's own services (DNS, DHCP) on it.
+		iifname @forward_if accept
+
+		tcp dport @open_tcp accept
+		udp dport @open_udp accept
+		ip6 saddr fe80::/10 tcp dport @pair_tcp accept
+		ip6 saddr fe80::/10 udp dport @pair_udp accept
+	}
+
+	# FORWARD is default-DROP: the machine routes nothing unless an interface is listed in
+	# /etc/runink/fw-forward.
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		iifname @forward_if accept
+		oifname @forward_if accept
+
+		# Everything else, notably a LAN peer trying to route through this machine: dropped.
+		log prefix "runink-fw fwd drop: " level info flags all limit rate 5/minute
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}

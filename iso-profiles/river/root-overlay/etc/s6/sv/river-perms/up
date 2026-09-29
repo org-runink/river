@@ -1,0 +1,6 @@
+#!/bin/execlineb -P
+# Re-assert shadow-grade modes on every node secret/state file and log any drift
+# (usr/local/bin/river-perms holds the table). Enabled with `s6 set enable` (profile.yaml
+# live-session services; 80-enable-s6 on the target); depends on mount-filesystems so /home
+# and the ESP are mounted. Never fails the boot: river-perms always exits 0 in fix mode.
+/usr/local/bin/river-perms

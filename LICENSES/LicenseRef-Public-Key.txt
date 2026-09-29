@@ -1,0 +1,9 @@
+Public key material
+
+The files covered by this identifier are public OpenPGP keys: those of third
+parties (upstream release signers), and the Runink River release key's public
+half, which the image ships so that pacman can verify the [runink] repository.
+They are redistributed unmodified, solely so that signatures can be verified.
+The RIVER Authors claim no copyright in them and grant no license to them; any
+rights belong to their respective owners. They may be redistributed as needed
+for signature verification.

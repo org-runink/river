@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# OpenSSF Scorecard (https://github.com/ossf/scorecard).
+#
+# Runs weekly, on push to main and on branch-protection changes, but ONLY once the
+# repository is public (the job-level `if:` below); while private it runs on manual
+# dispatch only, deliberately. It runs on GitHub-hosted ubuntu-latest (the Scorecard API
+# accepts published results only from a GitHub-hosted Ubuntu runner; scorecard-action README,
+# "Workflow Restrictions"), and none of its triggers is a pull request:
+#   * publish_results is true ONLY when the repo is public. Publishing sends the results
+#     to the public Scorecard API and a transparency log (it needs id-token: write for the
+#     OIDC identity); on a private repo it would publish the repo name, and the action
+#     refuses anyway. The README's Scorecard badge reads these published results.
+#   * SARIF upload to code scanning needs GitHub Advanced Security on a private repo, so
+#     it is also gated on visibility. The SARIF is always kept as a run artifact.
+#   * On a private repo several checks (Branch-Protection, ...) need a fine-grained PAT
+#     in the SCORECARD_TOKEN secret. Without it the run still completes and those checks
+#     report "internal error"/-1.
+#
+name: OpenSSF Scorecard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  branch_protection_rule:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write   # upload SARIF to code scanning (public repos only, gated below)
+      id-token: write          # publish_results: OIDC identity for the Scorecard API
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
+          publish_results: ${{ github.event.repository.visibility == 'public' }}
+
+      - name: Keep the SARIF as an artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-sarif
+          path: scorecard.sarif
+          retention-days: 14
+
+      - name: Upload to code scanning (public repos only)
+        if: github.event.repository.visibility == 'public'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: scorecard.sarif

@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 The RIVER Authors -->
+<!-- SPDX-License-Identifier: MIT -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installer</title>
+<link rel="stylesheet" href="app.css">
+<link rel="icon" id="favicon" href="edition-icon">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><img class="logo" id="logo" src="edition-icon" alt="" hidden><span class="mark" id="mark" aria-hidden="true"></span><span id="brand"></span></div>
+  <div id="stepper" class="stepper" aria-hidden="true"></div>
+  <label class="langpick"><span class="sr" id="langlabel">Language</span>
+    <select id="lang" aria-labelledby="langlabel"></select></label>
+</header>
+<div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
+<main id="app" tabindex="-1" aria-live="polite"><p class="lead">…</p></main>
+<script src="kiosk-pointer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

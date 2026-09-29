@@ -1,0 +1,4 @@
+# Runink River: the admin (the `runink` user, in wheel) administers the machine
+# with sudo and their own password. The installer locks root (50-runink-user), so without this
+# an installed workstation has no way to become root at all.
+%wheel ALL=(ALL:ALL) ALL

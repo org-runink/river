@@ -1,0 +1,11 @@
+# fw-pair — the LAN-install pairing ports the host firewall accepts on the LIVE medium only
+# (docs/INSTALL.md, "LAN installs"). `runink-fw apply` puts them in the pair_tcp / pair_udp
+# sets of inet runink_fw, whose only rules accept them from IPv6 link-local sources
+# (fe80::/10). It does so only when it runs from the live medium; this file is in the live
+# overlay and under /usr/local/lib/river-pair, which 20-clone-rootfs never copies, so an
+# installed node has neither the file nor the open ports (tests/assert-golden.sh checks).
+#
+# The ports are installer/internal/pair/protocol.go's (`river lint firewall` compares):
+udp 47653	# BeaconPort: the operator hears a target's link-local announcement
+tcp 47654	# PairPort: the target's pairing endpoint
+tcp 47655	# SSHPort: the target's restricted sshd, after the local "y"

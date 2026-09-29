@@ -1,0 +1,44 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-runtime — host binaries + shared data for the golden image.
+#
+# The keepalive/tuning scripts and s6 config ship via the profile's root-overlay (rsync'd
+# by the installer), NOT this package, to avoid double ownership. This package carries
+# every host binary a downstream payload staged in $RUNINK_OUT/bin (none on a base image)
+# plus the models manifest that runink-firstboot.sh verifies against.
+pkgname=runink-runtime
+pkgver=2026.07
+pkgrel=1
+pkgdesc="RIVER host binaries (payload-supplied) + shared data"
+arch=('x86_64')
+url="https://github.com/org-runink/river"
+license=('MIT')  # the packaging; a payload's own licence travels with the payload
+depends=('glibc')
+options=('!strip')
+
+package() {
+  local out="${RUNINK_OUT:?set RUNINK_OUT to build/artifacts}"
+  local n=0 b
+  if [ -d "$out/bin" ]; then
+    for b in "$out/bin"/*; do
+      [ -f "$b" ] || continue
+      [ -s "$b" ] || { echo "runink-runtime: $b is empty — refusing to package it" >&2; return 1; }
+      install -Dm755 "$b" "$pkgdir/usr/local/bin/$(basename "$b")"
+      n=$((n + 1))
+    done
+  fi
+  # A payload build that staged no host binaries is a failed payload build, not a variation.
+  # RUNINK_ALLOW_PARTIAL=1 is the deliberate escape hatch, matching build/build-all.sh.
+  if [ "$n" -eq 0 ] && [ "${RIVER_PAYLOAD_NONE:-0}" != 1 ]; then
+    if [ "${RUNINK_ALLOW_PARTIAL:-0}" = 1 ]; then
+      echo "runink-runtime: WARNING: no host binaries in $out/bin (RUNINK_ALLOW_PARTIAL=1)" >&2
+    else
+      echo "runink-runtime: no host binaries in $out/bin — the payload build staged nothing; refusing to package a hollow runtime" >&2
+      return 1
+    fi
+  fi
+  # Model manifest for first-boot verification.
+  [ -f "$out/models.manifest" ] && \
+    install -Dm644 "$out/models.manifest" "$pkgdir/usr/local/share/runink/models.manifest"
+  # Target for baked OCI tarballs (first-boot imports any *.tar here into k0s containerd).
+  install -d "$pkgdir/usr/local/share/runink/images"
+}

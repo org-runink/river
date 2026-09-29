@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+# Hugo build byproducts (the site itself builds to ~/.cache/river-docs-build/, see Makefile).
+/public/
+/resources/
+.hugo_build.lock

@@ -1,0 +1,20 @@
+# base/seed.lock — the PHASE-0 build container: the one toolchain the own base does not yet
+# build itself.
+#
+# Every recipe is compiled inside this image with --network=none and --pull=never. It is a
+# third-party glibc/gcc userland, trusted by digest, and it is the explicit, temporary hole in
+# "built from source": Phase 1 of docs/OWN-BASE.md replaces it with a cross toolchain built
+# from sources.lock, then a native one, and at that point this file points at our own
+# toolchain image. Until then the SBOM of every package names this digest as its build tool.
+#
+# `image` MUST be a digest reference (river-build refuses a tag). The build host pulls it
+# once, explicitly (`podman pull <ref>`); the driver never pulls.
+#
+# `provides` lists packages the seed stands in for until they have recipes. A recipe may
+# name them in depends/makedepends without a recipe existing; anything else must be a recipe.
+#
+# Resolved 2026-09-23: buildpack-deps:trixie = Debian 13, gcc 14.2.0, GNU make 4.4.1,
+# glibc 2.41 (linux/amd64 manifest digest).
+
+image    docker.io/library/buildpack-deps@sha256:e6454c82c2420d6a777c8d532ff4ddf2b3647c2caf2513a78911e045ef2b5163
+provides glibc gcc-libs linux-api-headers

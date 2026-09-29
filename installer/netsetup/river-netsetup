@@ -1,0 +1,510 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river-netsetup — NETWORK FIRST: the first action of a Runink River live session.
+#
+# Sets up the network with NetworkManager (nmcli, or nmtui for anything unusual), then checks
+# what it got and records the outcome for the steps that follow:
+#   link, addresses, default routes, DNS, and whether the default gateway answers, DNS
+#   resolves, and the internet answers over IPv4 and IPv6 (a TCP connect to port 443 of a
+#   well-known host, done by river-netcheck; no curl).
+# The outcome is online, lan-only or offline. ALL THREE ARE VALID: the install copies the
+# running live system and needs no network. It is recorded in /run/river/net-state.json
+# (schema river.net-state/v1) and /run/river/net.env (sh), which runink-install reads.
+#
+#   river-netsetup                 interactive (dialog when present, plain prompts otherwise):
+#                                  automatic wired (dual-stack, or IPv6 only), Wi-Fi (scan,
+#                                  pick, passphrase), static IPv4/IPv6, nmtui, keep, or off;
+#                                  then an optional HTTP proxy and the hostname; then the check
+#   river-netsetup --installer     step 0 of runink-install: keep a recorded setup or redo it
+#   river-netsetup --desktop       as interactive, for the workstation's Konsole autostart
+#   river-netsetup --auto          headless: apply river.net= from the kernel command line if
+#                                  present, else wait (--wait, default 20 s) for NetworkManager's
+#                                  automatic connection; then check. Never prompts.
+#   river-netsetup --config FILE   headless: apply a keyfile-style config, then check
+#   river-netsetup --net SPEC      headless: apply one river.net value, then check
+#   river-netsetup --check         check and record only; changes nothing (no root needed;
+#                                  an unprivileged run prints the report and records nothing)
+# Options: --wait SECONDS (settle time, default 20), --host HOST (internet-check host, `none`
+# disables that probe; default kernel.org, or river.net.check= / RIVER_NET_PROBE_HOST).
+#
+# Kernel command line (headless):  river.net=dhcp[,v6only][,iface=NAME]
+#   river.net=static:ADDR/PREFIX[,ADDR/PREFIX...][,gw=ADDR][,dns=ADDR...][,iface=NAME]
+#   river.net=off          river.net.check=HOST|none
+# Config file format and the full grammar: docs/INSTALL.md, "Network first".
+#
+# DUAL-STACK HOST, IPv6-only cluster: automatic setup means DHCPv4 plus IPv6 SLAAC/DHCPv6 on
+# both images (NetworkManager conf.d/10-dual-stack.conf on the server). IPv6-only sites ask
+# for "v6only" (river.net=dhcp,v6only, [network] ipv6-only=true, or the menu entry). Only
+# the k0s pod and service networks are IPv6-only, whatever the host does.
+set -eu
+
+NETCHECK="${RIVER_NETCHECK:-river-netcheck}"
+STATE_DIR="${RIVER_NET_STATE_DIR:-/run/river}"
+STATE="$STATE_DIR/net-state.json"
+NETENV="$STATE_DIR/net.env"
+PROXYENV="$STATE_DIR/proxy.env"
+WAIT=20
+MODE=interactive
+CONFIG=""
+SPEC=""
+HOST_OVERRIDE=""
+
+usage() { sed -n '5,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--auto) MODE=auto ;;
+		--check) MODE=check ;;
+		--installer) MODE=installer ;;
+		--desktop) MODE=desktop ;;
+		--config) MODE=config; CONFIG="${2:?--config needs a file}"; shift ;;
+		--config=*) MODE=config; CONFIG="${1#*=}" ;;
+		--net) MODE=spec; SPEC="${2:?--net needs a value}"; shift ;;
+		--net=*) MODE=spec; SPEC="${1#*=}" ;;
+		--wait) WAIT="${2:?--wait needs seconds}"; shift ;;
+		--wait=*) WAIT="${1#*=}" ;;
+		--host) HOST_OVERRIDE="${2:?--host needs a host}"; shift ;;
+		--host=*) HOST_OVERRIDE="${1#*=}" ;;
+		-h|--help) usage 0 ;;
+		*) echo "river-netsetup: unknown argument $1 (see --help)" >&2; exit 2 ;;
+	esac
+	shift
+done
+case "$WAIT" in ''|*[!0-9]*) echo "river-netsetup: --wait takes whole seconds" >&2; exit 2 ;; esac
+
+command -v "$NETCHECK" >/dev/null 2>&1 || {
+	echo "river-netsetup: $NETCHECK not found (runink-installer package missing?)" >&2; exit 1; }
+
+say() { printf '%s\n' "$*" >&2; }
+is_root() { [ "$(id -u)" -eq 0 ]; }
+need_root() {
+	is_root && return 0
+	say "river-netsetup: changing the network needs root: sudo river-netsetup${1:+ $1}"
+	exit 1
+}
+have_dialog() { command -v dialog >/dev/null 2>&1 && [ -t 0 ] && [ "${TERM:-dumb}" != dumb ]; }
+have_nm() { command -v nmcli >/dev/null 2>&1 && nmcli -t -f RUNNING general 2>/dev/null | grep -q '^running'; }
+
+# The NET_* settings river-netcheck parses (spec / cmdline / config) and the wrapper fills in.
+reset_net() {
+	NET_METHOD="" NET_IFACE="" NET_V6ONLY=0 NET_ADDR4="" NET_ADDR6="" NET_GW4="" NET_GW6=""
+	NET_DNS4="" NET_DNS6="" NET_SSID="" NET_PSK="" NET_PROXY="" NET_NO_PROXY="" NET_HOSTNAME=""
+	NET_PROBE_HOST=""
+}
+reset_net
+# load_net CMD... — eval the NET_* assignments river-netcheck prints (every value single-quoted
+# by it), after checking the output is nothing but such assignments.
+load_net() {
+	_out="$("$NETCHECK" "$@")" || return 1
+	if printf '%s\n' "$_out" | grep -qv "^NET_[A-Z0-9_]*='"; then
+		# A value may span lines only inside quotes; river-netcheck never emits that for the
+		# fields it validates, so anything else is refused rather than evaluated.
+		say "river-netsetup: unexpected output from $NETCHECK $1"; return 1
+	fi
+	eval "$_out"
+}
+
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# --- user interface: dialog, or plain prompts on a dumb terminal -------------------------
+BT="Runink River network setup"
+ui_msg() { # TEXT
+	if have_dialog; then dialog --backtitle "$BT" --msgbox "$1" 0 0 || true; else printf '%s\n' "$1" >&2; fi
+}
+ui_menu() { # TITLE TEXT tag item [tag item ...] -> chosen tag on stdout
+	_t="$1"; _x="$2"; shift 2
+	if have_dialog; then
+		dialog --stdout --backtitle "$BT" --title "$_t" --menu "$_x" 0 0 0 "$@"
+		return
+	fi
+	printf '\n== %s ==\n%s\n' "$_t" "$_x" >&2
+	_n=0
+	for _a in "$@"; do
+		_n=$((_n + 1))
+		[ $((_n % 2)) -eq 1 ] && _tag="$_a" && continue
+		printf '  %-12s %s\n' "$_tag" "$_a" >&2
+	done
+	printf 'choice: ' >&2
+	read -r _ans || return 1
+	printf '%s' "$_ans"
+}
+ui_input() { # TEXT DEFAULT
+	if have_dialog; then dialog --stdout --backtitle "$BT" --inputbox "$1" 0 72 "$2"; return; fi
+	printf '%s [%s]: ' "$1" "$2" >&2
+	read -r _ans || return 1
+	[ -n "$_ans" ] || _ans="$2"
+	printf '%s' "$_ans"
+}
+ui_secret() { # TEXT
+	if have_dialog; then dialog --stdout --backtitle "$BT" --insecure --passwordbox "$1" 0 72; return; fi
+	printf '%s: ' "$1" >&2
+	_st="$(stty -g 2>/dev/null || true)"
+	stty -echo 2>/dev/null || true
+	read -r _ans || _ans=""
+	[ -n "$_st" ] && stty "$_st" 2>/dev/null || true
+	printf '\n' >&2
+	printf '%s' "$_ans"
+}
+ui_file() { # TITLE FILE
+	if have_dialog; then dialog --backtitle "$BT" --title "$1" --exit-label "Continue" --textbox "$2" 0 0 || true
+	else cat "$2" >&2; fi
+}
+ui_yesno() { # TEXT -> status
+	if have_dialog; then dialog --backtitle "$BT" --yesno "$1" 0 0; return; fi
+	printf '%s [Y/n]: ' "$1" >&2
+	read -r _ans || return 1
+	case "$_ans" in [nN]*) return 1 ;; *) return 0 ;; esac
+}
+ui_clear() { have_dialog && clear 2>/dev/null || true; }
+
+# --- NetworkManager ------------------------------------------------------------------------
+devices() { # TYPE -> "device state" lines
+	nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | awk -F: -v t="$1" '$2 == t { print $1, $3 }'
+}
+
+pick_iface() { # TYPE -> device name on stdout
+	[ -n "$NET_IFACE" ] && { printf '%s' "$NET_IFACE"; return 0; }
+	_list="$(devices "$1")"
+	[ -n "$_list" ] || return 1
+	if [ "$(printf '%s\n' "$_list" | wc -l)" -eq 1 ] || [ "$MODE" = auto ] || [ "$MODE" = config ] || [ "$MODE" = spec ]; then
+		# Headless: the first one with a link (not "unavailable"), else the first.
+		_d="$(printf '%s\n' "$_list" | awk '$2 != "unavailable" { print $1; exit }')"
+		[ -n "$_d" ] || _d="$(printf '%s\n' "$_list" | awk '{ print $1; exit }')"
+		printf '%s' "$_d"
+		return 0
+	fi
+	# shellcheck disable=SC2046 # word-split into menu pairs on purpose (names and states have no blanks)
+	ui_menu "Interface" "Which $1 interface?" $(printf '%s\n' "$_list" | awk '{ s = $2; for (i = 3; i <= NF; i++) s = s "_" $i; print $1, s }')
+}
+
+v4_method() { # IPv4 method: DHCP (dual-stack, the default) unless v6only was asked for
+	if [ "$NET_V6ONLY" = 1 ]; then echo disabled; else echo auto; fi
+}
+
+con_up() { # CONNECTION [passwd-file FILE]
+	if nmcli -w "$WAIT" connection up "$@" >/dev/null 2>&1; then return 0; fi
+	say "river-netsetup: connection $1 did not come up within ${WAIT}s (recorded as it is)"
+	return 0
+}
+
+apply_dhcp() {
+	_if="$(pick_iface ethernet)" || { say "river-netsetup: no wired interface"; return 1; }
+	_c="river-$_if"
+	nmcli connection delete "$_c" >/dev/null 2>&1 || true
+	_v4="$(v4_method)"
+	nmcli connection add type ethernet ifname "$_if" con-name "$_c" autoconnect yes \
+		ipv4.method "$_v4" ipv6.method auto >/dev/null
+	[ -n "$NET_DNS6" ] && nmcli connection modify "$_c" ipv6.dns "$NET_DNS6"
+	[ -n "$NET_DNS4" ] && [ "$_v4" != disabled ] && nmcli connection modify "$_c" ipv4.dns "$NET_DNS4"
+	say "river-netsetup: $_if automatic (IPv6 SLAAC/DHCPv6, IPv4 $([ "$_v4" = auto ] && echo DHCP || echo off))"
+	con_up "$_c"
+}
+
+apply_static() {
+	_if="$(pick_iface ethernet)" || { say "river-netsetup: no wired interface"; return 1; }
+	_c="river-$_if"
+	nmcli connection delete "$_c" >/dev/null 2>&1 || true
+	set -- type ethernet ifname "$_if" con-name "$_c" autoconnect yes
+	if [ -n "$NET_ADDR4" ]; then
+		set -- "$@" ipv4.method manual ipv4.addresses "$NET_ADDR4"
+		[ -n "$NET_GW4" ] && set -- "$@" ipv4.gateway "$NET_GW4"
+		[ -n "$NET_DNS4" ] && set -- "$@" ipv4.dns "$NET_DNS4"
+	else
+		set -- "$@" ipv4.method disabled
+	fi
+	if [ -n "$NET_ADDR6" ]; then
+		set -- "$@" ipv6.method manual ipv6.addresses "$NET_ADDR6"
+		[ -n "$NET_GW6" ] && set -- "$@" ipv6.gateway "$NET_GW6"
+	else
+		set -- "$@" ipv6.method auto
+	fi
+	[ -n "$NET_DNS6" ] && set -- "$@" ipv6.dns "$NET_DNS6"
+	nmcli connection add "$@" >/dev/null
+	say "river-netsetup: $_if static ${NET_ADDR4}${NET_ADDR4:+ }${NET_ADDR6}"
+	con_up "$_c"
+}
+
+apply_wifi() {
+	nmcli radio wifi on >/dev/null 2>&1 || true
+	_if="$(pick_iface wifi)" || { say "river-netsetup: no Wi-Fi interface"; return 1; }
+	_c="river-wifi"
+	nmcli connection delete "$_c" >/dev/null 2>&1 || true
+	nmcli connection add type wifi ifname "$_if" con-name "$_c" autoconnect yes ssid "$NET_SSID" \
+		ipv4.method "$(v4_method)" ipv6.method auto >/dev/null
+	say "river-netsetup: $_if Wi-Fi \"$NET_SSID\""
+	if [ -z "$NET_PSK" ]; then
+		con_up "$_c"
+		return
+	fi
+	nmcli connection modify "$_c" wifi-sec.key-mgmt wpa-psk
+	# The passphrase goes to NetworkManager through a 0600 file, never on a command line
+	# (which every local user can read in /proc).
+	_pf="$(umask 077; mktemp "$STATE_DIR/.wifi.XXXXXX")"
+	printf '802-11-wireless-security.psk:%s\n' "$NET_PSK" > "$_pf"
+	con_up "$_c" passwd-file "$_pf"
+	rm -f "$_pf"
+}
+
+apply_off() {
+	nmcli networking off >/dev/null 2>&1 || true
+	say "river-netsetup: networking off for this live session"
+}
+
+apply_extras() { # proxy + hostname
+	if [ -n "$NET_PROXY" ]; then
+		( umask 077
+		  { for v in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do printf '%s=%s\n' "$v" "$(shq "$NET_PROXY")"; done
+		    if [ -n "$NET_NO_PROXY" ]; then
+		    	printf 'no_proxy=%s\nNO_PROXY=%s\n' "$(shq "$NET_NO_PROXY")" "$(shq "$NET_NO_PROXY")"
+		    fi
+		    echo "export http_proxy https_proxy HTTP_PROXY HTTPS_PROXY${NET_NO_PROXY:+ no_proxy NO_PROXY}"
+		  } > "$PROXYENV" )
+	else
+		rm -f "$PROXYENV"
+	fi
+	if [ -n "$NET_HOSTNAME" ]; then
+		nmcli general hostname "$NET_HOSTNAME" >/dev/null 2>&1 \
+			|| printf '%s\n' "$NET_HOSTNAME" > /proc/sys/kernel/hostname 2>/dev/null || true
+	fi
+}
+
+apply() { # applies NET_*; METHOD is what gets recorded
+	have_nm || { say "river-netsetup: NetworkManager is not running; nothing applied"; METHOD="${NET_METHOD:-none}-unapplied"; return 0; }
+	case "$NET_METHOD" in
+		dhcp) apply_dhcp ;;
+		static) apply_static ;;
+		wifi) apply_wifi ;;
+		off) apply_off ;;
+		*) : ;;
+	esac
+}
+
+# wait_settle — give NetworkManager's automatic connection up to $WAIT seconds, but only
+# while there is something to wait for: no interface, no carrier, or NetworkManager not
+# running returns at once, so an offline machine is never held up.
+wait_settle() {
+	command -v nmcli >/dev/null 2>&1 || return 0
+	_any=0
+	for _n in /sys/class/net/*; do
+		case "$_n" in */lo|*/"*") ;; *) _any=1 ;; esac
+	done
+	[ "$_any" -eq 1 ] || return 0
+	_i=0
+	while [ "$_i" -lt "$WAIT" ]; do
+		if have_nm; then
+			case "$(nmcli -t -f STATE general 2>/dev/null)" in connected*) sleep 2; return 0 ;; esac
+			_devs="$(nmcli -t -f TYPE,STATE device status 2>/dev/null | grep -E '^(ethernet|wifi):' || true)"
+			[ -n "$_devs" ] || return 0
+			if ! printf '%s\n' "$_devs" | grep -q ':connecting'; then
+				# Disconnected but plugged in: NetworkManager may not have started the automatic
+				# connection yet. Give it a few seconds, not the whole budget.
+				printf '%s\n' "$_devs" | grep -q ':disconnected' && [ "$_i" -lt 5 ] || return 0
+			fi
+		fi
+		sleep 1
+		_i=$((_i + 1))
+	done
+}
+
+REPORT=""
+trap '[ -z "$REPORT" ] || rm -f "$REPORT"' EXIT
+# check — run river-netcheck; the report lands in $REPORT.
+check() {
+	[ -z "$REPORT" ] || rm -f "$REPORT"
+	_host="${HOST_OVERRIDE:-${NET_PROBE_HOST:-${RIVER_NET_PROBE_HOST:-}}}"
+	set -- check --method "${METHOD:-unknown}" --state "$STATE"
+	[ -n "$_host" ] && set -- "$@" --host "$_host"
+	[ -n "$NET_PROXY" ] && set -- "$@" --proxy "$NET_PROXY"
+	[ -n "$NET_HOSTNAME" ] && set -- "$@" --hostname "$NET_HOSTNAME"
+	is_root || set -- "$@" --no-write
+	REPORT="$(mktemp "${TMPDIR:-/tmp}/river-netsetup.XXXXXX")"
+	"$NETCHECK" "$@" > "$REPORT" 2>&1 || true
+	is_root || echo "(not root: nothing recorded)" >> "$REPORT"
+}
+result() { sed -n 's/^RESULT: //p' "$REPORT" | head -1; }
+
+# --- interactive -------------------------------------------------------------------------
+choose_wifi() {
+	nmcli radio wifi on >/dev/null 2>&1 || true
+	_scan="$(mktemp "${TMPDIR:-/tmp}/river-wifi.XXXXXX")"
+	# -e yes escapes ':' and '\' inside SSIDs; decode them after splitting on ':'.
+	nmcli -t -e yes -f SSID,SIGNAL,SECURITY device wifi list --rescan yes 2>/dev/null \
+		| sed 's/\\\\/\x01/g; s/\\:/\x02/g' \
+		| awk -F: '$1 != "" { gsub(/\x02/, ":", $1); gsub(/\x01/, "\\", $1); print $1 "\t" $2 "\t" $3 }' \
+		| sort -t "$(printf '\t')" -k2,2nr | awk -F '\t' '!seen[$1]++' > "$_scan" || true
+	set --
+	_n=0
+	while IFS="$(printf '\t')" read -r _ssid _sig _sec; do
+		_n=$((_n + 1))
+		set -- "$@" "$_n" "$_ssid  (${_sig}%, ${_sec:-open})"
+	done < "$_scan"
+	set -- "$@" other "Another (hidden) network"
+	_pick="$(ui_menu "Wi-Fi" "Networks in range (strongest first):" "$@")" || { rm -f "$_scan"; return 1; }
+	if [ "$_pick" = other ]; then
+		NET_SSID="$(ui_input "Network name (SSID)" "")" || { rm -f "$_scan"; return 1; }
+		_sec="?"
+	else
+		NET_SSID="$(sed -n "${_pick}p" "$_scan" | cut -f1)"
+		_sec="$(sed -n "${_pick}p" "$_scan" | cut -f3)"
+	fi
+	rm -f "$_scan"
+	[ -n "$NET_SSID" ] || return 1
+	NET_PSK=""
+	case "$_sec" in ""|--) ;; *) NET_PSK="$(ui_secret "Passphrase for \"$NET_SSID\" (blank for an open network)")" || return 1 ;; esac
+	NET_METHOD=wifi
+}
+
+choose_static() {
+	_a="$(ui_input "Addresses with prefix, space-separated (IPv4 and/or IPv6), e.g. 192.0.2.10/24 2001:db8::10/64" "")" || return 1
+	_g="$(ui_input "Gateways, space-separated, at most one per family (blank: none, LAN only)" "")" || return 1
+	_d="$(ui_input "DNS servers, space-separated (blank: none)" "")" || return 1
+	_spec="static:$(printf '%s' "$_a" | tr -s ' ' ',')"
+	for _x in $_g; do _spec="$_spec,gw=$_x"; done
+	for _x in $_d; do _spec="$_spec,dns=$_x"; done
+	[ -n "$NET_IFACE" ] && _spec="$_spec,iface=$NET_IFACE"
+	_err="$("$NETCHECK" spec "$_spec" 2>&1 >/dev/null)" || { ui_msg "Not applied: ${_err#river-netcheck: }"; return 1; }
+	load_net spec "$_spec"
+}
+
+choose_extras() {
+	_p="$(ui_input "HTTP proxy for this session, http://HOST:PORT (blank: none)" "$NET_PROXY")" || return 0
+	case "$_p" in
+		"") NET_PROXY="" ;;
+		http://*|https://*) NET_PROXY="$_p" ;;
+		*) ui_msg "Ignored: a proxy is http://HOST:PORT or https://HOST:PORT"; NET_PROXY="" ;;
+	esac
+	_cur="${NET_HOSTNAME:-$(cat /proc/sys/kernel/hostname 2>/dev/null || echo runink)}"
+	while :; do
+		_h="$(ui_input "Hostname (lowercase letters, digits, '-')" "$_cur")" || return 0
+		if printf '%s' "$_h" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'; then
+			NET_HOSTNAME="$_h"; return 0
+		fi
+		ui_msg "\"$_h\" is not a hostname: lowercase letters, digits and '-', 1-63 characters."
+	done
+}
+
+interactive() {
+	need_root
+	mkdir -p "$STATE_DIR"
+	intro="Set up the network FIRST. Every outcome is fine: online, LAN only, or offline. The install copies this live system and needs no network; the network is for remote help, guide bundles and your platform."
+	[ "$MODE" = desktop ] && intro="$intro
+
+The network icon in the panel (the Plasma network applet) does the same graphically; close this window if you prefer it."
+	while :; do
+		reset_net
+		wait_settle
+		METHOD=keep
+		check
+		now="$(result)"
+		set -- auto "Automatic, wired: IPv4 DHCP + IPv6 SLAAC/DHCPv6" \
+			auto6 "Automatic, wired, IPv6 only (for IPv6-only sites)"
+		set -- "$@" wifi "Wi-Fi: scan and connect" static "Static IPv4/IPv6 address" \
+			nmtui "NetworkManager text UI (nmtui): VLAN, bond, 802.1X, ..." \
+			keep "Keep the current setup (now: $now)" off "Offline: networking off for this session"
+		choice="$(ui_menu "Network first" "$intro" "$@")" || choice=keep
+		ui_clear
+		case "$choice" in
+			auto) NET_METHOD=dhcp ;;
+			auto6) NET_METHOD=dhcp; NET_V6ONLY=1 ;;
+			wifi) choose_wifi || continue ;;
+			static) choose_static || continue ;;
+			nmtui) nmtui || true; ui_clear ;;
+			keep|"") ;;
+			off) NET_METHOD=off ;;
+			*) continue ;;
+		esac
+		METHOD="${NET_METHOD:-$choice}"
+		[ "$choice" = auto6 ] && METHOD=dhcp-v6only
+		apply || { ui_msg "The setup was not applied; see the messages above."; continue; }
+		[ "$NET_METHOD" = off ] || choose_extras
+		apply_extras
+		ui_clear
+		while :; do
+			[ "$NET_METHOD" = off ] || wait_settle
+			check
+			ui_file "Network: $(result)" "$REPORT"
+			next="$(ui_menu "Network: $(result)" "Recorded in $STATE." \
+				continue "Continue" recheck "Check again" change "Change the network setup")" || next="continue"
+			ui_clear
+			[ "$next" = recheck ] || break
+		done
+		[ "$next" = change ] || break
+	done
+	# Leave the report on the screen (the plain prompts have printed it already).
+	if have_dialog; then cat "$REPORT"; fi
+	rm -f "$REPORT"
+}
+
+headless() { # auto / config / spec
+	need_root "--$MODE"
+	mkdir -p "$STATE_DIR"
+	case "$MODE" in
+		auto)
+			if ! load_net cmdline; then
+				say "river-netsetup: river.net= on the kernel command line is invalid; ignoring it"
+				reset_net
+			fi
+			;;
+		config) load_net config "$CONFIG" || exit 1 ;;
+		spec) load_net spec "$SPEC" || exit 1 ;;
+	esac
+	METHOD="${NET_METHOD:-auto}"
+	[ "$NET_V6ONLY" = 1 ] && [ "$METHOD" = dhcp ] && METHOD=dhcp-v6only
+	if [ -n "$NET_METHOD" ]; then
+		apply || true
+	else
+		say "river-netsetup: no river.net= given; waiting up to ${WAIT}s for NetworkManager's automatic connection"
+	fi
+	apply_extras
+	[ "$NET_METHOD" = off ] || wait_settle
+	check
+	cat "$REPORT"
+	rm -f "$REPORT"
+}
+
+recheck() { # check only; keep what the last setup recorded (method, proxy, hostname)
+	if [ -r "$NETENV" ]; then
+		# shellcheck disable=SC1090
+		. "$NETENV"
+	fi
+	METHOD="${RIVER_NET_METHOD:-unknown}"
+	NET_HOSTNAME="${RIVER_NET_HOSTNAME:-}"
+	if [ -r "$PROXYENV" ]; then
+		# shellcheck disable=SC1090
+		. "$PROXYENV"
+		NET_PROXY="${https_proxy:-}"
+	fi
+	check
+	cat "$REPORT"
+}
+
+case "$MODE" in
+	check) recheck ;;
+	installer)
+		if [ -s "$STATE" ] && [ -r "$NETENV" ]; then
+			# shellcheck disable=SC1090
+			. "$NETENV"
+			if ui_yesno "Step 0, network: ${RIVER_NET_STATE:-unknown} (set up: ${RIVER_NET_METHOD:-unknown}).
+
+Keep this network setup and continue? (No: set it up again.)"; then
+				ui_clear
+				recheck
+				exit 0
+			fi
+			ui_clear
+		fi
+		interactive
+		;;
+	desktop)
+		interactive
+		# shellcheck disable=SC1090
+		_st="$( [ -r "$NETENV" ] && . "$NETENV"; printf '%s' "${RIVER_NET_STATE:-unknown}")"
+		printf '\nNetwork: %s. Next: sudo runink-install\nPress Enter to close this window. ' "$_st"
+		read -r _ || true
+		;;
+	interactive) interactive ;;
+	*) headless ;;
+esac
+exit 0

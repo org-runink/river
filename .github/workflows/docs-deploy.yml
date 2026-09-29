@@ -1,0 +1,72 @@
+name: Build and commit docs
+
+# Push to main only (never pull requests), on GitHub-hosted ubuntu-latest. It needs git,
+# curl, tar and outbound HTTPS to github.com; no sudo (Hugo is unpacked into RUNNER_TEMP,
+# pinned by sha256, the same pin docs.yml uses).
+#
+# OFF unless the repository variable RIVER_DOCS_COMMIT is 'true'. Until 2026-09-28 every run
+# failed at its Hugo checksum (the pinned sha256 did not match the .deb), so it never
+# committed anything. With a correct pin it WOULD work, and it would then commit the
+# rendered site into docs/, the Markdown documentation tree, on main. docs.yml already
+# publishes the website to GitHub Pages; decide whether this workflow is still wanted
+# before turning it on.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - '.github/workflows/docs-deploy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: vars.RIVER_DOCS_COMMIT == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install Hugo (pinned version and sha256, no sudo)
+        env:
+          HUGO_VERSION: "0.147.3"
+          HUGO_TARBALL: hugo_extended_0.147.3_linux-amd64.tar.gz
+          # sha256 of HUGO_TARBALL, from hugo_0.147.3_checksums.txt of the v0.147.3 release.
+          HUGO_SHA256: 24d119392243d9854485bbd76422a16f65ed7817b010e3359da38aedccdd54c2
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -fsSLo "$HUGO_TARBALL" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/${HUGO_TARBALL}"
+          echo "${HUGO_SHA256}  ${HUGO_TARBALL}" | sha256sum -c -
+          mkdir -p hugo-bin
+          tar -xzf "$HUGO_TARBALL" -C hugo-bin hugo
+          echo "$RUNNER_TEMP/hugo-bin" >> "$GITHUB_PATH"
+          ./hugo-bin/hugo version
+
+      - name: Build docs to /docs folder
+        working-directory: ./website
+        run: |
+          hugo -d ../docs --minify
+          echo "Build complete"
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "River Docs Bot"
+          git add docs/
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: rebuild documentation site"
+            git push
+          else
+            echo "No changes to commit"
+          fi

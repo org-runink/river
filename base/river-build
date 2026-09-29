@@ -1,0 +1,543 @@
+#!/bin/sh
+# river-build — hermetic from-source build driver for the RIVER own base. SCAFFOLD.
+#
+# Status: a first scaffold (docs/OWN-BASE.md, Phase 0). It is NOT wired into CI, `make`, or
+# the ISO build, and nothing it produces ships in any image yet.
+#
+# What it guarantees:
+#   * Sources come ONLY from base/sources.lock. Every file is sha256-checked on every use
+#     (cached or not), and OpenPGP-checked against a pinned fingerprint when upstream signs.
+#     Recipes carry no URLs, so a recipe cannot fetch anything the lock does not pin.
+#   * The fetch is the only networked step, and it runs on the build host. Compilation runs
+#     in a fresh container from the digest-pinned seed image (base/seed.lock) with
+#     --network=none and --pull=never, so a build cannot reach the network or pull an image.
+#   * Reproducible-build inputs are fixed: SOURCE_DATE_EPOCH, TZ=UTC, LC_ALL=C, umask 022,
+#     a constant build path (/build) with -ffile-prefix-map, sorted archive members with
+#     normalised owner and mtime.
+#   * Every package gets an SPDX 2.3 SBOM, and the output dir gets a SHA256SUMS.
+#   * Output is UNSIGNED. Signing is base/river-sign, which the owner runs locally with a key
+#     that never enters CI or this driver.
+#
+# Packages are pacman-format (.pkg.tar.zst with .PKGINFO / .BUILDINFO / .MTREE), so they are
+# readable by the pacman already on installed nodes. See docs/OWN-BASE.md "Package format".
+#
+# Usage:
+#   base/river-build lint                 check sources.lock, seed.lock and every recipe
+#   base/river-build fetch [source...]    fetch + verify sources into the cache (default: all)
+#   base/river-build verify [source...]   verify cached sources, never fetching (default: all)
+#   base/river-build order <recipe...>    print the build order, dependencies first
+#   base/river-build build <recipe...>    build recipes (and their recipe deps) into the output
+#
+# Environment:
+#   RIVER_BASE_CACHE    source cache           (default base/.cache/sources)
+#   RIVER_BASE_WORK     scratch build trees    (default base/.work)
+#   RIVER_BASE_OUT      packages + SBOMs       (default base/out)
+#   RIVER_BASE_MIRROR   fetch <mirror>/<basename> instead of the lock URL (hash still binds)
+#   RIVER_BASE_OFFLINE  =1: never fetch; a missing cache entry is an error
+#   RIVER_BASE_EPOCH    SOURCE_DATE_EPOCH (default: last commit touching the recipe)
+#   RIVER_BASE_JOBS     make -j (default: nproc)
+#   RIVER_BASE_ENGINE   container engine (default podman)
+#
+# Build-host requirements: POSIX sh, sha256sum, tar, gzip, xz, zstd, bsdtar (libarchive, for
+# the pacman-format archive + .MTREE), podman, gpg + gpgv (only for signed sources), curl or wget
+# (only for fetch). The seed image supplies the compiler; the host needs none.
+set -eu
+
+BASE_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+LOCK="$BASE_DIR/sources.lock"
+SEED_LOCK="$BASE_DIR/seed.lock"
+RECIPES="$BASE_DIR/recipes"
+PGP_KEYS="$BASE_DIR/keys/pgp"
+CACHE="${RIVER_BASE_CACHE:-$BASE_DIR/.cache/sources}"
+WORK="${RIVER_BASE_WORK:-$BASE_DIR/.work}"
+OUT="${RIVER_BASE_OUT:-$BASE_DIR/out}"
+ENGINE="${RIVER_BASE_ENGINE:-podman}"
+ARCH=x86_64
+TOOL=river-build
+TOOL_VERSION=0.1.0
+
+# Hardening + reproducibility flags for the glibc/gcc seed. x86-64-v3 is the fleet baseline
+# (the reference hardware: AVX2/FMA/F16C, no AVX-512).
+CFLAGS_DEFAULT="-O2 -pipe -march=x86-64-v3 -mtune=generic -fstack-protector-strong -fstack-clash-protection -fcf-protection -D_FORTIFY_SOURCE=3 -fno-plt -ffile-prefix-map=/build=."
+LDFLAGS_DEFAULT="-Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
+
+die() { printf '%s: error: %s\n' "$TOOL" "$*" >&2; exit 1; }
+say() { printf '%s: %s\n' "$TOOL" "$*"; }
+need() { for _t; do command -v "$_t" >/dev/null 2>&1 || die "required tool not found: $_t"; done; }
+
+# ---------------------------------------------------------------------------------------
+# sources.lock
+# ---------------------------------------------------------------------------------------
+
+lock_entries() { # print the non-comment, non-blank lines of the lock
+	sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$LOCK"
+}
+
+lock_names() { lock_entries | awk '{print $1}'; }
+
+# lock_get NAME -> sets L_NAME L_VER L_SHA L_URL L_SIGURL L_SIGKEY, or dies.
+lock_get() {
+	_line=$(lock_entries | awk -v n="$1" '$1 == n' )
+	[ -n "$_line" ] || die "source '$1' is not in sources.lock"
+	[ "$(printf '%s\n' "$_line" | wc -l)" -eq 1 ] || die "source '$1' appears more than once in sources.lock"
+	# shellcheck disable=SC2086
+	set -- $_line
+	[ "$#" -eq 6 ] || die "sources.lock: '$1' has $# columns, want 6 (name version sha256 url sig_url sig_key)"
+	L_NAME=$1 L_VER=$2 L_SHA=$3 L_URL=$4 L_SIGURL=$5 L_SIGKEY=$6
+}
+
+cache_path() { printf '%s/%s\n' "$CACHE" "$(basename -- "$L_URL")"; }
+
+download() { # download URL DEST — build host only
+	if command -v curl >/dev/null 2>&1; then
+		curl -fsSL --retry 3 -o "$2" -- "$1"
+	elif command -v wget >/dev/null 2>&1; then
+		wget -q -O "$2" -- "$1"
+	else
+		die "fetch needs curl or wget on the build host"
+	fi
+}
+
+fetch_url() { # the URL to fetch for the current entry, honouring RIVER_BASE_MIRROR
+	if [ -n "${RIVER_BASE_MIRROR:-}" ]; then
+		printf '%s/%s\n' "${RIVER_BASE_MIRROR%/}" "$(basename -- "$1")"
+	else
+		printf '%s\n' "$1"
+	fi
+}
+
+# verify_source NAME [fetch] — sha256 (always) + OpenPGP (when pinned). Fetches first only
+# when asked and the cache lacks the file.
+verify_source() {
+	lock_get "$1"
+	_f=$(cache_path)
+	if [ ! -f "$_f" ]; then
+		[ "${2:-}" = fetch ] || die "$L_NAME: not in the cache ($_f); run: $TOOL fetch $L_NAME"
+		[ "${RIVER_BASE_OFFLINE:-0}" = 1 ] && die "$L_NAME: not cached and RIVER_BASE_OFFLINE=1"
+		mkdir -p "$CACHE"
+		say "fetch $L_NAME $L_VER"
+		download "$(fetch_url "$L_URL")" "$_f.part" || { rm -f "$_f.part"; die "$L_NAME: download failed"; }
+		mv "$_f.part" "$_f"
+	fi
+	_got=$(sha256sum "$_f" | awk '{print $1}')
+	if [ "$_got" != "$L_SHA" ]; then
+		mv "$_f" "$_f.bad"
+		die "$L_NAME: sha256 MISMATCH (want $L_SHA, got $_got) — moved to $_f.bad"
+	fi
+	if [ "$L_SIGURL" != - ]; then
+		need gpg gpgv
+		_asc="$PGP_KEYS/$L_SIGKEY.asc"
+		[ -f "$_asc" ] || die "$L_NAME: signing key $_asc is missing"
+		# gpgv only reads binary keyrings; the repo keeps armored keys, so dearmor a private
+		# single-key keyring per verification. Nothing touches the user's own keyring.
+		mkdir -p "$CACHE"
+		_kr="$CACHE/.keyring.$L_SIGKEY.gpg"
+		gpg --batch --yes --dearmor -o "$_kr" "$_asc"
+		_sig="$_f.sig"
+		if [ ! -f "$_sig" ]; then
+			[ "${2:-}" = fetch ] || die "$L_NAME: signature not cached; run: $TOOL fetch $L_NAME"
+			[ "${RIVER_BASE_OFFLINE:-0}" = 1 ] && die "$L_NAME: signature not cached and RIVER_BASE_OFFLINE=1"
+			download "$(fetch_url "$L_SIGURL")" "$_sig.part" || { rm -f "$_sig.part"; die "$L_NAME: signature download failed"; }
+			mv "$_sig.part" "$_sig"
+		fi
+		# VALIDSIG's last field is the PRIMARY key fingerprint, so a signature by any
+		# subkey of the pinned key passes and a signature by any other key does not.
+		gpgv --keyring "$_kr" --status-fd 1 "$_sig" "$_f" 2>/dev/null \
+			| awk -v k="$L_SIGKEY" '$2 == "VALIDSIG" && $NF == k {ok=1} END {exit !ok}' \
+			|| die "$L_NAME: OpenPGP signature does not verify against $L_SIGKEY"
+		say "ok $L_NAME $L_VER (sha256 + pgp $L_SIGKEY)"
+	else
+		say "ok $L_NAME $L_VER (sha256; upstream publishes no signature)"
+	fi
+}
+
+# ---------------------------------------------------------------------------------------
+# seed.lock
+# ---------------------------------------------------------------------------------------
+
+seed_field() { sed -e 's/#.*//' "$SEED_LOCK" | awk -v k="$1" '$1 == k {$1=""; sub(/^ +/, ""); print; exit}'; }
+
+seed_image() {
+	_img=$(seed_field image)
+	case "$_img" in
+		*@sha256:????????????????????????????????????????????????????????????????) ;;
+		*) die "seed.lock: image must be a digest reference (…@sha256:<64 hex>), got '$_img'" ;;
+	esac
+	printf '%s\n' "$_img"
+}
+
+seed_provides() { # is $1 supplied by the seed?
+	for _p in $(seed_field provides); do [ "$_p" = "$1" ] && return 0; done
+	return 1
+}
+
+# ---------------------------------------------------------------------------------------
+# recipes
+# ---------------------------------------------------------------------------------------
+
+recipe_file() { printf '%s/%s/recipe\n' "$RECIPES" "$1"; }
+is_recipe() { [ -f "$(recipe_file "$1")" ]; }
+
+# recipe_var RECIPE VAR — read one metadata variable by sourcing the recipe in a subshell.
+recipe_var() {
+	is_recipe "$1" || die "no recipe '$1' ($(recipe_file "$1"))"
+	(
+		# shellcheck disable=SC1090
+		. "$(recipe_file "$1")"
+		eval "printf '%s\n' \"\${$2:-}\""
+	)
+}
+
+# recipe_deps RECIPE — makedepends then depends, recipes only.
+recipe_deps() {
+	for _d in $(recipe_var "$1" makedepends) $(recipe_var "$1" depends); do
+		is_recipe "$_d" && printf '%s\n' "$_d"
+	done
+	return 0
+}
+
+# Topological order (dependencies first). ORDER and VISITING are space-padded word lists.
+ORDER=" "
+VISITING=" "
+visit() {
+	case "$ORDER" in *" $1 "*) return 0 ;; esac
+	case "$VISITING" in *" $1 "*) die "dependency cycle through '$1'" ;; esac
+	VISITING="$VISITING$1 "
+	for _dep in $(recipe_deps "$1"); do visit "$_dep"; done
+	VISITING=$(printf '%s' "$VISITING" | sed "s/ $1 / /")
+	ORDER="$ORDER$1 "
+}
+
+# Runtime closure of a recipe's `depends` (recipes only), for staging into a build root.
+runtime_closure() {
+	for _r in $(recipe_var "$1" depends); do
+		is_recipe "$_r" || continue
+		printf '%s\n' "$_r"
+		runtime_closure "$_r"
+	done
+}
+
+# Everything that must be installed in the build root before building $1.
+build_inputs() {
+	for _i in $(recipe_var "$1" makedepends) $(recipe_var "$1" depends); do
+		is_recipe "$_i" || continue
+		printf '%s\n' "$_i"
+		runtime_closure "$_i"
+	done | sort -u
+}
+
+pkg_file() { # pkg_file RECIPE -> the output package path
+	printf '%s/%s-%s-%s-%s.pkg.tar.zst\n' "$OUT" "$1" "$(recipe_var "$1" pkgver)" "$(recipe_var "$1" pkgrel)" "$ARCH"
+}
+
+# ---------------------------------------------------------------------------------------
+# lint
+# ---------------------------------------------------------------------------------------
+
+cmd_lint() {
+	_rc=0
+	bad() { printf '%s: lint: %s\n' "$TOOL" "$*" >&2; _rc=1; }
+
+	for _n in $(lock_names); do
+		( lock_get "$_n" ) || { _rc=1; continue; }
+		lock_get "$_n"
+		printf '%s' "$L_SHA" | grep -Eq '^[0-9a-f]{64}$' || bad "$_n: sha256 is not 64 lowercase hex"
+		case "$L_URL" in https://*|http://*) ;; *) bad "$_n: url is not http(s)" ;; esac
+		if [ "$L_SIGURL" = - ]; then
+			[ "$L_SIGKEY" = - ] || bad "$_n: sig_key set without sig_url"
+			grep -Eq "^#[[:space:]]*nosig:[[:space:]]+${_n}[[:space:]]+[^[:space:]]" "$LOCK" \
+				|| bad "$_n: unsigned upstream needs a '# nosig: $_n <reason>' line"
+		else
+			printf '%s' "$L_SIGKEY" | grep -Eq '^[0-9A-F]{40}$' \
+				|| bad "$_n: sig_key must be a 40-hex uppercase primary fingerprint"
+			[ -f "$PGP_KEYS/$L_SIGKEY.asc" ] || bad "$_n: missing key file keys/pgp/$L_SIGKEY.asc"
+		fi
+	done
+
+	( seed_image >/dev/null ) || _rc=1
+
+	for _rf in "$RECIPES"/*/recipe; do
+		[ -f "$_rf" ] || continue
+		_r=$(basename -- "$(dirname -- "$_rf")")
+		for _v in pkgname pkgver pkgrel pkgdesc url license sources; do
+			[ -n "$(recipe_var "$_r" "$_v")" ] || bad "$_r: '$_v' is empty"
+		done
+		[ "$(recipe_var "$_r" pkgname)" = "$_r" ] || bad "$_r: pkgname must equal the directory name"
+		# shellcheck disable=SC1090
+		( . "$_rf"; command -v build >/dev/null && command -v package >/dev/null ) \
+			|| bad "$_r: must define build() and package()"
+		if sed -e 's/#.*//' -e '/^url=/d' "$_rf" | grep -Eq '(curl|wget|git clone|(https?|ftp)://)'; then
+			bad "$_r: URLs and fetch tools belong in sources.lock, not in recipes"
+		fi
+		for _s in $(recipe_var "$_r" sources); do
+			if ! lock_names | grep -qx "$_s"; then bad "$_r: source '$_s' not in sources.lock"; continue; fi
+			lock_get "$_s"
+			[ "$_s" != "$_r" ] || [ "$L_VER" = "$(recipe_var "$_r" pkgver)" ] \
+				|| bad "$_r: pkgver $(recipe_var "$_r" pkgver) != sources.lock $L_VER"
+		done
+		for _d in $(recipe_var "$_r" makedepends) $(recipe_var "$_r" depends); do
+			is_recipe "$_d" || seed_provides "$_d" || bad "$_r: dependency '$_d' is neither a recipe nor seed-provided"
+		done
+		ORDER=" " VISITING=" "; visit "$_r"   # dies on a cycle
+	done
+	ORDER=" " VISITING=" "
+
+	[ "$_rc" -eq 0 ] && say "lint ok ($(lock_names | wc -l | tr -d ' ') sources, $(find "$RECIPES" -name recipe | wc -l | tr -d ' ') recipes)"
+	return "$_rc"
+}
+
+# ---------------------------------------------------------------------------------------
+# build
+# ---------------------------------------------------------------------------------------
+
+extract() { # extract ARCHIVE DIR
+	case "$1" in
+		*.tar.gz|*.tgz) gzip -dc -- "$1" ;;
+		*.tar.xz)       xz -dc -- "$1" ;;
+		*.tar.zst)      zstd -qdc -- "$1" ;;
+		*.tar.bz2)      bzip2 -dc -- "$1" ;;
+		*.tar)          cat -- "$1" ;;
+		*) die "don't know how to extract $1" ;;
+	esac | tar -x --no-same-owner --no-same-permissions -f - -C "$2"
+}
+
+source_epoch() {
+	if [ -n "${RIVER_BASE_EPOCH:-}" ]; then
+		printf '%s\n' "$RIVER_BASE_EPOCH"
+	elif command -v git >/dev/null 2>&1 \
+		&& _e=$(git -C "$BASE_DIR" log -1 --format=%ct -- "recipes/$1" 2>/dev/null) && [ -n "$_e" ]; then
+		printf '%s\n' "$_e"
+	else
+		die "$1: no SOURCE_DATE_EPOCH — commit the recipe or set RIVER_BASE_EPOCH"
+	fi
+}
+
+# Refuse artifacts whose modes widen the attack surface. A recipe that genuinely needs a
+# setuid/setgid file lists its path in `setuid_allow` (none of the starter recipes do).
+check_modes() { # check_modes RECIPE PKGDIR
+	_allow=$(recipe_var "$1" setuid_allow)
+	_fail=0
+	for _p in $(cd "$2" && find . \( -perm -4000 -o -perm -2000 \) -type f | sed 's|^\.||'); do
+		case " $_allow " in *" $_p "*) say "$1: allowed setuid/setgid $_p" ;;
+			*) printf '%s: error: %s: setuid/setgid %s not in setuid_allow\n' "$TOOL" "$1" "$_p" >&2; _fail=1 ;;
+		esac
+	done
+	_ww=$(cd "$2" && find . -perm -0002 ! -type l ! \( -type d -perm -1000 \) | head -5)
+	[ -z "$_ww" ] || { printf '%s: error: %s: world-writable paths:\n%s\n' "$TOOL" "$1" "$_ww" >&2; _fail=1; }
+	[ "$_fail" -eq 0 ] || die "$1: unsafe file modes in the package"
+	if grep -rlF "/build/src" "$2" >/dev/null 2>&1; then
+		say "$1: WARNING: the build path /build/src leaks into package files (reproducibility)"
+	fi
+}
+
+write_pkginfo() { # write_pkginfo RECIPE PKGDIR EPOCH
+	_size=$(find "$2" -type f -exec cat {} + | wc -c | tr -d ' ')
+	{
+		printf '# Generated by %s %s\n' "$TOOL" "$TOOL_VERSION"
+		printf 'pkgname = %s\n' "$1"
+		printf 'pkgbase = %s\n' "$1"
+		printf 'pkgver = %s-%s\n' "$(recipe_var "$1" pkgver)" "$(recipe_var "$1" pkgrel)"
+		printf 'pkgdesc = %s\n' "$(recipe_var "$1" pkgdesc)"
+		printf 'url = %s\n' "$(recipe_var "$1" url)"
+		printf 'builddate = %s\n' "$3"
+		printf 'packager = RIVER base builder (unsigned; see base/river-sign)\n'
+		printf 'size = %s\n' "$_size"
+		printf 'arch = %s\n' "$ARCH"
+		printf 'license = %s\n' "$(recipe_var "$1" license)"
+		for _d in $(recipe_var "$1" depends); do printf 'depend = %s\n' "$_d"; done
+		for _d in $(recipe_var "$1" makedepends); do printf 'makedepend = %s\n' "$_d"; done
+	} > "$2/.PKGINFO"
+	{
+		printf 'format = 2\n'
+		printf 'pkgname = %s\n' "$1"
+		printf 'pkgbase = %s\n' "$1"
+		printf 'pkgver = %s-%s\n' "$(recipe_var "$1" pkgver)" "$(recipe_var "$1" pkgrel)"
+		printf 'pkgarch = %s\n' "$ARCH"
+		printf 'pkgbuild_sha256sum = %s\n' "$(sha256sum "$(recipe_file "$1")" | awk '{print $1}')"
+		printf 'packager = RIVER base builder (unsigned; see base/river-sign)\n'
+		printf 'builddate = %s\n' "$3"
+		printf 'builddir = /build\n'
+		printf 'startdir = /build\n'
+		printf 'buildtool = %s\n' "$TOOL"
+		printf 'buildtoolver = %s\n' "$TOOL_VERSION"
+	} > "$2/.BUILDINFO"
+}
+
+# pack RECIPE PKGDIR EPOCH -> pacman-format archive, deterministic member order + metadata.
+pack() {
+	_pf=$(pkg_file "$1")
+	find "$2" -exec touch -h -d "@$3" {} +
+	(
+		cd "$2"
+		{ printf '.PKGINFO\n.BUILDINFO\n'; find . -mindepth 1 ! -name .PKGINFO ! -name .BUILDINFO ! -name .MTREE | sed 's|^\./||' | LC_ALL=C sort; } > "$WORK/.members.$1"
+		LC_ALL=C bsdtar -cnf - --format=mtree --uid 0 --gid 0 --uname root --gname root \
+			--options='!all,use-set,type,uid,gid,mode,time,size,sha256,link' \
+			-T "$WORK/.members.$1" | gzip -9nc > .MTREE
+		touch -h -d "@$3" .MTREE
+		{ head -2 "$WORK/.members.$1"; printf '.MTREE\n'; tail -n +3 "$WORK/.members.$1"; } \
+			| LC_ALL=C bsdtar -cnf - --format=gnutar --uid 0 --gid 0 --uname root --gname root -T - \
+			| zstd -q -19 -T1 -c > "$_pf.part"
+	)
+	rm -f "$WORK/.members.$1"
+	mv "$_pf.part" "$_pf"
+}
+
+# SPDX 2.3 tag-value SBOM: the upstream source(s), the built package, the seed toolchain,
+# and DEPENDS_ON / BUILD_DEPENDENCY_OF links to the dependency packages' own SBOMs.
+write_sbom() { # write_sbom RECIPE EPOCH
+	_pf=$(pkg_file "$1")
+	_sb="${_pf%.pkg.tar.zst}.spdx"
+	_ver="$(recipe_var "$1" pkgver)-$(recipe_var "$1" pkgrel)"
+	_lic=$(recipe_var "$1" license)
+	_created=$(date -u -d "@$2" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$2" +%Y-%m-%dT%H:%M:%SZ)
+	{
+		printf 'SPDXVersion: SPDX-2.3\nDataLicense: CC0-1.0\nSPDXID: SPDXRef-DOCUMENT\n'
+		printf 'DocumentName: %s-%s-%s\n' "$1" "$_ver" "$ARCH"
+		printf 'DocumentNamespace: https://runink.org/spdx/river-base/%s-%s-%s\n' "$1" "$_ver" "$ARCH"
+		for _d in $(recipe_var "$1" depends) $(recipe_var "$1" makedepends); do
+			is_recipe "$_d" || continue
+			_dsb="$(pkg_file "$_d")"; _dsb="${_dsb%.pkg.tar.zst}.spdx"
+			[ -f "$_dsb" ] || continue
+			_dv="$(recipe_var "$_d" pkgver)-$(recipe_var "$_d" pkgrel)"
+			printf 'ExternalDocumentRef: DocumentRef-%s https://runink.org/spdx/river-base/%s-%s-%s SHA1: %s\n' \
+				"$_d" "$_d" "$_dv" "$ARCH" "$(sha1sum "$_dsb" | awk '{print $1}')"
+		done | sort -u
+		printf 'Creator: Tool: %s-%s\nCreator: Organization: Runink\nCreated: %s\n\n' "$TOOL" "$TOOL_VERSION" "$_created"
+
+		printf 'PackageName: %s\nSPDXID: SPDXRef-Package-%s\nPackageVersion: %s\n' "$1" "$1" "$_ver"
+		printf 'PackageFileName: %s\nPackageSupplier: Organization: Runink\n' "$(basename -- "$_pf")"
+		printf 'PackageDownloadLocation: NOASSERTION\nFilesAnalyzed: false\n'
+		printf 'PackageChecksum: SHA256: %s\n' "$(sha256sum "$_pf" | awk '{print $1}')"
+		printf 'PackageLicenseConcluded: %s\nPackageLicenseDeclared: %s\nPackageCopyrightText: NOASSERTION\n' "$_lic" "$_lic"
+		printf 'PrimaryPackagePurpose: OPERATING-SYSTEM\n\n'
+
+		for _s in $(recipe_var "$1" sources); do
+			lock_get "$_s"
+			printf 'PackageName: %s\nSPDXID: SPDXRef-Source-%s\nPackageVersion: %s\n' "$L_NAME" "$L_NAME" "$L_VER"
+			printf 'PackageDownloadLocation: %s\nFilesAnalyzed: false\n' "$L_URL"
+			printf 'PackageChecksum: SHA256: %s\n' "$L_SHA"
+			printf 'PackageLicenseConcluded: NOASSERTION\nPackageLicenseDeclared: %s\nPackageCopyrightText: NOASSERTION\n' "$_lic"
+			if [ "$L_SIGURL" = - ]; then
+				printf 'PackageComment: <text>pinned by sha256 only; upstream publishes no signature</text>\n'
+			else
+				printf 'PackageComment: <text>OpenPGP-verified against %s</text>\n' "$L_SIGKEY"
+			fi
+			printf 'PrimaryPackagePurpose: SOURCE\n\n'
+		done
+
+		printf 'PackageName: river-base-seed\nSPDXID: SPDXRef-Seed\nPackageVersion: NOASSERTION\n'
+		printf 'PackageDownloadLocation: %s\nFilesAnalyzed: false\n' "$(seed_image)"
+		printf 'PackageLicenseConcluded: NOASSERTION\nPackageLicenseDeclared: NOASSERTION\nPackageCopyrightText: NOASSERTION\n'
+		printf 'PackageComment: <text>Phase-0 build container (base/seed.lock); replaced by our own toolchain in Phase 1</text>\n'
+		printf 'PrimaryPackagePurpose: CONTAINER\n\n'
+
+		printf 'Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-%s\n' "$1"
+		for _s in $(recipe_var "$1" sources); do
+			printf 'Relationship: SPDXRef-Package-%s GENERATED_FROM SPDXRef-Source-%s\n' "$1" "$_s"
+		done
+		printf 'Relationship: SPDXRef-Seed BUILD_TOOL_OF SPDXRef-Package-%s\n' "$1"
+		for _d in $(recipe_var "$1" depends); do
+			if is_recipe "$_d"; then
+				printf 'Relationship: SPDXRef-Package-%s DEPENDS_ON DocumentRef-%s:SPDXRef-Package-%s\n' "$1" "$_d" "$_d"
+			else
+				printf 'Relationship: SPDXRef-Package-%s DEPENDS_ON NOASSERTION\nRelationshipComment: <text>%s (seed-provided until it has a recipe)</text>\n' "$1" "$_d"
+			fi
+		done
+		for _d in $(recipe_var "$1" makedepends); do
+			is_recipe "$_d" || continue
+			printf 'Relationship: DocumentRef-%s:SPDXRef-Package-%s BUILD_DEPENDENCY_OF SPDXRef-Package-%s\n' "$_d" "$_d" "$1"
+		done
+	} > "$_sb"
+}
+
+build_one() {
+	_r=$1
+	_w="$WORK/$_r"
+	_epoch=$(source_epoch "$_r")
+	say "build $_r $(recipe_var "$_r" pkgver)-$(recipe_var "$_r" pkgrel) (SOURCE_DATE_EPOCH=$_epoch)"
+
+	rm -rf "$_w"
+	mkdir -p "$_w/src" "$_w/pkg" "$_w/deps" "$_w/recipe"
+	cp "$(recipe_file "$_r")" "$_w/recipe/recipe"
+
+	for _s in $(recipe_var "$_r" sources); do
+		verify_source "$_s"
+		extract "$(cache_path)" "$_w/src"
+	done
+
+	for _i in $(build_inputs "$_r"); do
+		_ip=$(pkg_file "$_i")
+		[ -f "$_ip" ] || die "$_r: input package $_ip was not built"
+		zstd -qdc -- "$_ip" | tar -x --no-same-owner -f - -C "$_w/deps" \
+			--exclude=.PKGINFO --exclude=.BUILDINFO --exclude=.MTREE
+	done
+
+	# The build runs as root INSIDE a throwaway container (rootless podman maps it to the
+	# invoking user). No network, no pulling, fixed paths and environment.
+	# shellcheck disable=SC2016 # the inner script expands inside the container
+	"$ENGINE" run --rm --network=none --pull=never \
+		--tmpfs /tmp \
+		-v "$_w/src:/build/src" -v "$_w/pkg:/build/pkg" \
+		-v "$_w/deps:/build/deps:ro" -v "$_w/recipe:/build/recipe:ro" \
+		-e SOURCE_DATE_EPOCH="$_epoch" -e TZ=UTC -e LC_ALL=C -e LANG=C \
+		-e HOME=/build/home -e srcdir=/build/src -e pkgdir=/build/pkg \
+		-e CFLAGS="$CFLAGS_DEFAULT" -e CXXFLAGS="$CFLAGS_DEFAULT" -e LDFLAGS="$LDFLAGS_DEFAULT" \
+		-e MAKEFLAGS="-j${RIVER_BASE_JOBS:-$(nproc 2>/dev/null || echo 4)}" \
+		-w /build/src \
+		"$(seed_image)" /bin/sh -euc '
+			umask 022
+			mkdir -p "$HOME"
+			if [ -n "$(ls -A /build/deps)" ]; then cp -a /build/deps/. /; fi
+			. /build/recipe/recipe
+			cd "$srcdir"; build
+			cd "$srcdir"; package
+		' || die "$_r: build failed (tree kept in $_w)"
+
+	check_modes "$_r" "$_w/pkg"
+	write_pkginfo "$_r" "$_w/pkg" "$_epoch"
+	mkdir -p "$OUT"
+	pack "$_r" "$_w/pkg" "$_epoch"
+	write_sbom "$_r" "$_epoch"
+	say "wrote $(pkg_file "$_r")"
+}
+
+write_sums() {
+	(
+		cd "$OUT"
+		set --
+		for _f in *.pkg.tar.zst *.spdx; do [ -f "$_f" ] && set -- "$@" "$_f"; done
+		[ "$#" -gt 0 ] && LC_ALL=C sha256sum -- "$@" | LC_ALL=C sort -k2 > SHA256SUMS
+	)
+	say "wrote $OUT/SHA256SUMS (unsigned — sign with base/river-sign)"
+}
+
+# ---------------------------------------------------------------------------------------
+
+main() {
+	[ "$#" -ge 1 ] || { sed -n '/^# Usage:/,/^# Build-host/p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+	_cmd=$1; shift
+	case "$_cmd" in
+		lint) cmd_lint ;;
+		fetch|verify)
+			need sha256sum
+			# shellcheck disable=SC2046 # names never contain whitespace
+			[ "$#" -gt 0 ] || set -- $(lock_names)
+			_mode=; [ "$_cmd" = fetch ] && _mode=fetch
+			for _n; do verify_source "$_n" "$_mode"; done ;;
+		order)
+			[ "$#" -gt 0 ] || die "order: name at least one recipe"
+			for _n; do visit "$_n"; done
+			for _n in $ORDER; do printf '%s\n' "$_n"; done ;;
+		build)
+			[ "$#" -gt 0 ] || die "build: name at least one recipe"
+			need sha256sum sha1sum tar gzip zstd bsdtar "$ENGINE"
+			cmd_lint >/dev/null || die "lint failed; run: $TOOL lint"
+			for _n; do visit "$_n"; done
+			mkdir -p "$WORK"
+			for _n in $ORDER; do build_one "$_n"; done
+			write_sums ;;
+		*) die "unknown command '$_cmd' (lint | fetch | verify | order | build)" ;;
+	esac
+}
+
+main "$@"

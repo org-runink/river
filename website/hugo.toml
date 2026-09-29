@@ -1,0 +1,190 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Runink River documentation website (Hugo + the Hextra theme).
+#
+#   make docs         build into ~/.cache/river-docs-build/ (hugo --minify)
+#   make docs-serve   live preview on http://localhost:1313/
+#
+# The theme is a Hugo module pinned to an exact release in go.mod/go.sum AND vendored into
+# _vendor/ (`hugo mod vendor`), so a build needs no network and no Go toolchain. FlexSearch,
+# which Hextra would fetch from a CDN at build time, is vendored under assets/lib/ too.
+# Must build with Hugo 0.147.3 (the version .github/workflows/docs.yml pins) and newer.
+
+baseURL = "https://docs.runink.org/river/"
+title = "Runink River"
+defaultContentLanguage = "en"
+enableRobotsTXT = true
+# No blog, tags or feeds: only the docs tree and the home page.
+disableKinds = ["taxonomy", "term", "rss"]
+# No enableGitInfo: the CI checkout is shallow, and a wrong "last updated" date is worse
+# than none.
+
+# Consent-gated (Consent Mode v2, denied by default): see
+# layouts/_partials/components/analytics/google-analytics.html and
+# layouts/_partials/custom/banner.html, both overrides of Hextra's vendored
+# partials at those paths. Same GA4 property as runink.org and docs.runink.org
+# (one property across every public Runink surface, owner decision 2026-09-28).
+[services]
+  [services.googleAnalytics]
+    id = 'G-SEECKDWZNJ'
+
+[module]
+  [module.hugoVersion]
+    extended = false
+    min = "0.147.3"
+
+  [[module.imports]]
+    path = "github.com/imfing/hextra"
+
+  # Hugo drops its default mounts once any mount is declared, so they are listed again.
+  [[module.mounts]]
+    source = "content"
+    target = "content"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
+  [[module.mounts]]
+    source = "layouts"
+    target = "layouts"
+  [[module.mounts]]
+    source = "assets"
+    target = "assets"
+  [[module.mounts]]
+    source = "i18n"
+    target = "i18n"
+  [[module.mounts]]
+    source = "data"
+    target = "data"
+  # The Runink River logo (the M2 mascot), served straight from branding/logo/ so the site
+  # never holds a second copy of the project mark (LicenseRef-Runink-Trademark, REUSE.toml).
+  # One mount per file: a directory mount would publish the other marks too, and its file
+  # filter changed name between Hugo 0.147 (includeFiles) and 0.153+ (files).
+  [[module.mounts]]
+    source = "../branding/logo/river-mark.svg"
+    target = "static/brand/river-mark.svg"
+  [[module.mounts]]
+    source = "../branding/logo/river-mark-small.svg"
+    target = "static/brand/river-mark-small.svg"
+  [[module.mounts]]
+    source = "../branding/mascot/river-mascot.svg"
+    target = "static/brand/river-mascot.svg"
+  [[module.mounts]]
+    source = "../branding/mascot/river-mascot.png"
+    target = "static/brand/river-mascot.png"
+
+[outputs]
+  home = ["html"]
+  page = ["html"]
+  section = ["html"]
+
+[markup]
+  [markup.highlight]
+    noClasses = false
+  [markup.goldmark.renderer]
+    unsafe = true
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+
+[[menu.main]]
+  identifier = "docs"
+  name = "Documentation"
+  pageRef = "/docs"
+  weight = 1
+[[menu.main]]
+  identifier = "download"
+  name = "Download"
+  pageRef = "/docs/getting-started/download"
+  weight = 2
+[[menu.main]]
+  identifier = "faq"
+  name = "FAQ"
+  pageRef = "/docs/faq"
+  weight = 3
+[[menu.main]]
+  name = "Search"
+  weight = 4
+  [menu.main.params]
+    type = "search"
+[[menu.main]]
+  name = "GitHub"
+  weight = 5
+  url = "https://github.com/org-runink/river"
+  [menu.main.params]
+    icon = "github"
+
+[[menu.sidebar]]
+  identifier = "more"
+  name = "More"
+  weight = 1
+  [menu.sidebar.params]
+    type = "separator"
+[[menu.sidebar]]
+  identifier = "repo"
+  name = "Source on GitHub"
+  url = "https://github.com/org-runink/river"
+  weight = 2
+[[menu.sidebar]]
+  identifier = "changelog"
+  name = "Changelog"
+  url = "https://github.com/org-runink/river/blob/main/CHANGELOG.md"
+  weight = 3
+
+[params]
+  description = "Runink River: an optimized developer workstation on s6, with an encrypted ZFS root, the linux-runink kernel and a graphical installer."
+  # The share card LinkedIn and other sites show for any page (1200x627, static/og/).
+  images = ["og/runink-river-card.png"]
+  externalLinkDecoration = true
+  displayUpdatedDate = false
+
+  [params.navbar]
+    displayTitle = true
+    displayLogo = true
+    width = "wide"
+    [params.navbar.logo]
+      path = "brand/river-mark-small.svg"
+      dark = "brand/river-mark-small.svg"
+      width = 32
+      height = 32
+
+  [params.page]
+    width = "wide"
+    # The per-page menu of "Open in ChatGPT / Claude" links: third-party AI services have
+    # no place in this project's pages (AGENTS.md, security guardrails).
+    [params.page.contextMenu]
+      enable = false
+
+  [params.theme]
+    default = "system"
+    displayToggle = true
+
+  [params.footer]
+    enable = true
+    displayCopyright = true
+    displayPoweredBy = true   # credits the Hextra theme (MIT; docs/LICENSING.md)
+    width = "wide"
+
+  [params.search]
+    enable = true
+    type = "flexsearch"
+    [params.search.flexsearch]
+      index = "content"
+      tokenize = "forward"
+      # Local copy (assets/lib/flexsearch/SOURCE); without it Hextra downloads it at build time.
+      js = "lib/flexsearch/flexsearch.bundle.min.js"
+
+  [params.editURL]
+    enable = true
+    base = "https://github.com/org-runink/river/edit/main/website/content"
+
+  [params.highlight.copy]
+    enable = true
+    display = "hover"
+
+  # medium-zoom would be fetched from a CDN at build time; the pages need no image zoom.
+  [params.imageZoom]
+    enable = false
+
+  [params.comments]
+    enable = false

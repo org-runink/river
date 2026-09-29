@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Maintainer: The RIVER Authors
+# river-guide — the install guide agent, LIVE MEDIUM ONLY.
+#
+# Carries river-guide (built by build/25-river-guide.sh), the public Runink River guide markdown
+# (read-only copy of what the binary embeds) and the mistral.rs CPU server that serves the
+# guide model on the IPv6 loopback. The model weights themselves are NOT in this package: they
+# are staged (build/25-river-guide.sh, build/local-iso.sh) into the live overlay of a profile
+# that ships the guide, so a LEAN medium can leave them out. The installer's 20-clone-rootfs
+# removes this package from every installed node.
+#
+# Build WITH integrity checking (makepkg without --skipinteg): the server tarball is a
+# network download and its sha256 is the only thing that makes shipping it acceptable.
+# The pin must match guide/model.lock ("server" row).
+pkgname=river-guide
+pkgver=0.1.0
+pkgrel=1
+_mrsver=v0.9.4
+pkgdesc="Runink River install guide agent (live medium only): grounded install help, offline"
+arch=('x86_64')
+url="https://github.com/org-runink/river"
+license=('MIT')
+depends=('glibc' 'gcc-libs')
+options=('!strip')
+source=("mistralrs-cpu-${_mrsver}.tar.gz::https://github.com/EricLBuehler/mistral.rs/releases/download/${_mrsver}/mistralrs-cpu-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('99a8f233db07927b9af4d6ac8d5c1541bc9e4c6c90ebeec1be97fe6306e00feb')
+
+package() {
+	local out="${RUNINK_OUT:?set RUNINK_OUT to build/artifacts}/river-guide"
+	[ -s "$out/river-guide" ] || { echo "river-guide: $out/river-guide missing — run build/25-river-guide.sh" >&2; return 1; }
+	install -Dm755 "$out/river-guide" "$pkgdir/usr/local/bin/river-guide"
+	install -Dm755 "$srcdir/mistralrs" "$pkgdir/usr/lib/river-guide/mistralrs"
+	local f
+	for f in "$out"/bundles/river/*.md; do
+		install -Dm444 "$f" "$pkgdir/usr/share/river-guide/bundles/river/$(basename "$f")"
+	done
+}

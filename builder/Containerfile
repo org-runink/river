@@ -1,0 +1,63 @@
+# Reproducible Artix build environment for the RIVER golden image.
+#
+# `buildiso` (artools) must run on Artix; this dev/CI host is usually not Artix. This
+# image gives any podman/docker host the exact toolchain to build the ISO + the from-source
+# components:  artools (buildiso), Go, and gcc + base-devel for the [runink] packages
+# (tayga; the kernel and OpenZFS build in build/kernel-builder.Containerfile, FROM this image).
+# No cmake or ninja: nothing built here uses them. The Flutter SDK (needed only
+# by a downstream payload that builds Flutter web bundles) is optional and installed when
+# BUILD_FLUTTER=1 to keep the base lean.
+#
+# Build:   podman build -t runink-os-builder build/../builder   (see `make builder`)
+# Use:     podman run --privileged -v $PWD:/os -w /os runink-os-builder make iso
+#          (--privileged: buildiso/basestrap need mount + loop devices)
+FROM docker.io/artixlinux/artixlinux:latest
+
+ARG BUILD_FLUTTER=0
+
+# Keyring first (fresh Artix containers ship without an initialized keyring), then the
+# toolchain. No ZFS userland here: the builder never touches a pool, and the ISO's ZFS
+# (runink-zfs + runink-zfs-utils) comes from [runink]. The zfs-utils this list used to name
+# exists only in archzfs, which this file only ever added AFTER that install step, so on
+# Artix it could only make the whole `pacman -Syu` transaction fail with "target not found".
+RUN pacman-key --init && pacman-key --populate artix archlinux 2>/dev/null || true; \
+    pacman -Sy --noconfirm --needed \
+        artix-keyring archlinux-keyring; \
+    pacman -Syu --noconfirm --needed \
+        artools-iso artools-pkg \
+        base-devel git rsync curl \
+        go gcc \
+        squashfs-tools dosfstools libarchive \
+    ; \
+    pacman -Scc --noconfirm
+
+# No Python in the build environment. Nothing this image runs needs it (buildiso, makepkg of
+# the [runink] packages, go), but it arrives as a dependency of tools it never runs:
+# base-devel's debugedit pulls gdb (which embeds the interpreter) and artools-pkg pulls bzr and
+# mercurial (written in it), for VCS package sources this repository does not use. Remove the
+# interpreter, every python-* package and the packages that require them, without their
+# dependents (-Rdd: debugedit and artools-pkg stay), and fail the image build if an interpreter
+# is still on PATH. build/kernel-builder.Containerfile repeats this for images built before it.
+RUN py="$(pacman -Qq | grep -E '^python(-|$)' || true)" \
+    && if [ -n "$py" ]; then \
+         pacman -Rdd --noconfirm $py $(pacman -Qi $py | sed -n 's/^Required By *: //p' \
+           | tr ' ' '\n' | grep -vxE 'None|python(-.*)?' | sort -u); \
+       fi \
+    && ! command -v python3 && ! command -v python \
+    && ! ls /usr/bin/python* >/dev/null 2>&1
+
+# Optional Flutter SDK (large), for downstream payloads that build Flutter web bundles.
+RUN if [ "$BUILD_FLUTTER" = "1" ]; then \
+        pacman -Sy --noconfirm --needed unzip clang && \
+        git clone --depth 1 -b stable https://github.com/flutter/flutter.git /opt/flutter && \
+        /opt/flutter/bin/flutter --version ; \
+    fi
+ENV PATH="/opt/flutter/bin:${PATH}"
+
+# A non-root build user (makepkg refuses to run as root).
+RUN useradd -m -G wheel builder && \
+    printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/builder
+USER builder
+WORKDIR /os
+
+CMD ["/bin/bash"]

@@ -1,0 +1,119 @@
+#!/bin/sh
+# river-sign — the OWNER signs a directory of RIVER artifacts, locally. SCAFFOLD.
+#
+# The trust model is the Arch-packager one: the owner's personal OpenPGP key is the root of
+# trust (base/keys/owner/fingerprint). CI and base/river-build only ever produce UNSIGNED
+# artifacts plus a SHA256SUMS; this script is the one place a private key is used, and it
+# refuses to run in CI.
+#
+#   1. verifies every file listed in DIR/SHA256SUMS against its checksum (sha256sum -c);
+#   2. refuses to sign anything the checksum file does not cover (e.g. a repo db that was
+#      regenerated after SHA256SUMS was written);
+#   3. makes a binary detached signature <file>.sig — the name pacman fetches — for each
+#      listed file and for SHA256SUMS itself, with `gpg --detach-sign`;
+#   4. mirrors repo-add's db symlinks (river.db -> river.db.tar.zst gets
+#      river.db.sig -> river.db.tar.zst.sig), so pacman finds the db signature;
+#   5. verifies every signature and checks that it chains to the OWNER's primary key. When
+#      base/keys/owner/<fpr>.asc is present, that check uses ONLY that exported public key
+#      (via gpgv) — the same key the image ships — not whatever is in the local keyring.
+#
+# Usage:
+#   base/river-sign [-f] [-u KEYID] DIR
+#     -f        re-sign files that already have a .sig (default: refuse)
+#     -u KEYID  key to sign with (default: the owner fingerprint, letting gpg pick the
+#               signing subkey; pass SUBKEYFPR! to force one subkey, e.g. on a token)
+#
+# Environment: RIVER_SIGN_FPR overrides base/keys/owner/fingerprint (the EXPECTED primary).
+set -eu
+
+BASE_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+OWNER_DIR="$BASE_DIR/keys/owner"
+TOOL=river-sign
+
+die() { printf '%s: error: %s\n' "$TOOL" "$*" >&2; exit 1; }
+say() { printf '%s: %s\n' "$TOOL" "$*"; }
+
+# The private key never enters CI. This is a tripwire, not the control — the control is that
+# no CI secret holds the key — but it stops a workflow from ever growing a signing step.
+if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+	die "refusing to run in CI: signing is an owner-local step (docs/OWN-BASE.md)"
+fi
+
+force=0
+key=
+while getopts fu: _o; do
+	case "$_o" in
+		f) force=1 ;;
+		u) key=$OPTARG ;;
+		*) die "usage: $TOOL [-f] [-u KEYID] DIR" ;;
+	esac
+done
+shift $((OPTIND - 1))
+[ "$#" -eq 1 ] || die "usage: $TOOL [-f] [-u KEYID] DIR"
+DIR=$(CDPATH='' cd -- "$1" && pwd) || die "no such directory: $1"
+
+for _t in gpg gpgv sha256sum; do
+	command -v "$_t" >/dev/null 2>&1 || die "required tool not found: $_t"
+done
+
+fpr=${RIVER_SIGN_FPR:-$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$OWNER_DIR/fingerprint" | head -1 | tr -d '[:space:]')}
+[ "$fpr" != OWNER_GPG_FPR ] || die "base/keys/owner/fingerprint is still the OWNER_GPG_FPR placeholder"
+printf '%s' "$fpr" | grep -Eq '^[0-9A-F]{40}$' || die "owner fingerprint must be 40 uppercase hex, got '$fpr'"
+[ -n "$key" ] || key=$fpr
+
+cd "$DIR"
+[ -f SHA256SUMS ] || die "$DIR has no SHA256SUMS (river-build writes one)"
+
+say "1/5 checking SHA256SUMS in $DIR"
+sha256sum -c --strict --quiet SHA256SUMS || die "checksum verification failed — not signing"
+
+# Files the checksum list covers. Names never contain whitespace (river-build output).
+listed=$(awk '{sub(/^\*/, "", $2); print $2}' SHA256SUMS)
+[ -n "$listed" ] || die "SHA256SUMS lists no files"
+
+say "2/5 checking coverage"
+for _f in *.db.tar.* *.files.tar.* *.pkg.tar.* *.iso; do
+	[ -f "$_f" ] && [ ! -L "$_f" ] || continue
+	case "$_f" in *.sig) continue ;; esac
+	printf '%s\n' "$listed" | grep -qxF -- "$_f" || die "$_f is not covered by SHA256SUMS — regenerate it first"
+done
+
+say "3/5 signing with $key"
+for _f in $listed SHA256SUMS; do
+	if [ -e "$_f.sig" ] && [ "$force" -ne 1 ]; then
+		die "$_f.sig already exists (use -f to re-sign)"
+	fi
+	rm -f "$_f.sig"
+	gpg --local-user "$key" --detach-sign --output "$_f.sig" -- "$_f"
+	say "  signed $_f"
+done
+
+say "4/5 linking repo db signatures"
+for _l in *.db *.files; do
+	[ -L "$_l" ] || continue
+	_t=$(readlink "$_l")
+	[ -f "$_t.sig" ] && ln -sfn "$_t.sig" "$_l.sig" && say "  $_l.sig -> $_t.sig"
+done
+
+say "5/5 verifying against the owner primary key $fpr"
+_asc="$OWNER_DIR/$fpr.asc"
+_kr=
+if [ -f "$_asc" ]; then
+	_kr=$(mktemp)
+	trap 'rm -f "$_kr"' EXIT INT TERM
+	gpg --batch --yes --dearmor -o "$_kr" "$_asc"
+	say "  using ONLY the shipped public key $_asc"
+else
+	say "  WARNING: $_asc missing — verifying with the local keyring instead of the shipped key"
+fi
+for _f in $listed SHA256SUMS; do
+	if [ -n "$_kr" ]; then
+		_st=$(gpgv --keyring "$_kr" --status-fd 1 "$_f.sig" "$_f" 2>/dev/null) || _st=
+	else
+		_st=$(gpg --batch --status-fd 1 --verify "$_f.sig" "$_f" 2>/dev/null) || _st=
+	fi
+	# VALIDSIG ... <primary-key-fpr> is the last field: a subkey signature still chains here.
+	printf '%s\n' "$_st" | awk -v k="$fpr" '$2 == "VALIDSIG" && $NF == k {ok=1} END {exit !ok}' \
+		|| die "$_f.sig does not verify against the owner key $fpr"
+done
+say "done: $(printf '%s\n' "$listed" | wc -l | tr -d ' ') artifacts + SHA256SUMS signed and verified"

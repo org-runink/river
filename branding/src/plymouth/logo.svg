@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runink River boot splash logo, 1260x280: the dark-ground lockup (the community mark and
+     the light "Runink River" wordmark, with the meaning of the name) for the dark splash ground. SOURCE of
+     branding/plymouth/river/logo.png and of the Plasma start-up splash image
+     (branding/render.sh swaps the placeholder for branding/logo/river-lockup-dark.svg, so
+     both come from the one source). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="280" viewBox="0 0 1260 280">
+  <!-- RIVER-ART src=logo/river-lockup-dark.svg x=630 y=0 height=280 anchor=middle -->
+</svg>

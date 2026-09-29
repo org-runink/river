@@ -1,0 +1,28 @@
+pkgbase = zfs-linux-runink
+	pkgdesc = OpenZFS kernel modules for linux-runink 7.2.7.zen1-1 (Runink River kernel for Arch Linux)
+	pkgver = 2.4.4_7.2.7.zen1.1
+	pkgrel = 1
+	url = https://openzfs.org
+	arch = x86_64
+	license = CDDL-1.0
+	makedepends = linux-runink-headers=7.2.7.zen1-1
+	depends = kmod
+	depends = zfs-utils=2.4.4
+	depends = linux-runink=7.2.7.zen1-1
+	provides = zfs
+	provides = spl
+	provides = ZFS-MODULE=2.4.4
+	provides = SPL-MODULE=2.4.4
+	conflicts = zfs-dkms
+	conflicts = zfs-dkms-git
+	conflicts = zfs-dkms-rc
+	conflicts = spl-dkms
+	conflicts = spl-dkms-git
+	source = https://github.com/openzfs/zfs/releases/download/zfs-2.4.4/zfs-2.4.4.tar.gz
+	source = https://github.com/openzfs/zfs/releases/download/zfs-2.4.4/zfs-2.4.4.tar.gz.asc
+	validpgpkeys = 4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027
+	validpgpkeys = C33DF142657ED1F7C328A2960AB9E991C6AF658B
+	sha256sums = 2a3c70d55a37cc71618a95a60e81ad66530201eb118d37741dc92efcf848c8b1
+	sha256sums = SKIP
+
+pkgname = zfs-linux-runink

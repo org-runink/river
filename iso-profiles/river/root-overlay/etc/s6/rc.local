@@ -1,0 +1,55 @@
+#!/bin/sh
+# /etc/s6/rc.local — Runink River init-context launcher.
+#
+# Executed by the s6 `rc-local` oneshot at the end of boot, in INIT context (PID-1 tree),
+# not in a login session, so elogind never reaps what it starts.
+#
+# What is deliberately NOT here: a Kubernetes node, a CI runner, tunnels, off-box backups. A
+# downstream distribution that needs them ships its own rc.local in its own profile
+# (docs/BUILD.md, "Downstream distributions").
+#
+# The desktop itself is NOT started here. SDDM is an s6 service declared in profile.yaml's
+# live-session.services and enabled at install by 80-enable-s6.sh — starting a display
+# manager from rc.local would race the one s6 already supervises. The host firewall
+# (runink-fw), the ZFS datasets (zfs-mount) and the shadow-grade modes (river-perms) are s6
+# oneshots too, and have already run.
+set -eu
+
+log() { echo "rc.local: $*"; }
+
+# 0. Live-installer guard ----------------------------------------------------
+# Booted from the ISO the kernel cmdline carries `overlay=livefs`: that is the INSTALLER
+# environment, not an installed machine. Without this guard the live session does tuning work
+# on a rootfs that is about to be discarded.
+if grep -qw 'overlay=livefs' /proc/cmdline 2>/dev/null; then
+	log "live installer session — host tuning skipped (run the installer to provision)"
+	exit 0
+fi
+
+# 0b. Boot splash fallback ---------------------------------------------------
+# The plymouth-quit oneshot (a dependency of sddm-srv) normally ends the splash. If SDDM
+# is disabled or failed, nothing would, and the splash would sit over the text console.
+/usr/local/bin/runink-plymouth-quit
+
+# 1. OS tuning ---------------------------------------------------------------
+sysctl --system >/dev/null 2>&1 || log "sysctl --system reported issues (non-fatal)"
+
+# zram, zstd: sized by the install plan (/etc/runink/zram.conf), else 1:1 with RAM (the live
+# medium, or a machine installed without a plan). Pair this with /etc/sysctl.d/99-runink-workstation.conf
+# (swappiness=150, page-cluster=0) — the device without that tuning leaves most of the
+# benefit on the table, and the tuning without the device is actively harmful on a
+# disk-backed swap.
+RUNINK_ZRAM_DEFAULT=ram /usr/local/bin/runink-zram.sh || log "zram setup failed (non-fatal)"
+
+# 2. First-boot hooks ----------------------------------------------------------
+# /usr/local/lib/runink/firstboot.d/* (a downstream's setup hand-off, docs/PAYLOADS.md): runs
+# each hook until it has succeeded once. No hooks (Runink River itself) = no-op. Backgrounded:
+# it must never hold up the boot.
+/usr/local/bin/river-firstboot-hooks &
+
+# 2b. Graphical first boot -----------------------------------------------------
+# Only when the installer left the marker (an edition with firstboot_ui; Runink River's has
+# none) and the image carries the kiosk. No marker = no-op. Backgrounded.
+if [ -e /var/lib/runink/firstboot-ui ]; then /usr/local/bin/river-firstboot-ui & fi
+
+log "host tuning complete"

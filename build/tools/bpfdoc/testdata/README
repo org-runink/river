@@ -1,0 +1,20 @@
+bpfdoc test fixtures (gzip -9 -n; the test decompresses them in memory)
+
+bpf-7.2.7.h.gz
+    tools/include/uapi/linux/bpf.h of Linux 7.2.7, from linux-7.2.7.tar.xz
+    (sha256 4ac34c47db2540ffb2713943f8d891ff1702e0ba6934525a493b7d1cad43145a, the tarball
+    build/pkgbuilds/runink-kernel pins and verifies against kernel.org's signature). The zen
+    patch v7.2.7-zen1 does not touch it. Uncompressed sha256:
+    ae0668c3b99d9ce2372f9227a462d189ad9ce7c886adaf29cbe65eb76f456c43
+
+bpf_helper_defs-7.2.7.h.gz
+    The bpf_helper_defs.h that UPSTREAM scripts/bpf_doc.py generated from that bpf.h, taken
+    from tools/bpf/resolve_btfids/libbpf/ of a full linux-runink 7.2.7-zen1-1 build made
+    before bpfdoc existed (2026-09-24; bpftool's bootstrap copy was the same file). It is the
+    oracle: no Python was run to produce or check it for this change. Uncompressed sha256:
+    05e718b9297813159527482b0174fcb5a3e705a4bea836cd46af206857fd3697
+
+When the kernel pin moves: replace both files with the new kernel's bpf.h and the header
+generated from it by a known-good build (or by libbpf's own committed bpf_helper_defs.h if its
+bpf.h is byte-identical), rename them, update main_test.go, and port any change in the new
+scripts/bpf_doc.py's --header path to main.go.

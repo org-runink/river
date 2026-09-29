@@ -1,0 +1,25 @@
+# KEYS — the OpenPGP key that signs Runink River releases.
+#
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+
+Key:          the Runink River release-signing key (nistp384; uid today: Daniel Paes <paes@runink.org>,
+              the lead maintainer; a "Runink River Release Engineering" uid may be added to it)
+Published at: https://runink.org/.well-known/gpg-key.txt
+Fingerprint:  95C0A7B97D547413E42660DDB06FE75626F15BF3
+
+What it signs: each release's SHA256SUMS, as the detached signature SHA256SUMS.asc.
+The ISO is then checked against SHA256SUMS. Verify by hand:
+
+    gpg --import gpg-key.txt
+    gpg --fingerprint <the fingerprint above>        # must match THIS file
+    gpg --verify SHA256SUMS.asc SHA256SUMS
+    sha256sum -c --ignore-missing SHA256SUMS
+
+install.sh carries the same fingerprint (KEY_FPR_PINNED). While it is pending, install.sh
+FAILS CLOSED: it downloads no image, because none could be verified. When the key is
+published, the fingerprint is set here and in install.sh in the same commit.
+(Published 2026-09-27.)
+
+This is also the package-signing root of trust: base/keys/owner/fingerprint pins the same
+fingerprint, and base/river-sign signs packages and repo databases with it.

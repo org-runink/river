@@ -1,0 +1,157 @@
+name: Images (public, payload-free)
+
+# Builds the PUBLIC Runink River image on GitHub-hosted ubuntu-24.04 runners (pinned, not
+# ubuntu-latest: build/ci-runner-prep.sh installs Ubuntu 24.04 package names): the Runink
+# River ISO (iso-profiles/river, runink-river-<date>-x86_64.iso), with NO downstream payload
+# and NO model payload (MODEL_PAYLOAD=no). The Compute Engine image (build/cloud-image.sh)
+# is a server image; it is built downstream, from a server profile that no longer lives here.
+#
+# A downstream distribution's images (its own profile, payloads, encrypted models) are NOT
+# built here, and never are: the downstream repository builds them on its own runner. Nothing in this workflow reads a secret.
+#
+# Heavy (kernel ~4 h on a 4-vCPU runner, then the ISO): manual dispatch, or a pushed
+# `runink-os-*` tag. Never on pull requests, so fork code never reaches it.
+#
+# Runner constraints (docs/CLOUD-IMAGES.md, "Building in GitHub Actions"). A standard hosted
+# runner has 4 vCPU, 16 GB of RAM and ~14 GB free on /; build/ci-runner-prep.sh makes it fit:
+#   * disk: it removes the preinstalled toolchains no build here uses and puts every big path
+#     (XDG_CACHE_HOME, both podman stores, the kernel build) under /mnt, which is on the same
+#     root disk, then fails at once unless /mnt has the room the job needs (kernel 30 GB,
+#     ISO 20 GB). On 2026-09-05 the same reclaim left 38 GB free, and kernel-build.yml built
+#     linux-runink in it;
+#   * root: buildiso runs through `sudo sh build/iso-root-stage.sh` (passwordless sudo on
+#     hosted runners); everything else is rootless. No job needs /dev/kvm;
+#   * time: 6 h per job on a hosted runner. The kernel + ZFS build (~4 h on 4 vCPUs) is its
+#     own job; the ISO job reuses its packages as an artifact. No cache (zizmor: cache
+#     poisoning).
+# The workstation build people and agents use is build/local-iso.sh (docs/BUILD.md); this
+# workflow is the same path on a hosted runner, and has not yet completed a run.
+#
+# Publishing to Releases: NOT from this workflow. The release key exists (KEYS pins
+# 95C0A7B97D547413E42660DDB06FE75626F15BF3), but it is offline, so CI can never sign
+# SHA256SUMS. The path to a public release is RELEASE.md: a maintainer signs SHA256SUMS
+# offline, uploads the assets and SHA256SUMS.asc to a DRAFT release, and release-gate.yml
+# verifies the signature against KEYS and publishes. The `publish` job below stays a
+# disabled stub; see its comment for what it would still need.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'runink-os-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  XDG_CACHE_HOME: /mnt/cache
+  KERNEL_OUT: /mnt/cache/river-build/kernel
+
+jobs:
+  kernel:
+    name: linux-runink + runink-zfs
+    if: github.repository_owner == 'org-runink'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Free disk and move big paths to /mnt
+        run: sh build/ci-runner-prep.sh 30
+      # No actions/cache: a cache that another workflow run could have written must not feed
+      # a release image (cache poisoning), so every run builds the kernel from its pinned,
+      # signature-checked sources.
+      - name: Build and verify
+        run: |
+          set -eu
+          podman build -q -t runink-os-builder builder
+          build/build-kernel-zfs.sh
+          build/verify-kernel-zfs.sh "$KERNEL_OUT"
+          # The per-build module-signing PRIVATE key never leaves this job: the artifact
+          # keeps only its certificate, which is all verify-kernel-zfs.sh needs.
+          openssl x509 -in "$KERNEL_OUT/runink_signing.pem" -out "$KERNEL_OUT/cert.pem"
+          mv "$KERNEL_OUT/cert.pem" "$KERNEL_OUT/runink_signing.pem"
+          build/verify-kernel-zfs.sh "$KERNEL_OUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-zfs
+          path: /mnt/cache/river-build/kernel
+          if-no-files-found: error
+          retention-days: 3
+
+  iso:
+    name: ISO (${{ matrix.profile }})
+    needs: kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [river]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Free disk and move big paths to /mnt
+        run: sh build/ci-runner-prep.sh 20
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: installer/go.mod
+          cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kernel-zfs
+          path: /mnt/cache/river-build/kernel
+      - name: Rootless stages (builder, components, local repository, lints)
+        env:
+          PROFILE: ${{ matrix.profile }}
+          MODEL_PAYLOAD: 'no'
+          # Public artifacts carry no payload of any kind; local-iso.sh and iso-root-stage.sh
+          # refuse one (docs/PAYLOADS.md).
+          RIVER_PUBLIC: '1'
+        run: build/local-iso.sh
+      - name: The one root stage (buildiso in a privileged container)
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: sudo sh build/iso-root-stage.sh "$XDG_CACHE_HOME/river-build/local-iso/root-stage-$PROFILE.env"
+      - name: Collect
+        run: |
+          set -eu
+          mkdir -p out
+          mv "$XDG_CACHE_HOME"/river-build/iso-out/*.iso out/
+          ( cd out && sha256sum ./*.iso | tee SHA256SUMS )
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: iso-${{ matrix.profile }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to Releases (disabled; release-gate.yml publishes)
+    needs: [iso]
+    # Stays disabled. KEYS now carries the release-key fingerprint, but that was never the
+    # only blocker:
+    #   * this job is a stub: it verifies nothing and uploads nothing;
+    #   * CI cannot make SHA256SUMS.asc: the key is offline (docs/RELEASE-SIGNING.md), so an
+    #     image built here must go back to a maintainer to be signed before it can ship;
+    #   * release-gate.yml is the only path to a public release (RELEASE.md). It verifies
+    #     SHA256SUMS.asc against KEYS, scans, attests and publishes a DRAFT release.
+    # TODO(release-signing): if this job is ever built, it may only UPLOAD the unsigned ISO
+    # and SHA256SUMS to a DRAFT release for a `runink-os-*` tag that `git verify-tag` checks
+    # against KEYS, with `contents: write` on this job alone; publication stays with
+    # release-gate.yml. Never an image built with a downstream payload (this workflow
+    # cannot build one; cloud-image.sh marks one PRIVATE).
+    # Off unless the owner sets the repository variable RIVER_RELEASE_PUBLISH=true, and even
+    # then it only fails: nothing is published by accident.
+    if: vars.RIVER_RELEASE_PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/runink-os-')
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "::error::publishing is not implemented here: sign SHA256SUMS offline and run release-gate.yml (RELEASE.md)"
+          exit 1

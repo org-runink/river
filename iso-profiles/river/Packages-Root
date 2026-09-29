@@ -1,0 +1,251 @@
+# Packages-Root — the allow-list for Runink River, the developer workstation (KDE Plasma on
+# Wayland, s6, encrypted ZFS root, one pinned kernel).
+#
+# artools installs profile.yaml's rootfs lists on top of its own desktop common.yaml; every
+# package profile.yaml names must be listed here (river lint profile-manifest), and the
+# closure of this list is checked against forbidden.closure (river lint closure).
+#
+# NOT on this image, deliberately: a Kubernetes node, NAT64, platform runtimes, model
+# payloads. A downstream distribution that needs them builds its own profile from this
+# repository's packaging (docs/BUILD.md, "Downstream distributions").
+
+# ── base + boot ────────────────────────────────────────────────────────────────────────
+base
+linux-runink
+
+mkinitcpio
+grub
+efibootmgr
+
+# ── firmware ───────────────────────────────────────────────────────────────────────────
+# A workstation fleet is not one SKU: the reference machine is AMD (Radeon, HawkPoint), and
+# amdgpu will not initialise without its firmware split. Both vendors are listed so one image
+# boots either.
+linux-firmware-amdgpu
+linux-firmware-intel
+
+# ── ZFS root ───────────────────────────────────────────────────────────────────────────
+# Encrypted ZFS root (invariant 3); the datasets are created with compression=zstd by the
+# installer.
+runink-zfs
+runink-zfs-utils
+
+# ── installer ─────────────────────────────────────────────────────────────────────────
+# From the pinned [runink] local repo: river-hwprobe + river-plan (the
+# install plan runink-install confirms by disk serial) and river-netsetup + river-netcheck
+# (the network-first step the live session opens with).
+runink-installer
+# Live-medium boot and the installer's disk tools (the installed machine is a clone of the live
+# rootfs, so they stay on it too).
+squashfs-tools
+mkinitcpio-nfs-utils
+artools-base
+dialog
+parted
+gptfdisk
+dosfstools
+
+# ── s6 init ────────────────────────────────────────────────────────────────────────────
+# s6, NOT systemd. This is a hard invariant of the image and it constrains the desktop:
+# every service below must have an s6 counterpart, which is why the -s6 packages are named
+# explicitly rather than relying on a plasma meta-package to drag in systemd units.
+s6
+s6-rc
+s6-linux-init
+s6-scripts
+elogind-s6
+dbus-s6
+networkmanager-s6
+openssh-s6
+# bluez-s6 ships the `bluetoothd` s6-rc bundle (bluetoothd-srv + bluetoothd-log, depends on
+# dbus); cups-s6 ships `cupsd`. Both are enabled in profile.yaml's live-session.services the
+# same way sddm is, and 20-clone-rootfs.sh carries the live default bundle to the target.
+bluez-s6
+cups-s6
+
+# ── network ────────────────────────────────────────────────────────────────────────────
+networkmanager
+wpa_supplicant
+openssh
+iptables
+nftables
+
+# ── desktop: KDE Plasma on Wayland ─────────────────────────────────────────────────────
+# EXPLICIT list, not plasma-meta (owner decision 2026-09-24: minimal tech, no telemetry,
+# no app store). This is plasma-meta 6.7.5's dependency list MINUS:
+#   discover, flatpak-kcm  - app store + Flatpak; the workstation updates by pacman.
+#                            flatpak, discover, flatpak-kcm and packagekit are on
+#                            forbidden.closure so they cannot come back transitively.
+#   plasma-welcome         - first-run wizard (also hard-depends on kuserfeedback)
+#   krdp                   - RDP server (freerdp); nothing here should listen for desktops
+#   plasma-vault           - gocryptfs/FUSE vaults; the ZFS pool is already encrypted
+#   plasma-firewall        - ufw/firewalld KCM; neither backend ships (nftables is used)
+#   oxygen, oxygen-sounds  - legacy theme; Breeze is the theme
+# PLUS sddm-kcm (login-screen settings). konsole and spectacle are listed below.
+# kuserfeedback CANNOT be dropped: plasma-workspace, dolphin and kate hard-depend on it
+# (pacman -Si, Artix 2026-09-24). It is KDE's opt-in feedback library, off by default
+# (nothing is sent unless a user enables it in System Settings), so it stays, and is
+# deliberately NOT on forbidden.closure.
+aurorae
+bluedevil
+breeze
+breeze-gtk
+kactivitymanagerd
+kde-cli-tools
+kde-gtk-config
+kdecoration
+kdeplasma-addons
+kglobalacceld
+kinfocenter
+kmenuedit
+knighttime
+kpipewire
+kscreen
+kscreenlocker
+ksshaskpass
+ksystemstats
+kwallet-pam
+kwayland
+kwin
+kwrited
+layer-shell-qt
+libkscreen
+libksysguard
+libplasma
+milou
+ocean-sound-theme
+plasma-activities
+plasma-activities-stats
+plasma-browser-integration
+plasma-desktop
+plasma-disks
+plasma-integration
+plasma-keyboard
+plasma-nm
+plasma-pa
+plasma-systemmonitor
+plasma-thunderbolt
+plasma-workspace
+polkit-kde-agent
+powerdevil
+print-manager
+systemsettings
+xdg-desktop-portal-kde
+sddm-kcm
+sddm
+sddm-s6
+konsole
+dolphin
+kate
+
+# ── KDE applications (daily desktop) ─────────────────────────────────────────────────
+# Video is `dragon` (KDE's own ffmpeg-based
+# player): haruna is NOT in the Artix repos (only Arch [extra]), and this builder is
+# Artix-only. okular pulls phonon-qt6 -> phonon-qt6-vlc (the only Phonon backend in
+# Artix), which accounts for the vlc-plugin-* entries in the closure.
+# partitionmanager (+ kpmcore) adds nothing forbidden; measured 2026-09-24.
+dragon
+elisa
+gwenview
+okular
+ark
+spectacle
+kcalc
+partitionmanager
+
+# Browser. Its telemetry, studies and default-browser nag are switched off system-wide by
+# root-overlay/etc/firefox/policies/policies.json (Mozilla enterprise policies).
+firefox
+
+# KDE's official wallpaper collection (not in the Plasma list above). The DEFAULT stays
+# RIVER (look-and-feel org.runink.river.desktop); the Emerald set is vendored under
+# branding/wallpapers/emerald and shipped by branding/render.sh.
+plasma-workspace-wallpapers
+
+# ── boot splash: Plymouth (workstation ONLY) ──────────────────────────────────────────
+# The RIVER `river` script theme (root-overlay/usr/share/plymouth/themes/river). Artix
+# ships plymouth in [world] and its mkinitcpio hook has a non-systemd path (add_runscript;
+# the busybox hook starts plymouthd), so it is s6-clean. Its dependencies (cairo, pango,
+# fontconfig, freetype2, libx11, libdrm, libxkbcommon, xkeyboard-config, glib2) are
+# already in this closure: measured with pactree (2026-09-22), plymouth adds only itself
+# (the s6/Artix subtrees are unresolvable off-box; recheck on Artix).
+# s6 has no plymouth-quit.service; root-overlay/etc/s6/adminsv/plymouth-quit does that job.
+plymouth
+
+# ── graphics: mesa ─────────────────────────────────────────────────────────────────────
+# vulkan-radeon for the AMD reference machine, vulkan-intel so the same image is usable on
+# Intel hardware. libva for hardware video decode.
+mesa
+vulkan-icd-loader
+vulkan-radeon
+vulkan-intel
+libva-mesa-driver
+mesa-utils
+
+# ── multimedia: codecs + hardware video ──────────────────────────────────────────────
+# GStreamer (what Plasma/KDE apps and Firefox's WebRTC use) plus ffmpeg (dragon, Qt
+# Multimedia). intel-media-driver is the Meteor Lake (iHD) VA-API driver; the AMD
+# reference machine decodes through libva-mesa-driver above. libva-utils gives vainfo.
+gst-plugins-base
+gst-plugins-good
+gst-plugins-bad
+gst-plugins-ugly
+gst-libav
+ffmpeg
+intel-media-driver
+libva-utils
+
+# ── audio ──────────────────────────────────────────────────────────────────────────────
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+# JACK clients through PipeWire (pro-audio apps without a separate jack2 server). The
+# volume UI is plasma-pa, in the Plasma list above, so pavucontrol-qt is not added.
+pipewire-jack
+
+# ── bluetooth ────────────────────────────────────────────────────────────────────────
+# bluedevil (the Plasma applet) is in the Plasma list above; this is the stack under it. The
+# s6 service (bluez-s6) is with the other -s6 packages above.
+bluez
+bluez-utils
+
+# ── printing ─────────────────────────────────────────────────────────────────────────
+# print-manager (the Plasma printer KCM) is in the Plasma list above and is
+# useless without a CUPS daemon. system-config-printer is deliberately NOT added: it
+# duplicates print-manager and drags in python-gobject/gtk3 bindings.
+cups
+
+# ── fonts ──────────────────────────────────────────────────────────────────────────────
+ttf-dejavu
+ttf-liberation
+noto-fonts
+noto-fonts-emoji
+noto-fonts-cjk
+noto-fonts-extra
+
+# ── developer toolchain ────────────────────────────────────────────────────────────────
+# A developer workstation clones and builds: base-devel, git and curl are its tools (invariant
+# 5 is written for this; see AGENTS.md).
+base-devel
+git
+curl
+rsync
+vim
+# The terminal greeting: fish (the users' login shell) and fastfetch (the machine summary).
+fish
+fastfetch
+sudo
+go
+zstd
+
+# ── compression + power ────────────────────────────────────────────────────────────────
+# zram is configured by the s6 service in root-overlay (zram-generator is a systemd
+# generator and cannot be used here). util-linux provides zramctl.
+util-linux
+cpupower
+
+# ── sandbox ────────────────────────────────────────────────────────────────────────────
+# bubblewrap: unprivileged (not setuid) and adds only itself to the closure. river-sandbox
+# (root-overlay/usr/local/bin) runs untrusted code under it (invariant 8).
+bubblewrap

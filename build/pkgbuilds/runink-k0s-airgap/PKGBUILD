@@ -1,0 +1,42 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-k0s-airgap — k0s's own system images, so a server image built from Runink River needs no network to
+# bring its cluster up.
+#
+# build/k0s-airgap.sh (run on the build host by build/local-iso.sh, rootless podman) pulls
+# every image `k0s airgap list-images` names for the pinned k0s and the server profile's
+# k0s.yaml, BY DIGEST (build/k0s-images.lock), and writes one verified docker-archive to
+# $RUNINK_OUT/k0s-airgap/. This package installs it where k0s looks:
+#
+#   /var/lib/k0s/images/k0s-airgap-bundle-<k0s version>-amd64.tar
+#
+# k0s imports every archive in that directory into its containerd (namespace k8s.io, pinned
+# against image GC) before it starts kubelet, and the profile's k0s.yaml sets
+# spec.images.default_pull_policy: IfNotPresent, so kubelet never pulls these images.
+# Keep the archive in place: removing it makes k0s unpin the images.
+#
+# The images are unmodified upstream images (Apache-2.0 software; the OS packages inside
+# them carry their own licences): see /usr/share/licenses/runink-k0s-airgap/NOTICE.
+# Pinned in lockstep with runink-k0s: the bundle's file name carries the k0s version, and
+# k0s-airgap.sh refuses a lock that does not match what that k0s lists.
+pkgname=runink-k0s-airgap
+pkgver=1.31.2
+pkgrel=1
+_k0sver="v1.31.2+k0s.0"
+pkgdesc="k0s system images (airgap bundle) for a server image built from Runink River: the cluster starts with no network"
+arch=('x86_64')
+url="https://docs.k0sproject.io/stable/airgap-install/"
+license=('Apache-2.0')
+depends=("runink-k0s=${pkgver}")
+options=('!strip')
+
+package() {
+	local src="${RUNINK_OUT:?set RUNINK_OUT to build/artifacts}/k0s-airgap"
+	local bundle="$src/k0s-airgap-bundle-${_k0sver}-amd64.tar"
+	if [ ! -s "$bundle" ] || [ ! -s "$src/k0s-images.lock" ] || [ ! -s "$src/NOTICE" ]; then
+		echo "runink-k0s-airgap: no verified bundle in $src — run build/k0s-airgap.sh (build/local-iso.sh does)" >&2
+		return 1
+	fi
+	install -Dm644 "$bundle" "$pkgdir/var/lib/k0s/images/$(basename "$bundle")"
+	install -Dm644 "$src/k0s-images.lock" "$pkgdir/usr/local/share/runink/k0s-images.lock"
+	install -Dm644 "$src/NOTICE" "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+}

@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# REUSE: every file declares its copyright and licence (an SPDX header, or an entry in
+# REUSE.toml), and every licence it names is in LICENSES/ (https://reuse.software/spec-3.3/).
+#
+# Its own workflow, not a step of ci.yml, so the README's "REUSE" badge is this workflow's
+# live status on main: it turns red the moment main stops being compliant, which a static
+# "compliant" badge could not do. This replaces a registration with api.reuse.software;
+# see docs/governance/BADGES.md.
+#
+# The check is `river lint reuse` (cli/internal/lint/reuse.go), a Go port of `reuse lint`:
+# standard library only, run as a plain process from the vendored cli/ module, so it needs no
+# container, no Python and no network after setup-go. No secrets: it runs on GitHub-hosted
+# ubuntu-latest for every event, fork pull requests included (docs/governance/CI.md, "Runners").
+name: REUSE
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reuse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reuse:
+    name: REUSE lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache: false
+      - name: river lint reuse
+        run: go -C cli run ./cmd/river lint reuse --repo ..
+

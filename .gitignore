@@ -1,0 +1,50 @@
+# Build outputs
+/build/.out/
+/build/**/src/
+/build/**/pkg/
+/build/**/*.pkg.tar.zst
+/localrepo/*.pkg.tar.zst
+/localrepo/*.db*
+/localrepo/*.files*
+
+# Baked artifacts staged for the ISO (large; produced by `make components`)
+/build/artifacts/
+*.iso
+
+# Fetched upstream (pinned by hash, not vendored)
+/iso-profiles/.upstream/
+
+# Secrets must never be committed (they are first-boot provisioned anyway)
+*.key
+*.pem
+*.kek
+enrollment.env
+
+# Editor / OS noise
+*.swp
+.DS_Store
+
+__pycache__/
+*.pyc
+
+# Baked app-image multi-archive (2.7GB export; produced by podman save on the box)
+/iso-profiles/*/root-overlay/usr/local/share/runink/images/*.tar
+build/pkgbuilds/**/k0s-v*-amd64
+
+# Own-base scaffold (base/river-build): source cache, build trees, unsigned outputs
+/base/.cache/
+/base/.work/
+/base/out/
+
+# river-guide's model weights: staged by build/25-river-guide.sh (build/artifacts/river-guide/model)
+# from the sha256 pin in guide/model.lock, and copied into a profile that ships the guide.
+# Never committed.
+/iso-profiles/*/live-overlay/usr/share/river-guide/model/
+# makepkg source downloads (pinned by sha256 in each PKGBUILD)
+/build/pkgbuilds/river-guide/mistralrs-cpu-*.tar.gz
+/build/pkgbuilds/runink-tayga/tayga-*.tar.bz2
+
+# Hugo build intermediates (but DO commit the final /docs/ to GitHub Pages)
+/website/public/
+/website/resources/
+/website/.hugo_build.lock

@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# s6 service: one LAN-install pairing session (live medium only; docs/INSTALL.md, "LAN
+# installs"). This is a TEMPLATE, never part of the s6-rc boot database and never enabled:
+# `river-pair-announce` (what runink-install's "Let another machine install this one" runs)
+# copies it to /run/river-pair-sv/, links it into the scan directory for as long as the local
+# operator's console is open, and unlinks it again. Nothing announces or listens otherwise.
+#
+# Run once: `s6-svc -O .` marks the service "do not restart", so a session that ends (code
+# expired, locked, refused, installed, rebooted) stays ended; a new one needs the local
+# operator again.
+exec 2>&1
+s6-svc -O .
+iface="$(cat ./iface)"
+exec /usr/local/bin/river-pair-announce serve --iface "$iface"

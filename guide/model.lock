@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# guide/model.lock — the ONE model river-guide may serve on an install medium, plus the
+# model server that serves it. Pinned by revision and sha256; build/25-river-guide.sh
+# refuses anything that does not hash to these values. Weights are never committed.
+#
+# Model rows use the same 8 columns as the installer's models.lock:
+#   role  repo  revision  file  size  sha256  license  dest
+#
+# Chosen 2026-09-24 by `river-guide eval` (guide/eval/cases.json, 15 fixed questions: 12
+# answerable with an expected citation, 3 out of scope). Evidence and the rejected
+# candidates are in docs/INSTALL-GUIDE-AGENT.md ("Choosing the guide model").
+guide  Qwen/Qwen2.5-1.5B-Instruct-GGUF  91cad51170dc346986eccefdc2dd33a9da36ead9  qwen2.5-1.5b-instruct-q4_k_m.gguf  1117320736  6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e  Apache-2.0  /usr/share/river-guide/model
+
+# The server: mistral.rs's own CPU release build (glibc + libgcc only). Same engine as
+# the platform's inference; no C/C++ toolchain on the builder, nothing compiled here.
+#   server  release-url  version  sha256  license
+server  https://github.com/EricLBuehler/mistral.rs/releases/download/v0.9.4/mistralrs-cpu-x86_64-unknown-linux-gnu.tar.gz  v0.9.4  99a8f233db07927b9af4d6ac8d5c1541bc9e4c6c90ebeec1be97fe6306e00feb  MIT

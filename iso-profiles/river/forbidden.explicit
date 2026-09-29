@@ -1,0 +1,15 @@
+# forbidden.explicit — packages that must never be listed EXPLICITLY in Packages-Root.
+#
+# Checked against the MANIFEST, not the closure, so a transitive arrival is tolerated. The
+# ban is on shipping these as deliberate, first-class tools.
+#
+# git and curl are NOT here: a developer workstation whose job is cloning repositories and
+# building them cannot function without them. They are REQUIRED in Packages-Root.
+#
+# What stays banned is a container runtime in the base image. Runink River does not run
+# workloads for anyone: a runtime baked into every machine is an always-present daemon and
+# a second software supply chain (registries) beside the pinned pacman repositories. A
+# developer who wants one installs it deliberately, and lists its bridge in
+# /etc/runink/fw-forward so the host firewall routes for it (runink-fw).
+
+podman docker docker-compose podman-compose

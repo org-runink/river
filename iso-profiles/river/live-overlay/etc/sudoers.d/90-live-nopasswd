@@ -1,0 +1,5 @@
+# Runink River live medium: the live user runs the installer (runink-install needs
+# root for ZFS and GRUB) without a password prompt, as on the server's live medium. Named 90-
+# so it is read after 10-wheel: sudo applies the LAST matching rule. Live overlay only:
+# 20-clone-rootfs deletes this file, and installed machines use 10-wheel (password).
+runink ALL=(ALL:ALL) NOPASSWD: ALL

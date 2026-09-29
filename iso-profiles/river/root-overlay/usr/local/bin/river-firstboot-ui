@@ -1,0 +1,38 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river-firstboot-ui — the graphical first boot of a server installed with the graphical
+# installer (docs/INSTALL.md, "The first start"). Started in the background by /etc/s6/rc.local
+# (init context) while /var/lib/runink/firstboot-ui exists and the machine has a display.
+#
+# It runs the first-boot backend (river-installer firstboot, on [::1]:47660) and the kiosk on a
+# virtual terminal of its own (tty7: tty1 keeps its login prompt, and keys typed into the kiosk
+# never reach it). The operator sees the node settle (network, clock, firewall, k0s), then the
+# downstream's setup pages (docs/PAYLOADS.md), then "ready". Finish removes the marker, the
+# kiosk and its packages; this script then stops the backend and shows tty1 again. A reboot
+# before Finish starts it all again.
+set -u
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
+MARKER=/var/lib/runink/firstboot-ui
+RUN=/run/river-installer
+LOG=/var/log/river-firstboot-ui.log
+
+[ -e "$MARKER" ] || exit 0
+{ [ -e /dev/dri/card0 ] || [ -e /dev/fb0 ]; } || { echo "river-firstboot-ui: no display; headless first boot" >>"$LOG"; exit 0; }
+[ -x /usr/lib/wpe-webkit-2.0/MiniBrowser ] || { echo "river-firstboot-ui: no kiosk on this node" >>"$LOG"; exit 0; }
+umask 077
+install -d -m 0700 "$RUN"
+exec >>"$LOG" 2>&1
+echo "river-firstboot-ui: starting ($(date -u +%FT%TZ))"
+setsid river-installer firstboot --listen '[::1]:47660' --kiosk-user river-kiosk --state-dir "$RUN" </dev/null &
+backend=$!
+setsid -w river-kiosk --vt 7 --run-dir "$RUN" </dev/null
+# Finish stopped the kiosk; the backend is still removing it (packages, user) and exits by
+# itself when done. Give it time, then make sure it is gone.
+i=0
+while kill -0 "$backend" 2>/dev/null && [ "$i" -lt 600 ]; do sleep 1; i=$((i + 1)); done
+kill "$backend" 2>/dev/null
+wait "$backend" 2>/dev/null
+river-installer vt 1 || true
+echo "river-firstboot-ui: done"

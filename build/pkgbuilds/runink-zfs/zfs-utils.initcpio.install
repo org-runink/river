@@ -1,0 +1,204 @@
+#!/bin/bash
+
+build() {
+    local tpm2_lib
+    local tpm2_lib_file
+
+    map add_module \
+        zavl \
+        znvpair \
+        zunicode \
+        zcommon \
+        zfs \
+        spl
+
+    map add_binary \
+        fsck.zfs \
+        mount.zfs \
+        seq \
+        zdb \
+        zed \
+        zfs \
+        zhack \
+        zinject \
+        zpool \
+        zstreamdump \
+        /lib/udev/vdev_id \
+        /lib/udev/zvol_id \
+        findmnt \
+        udevadm
+
+    map add_file \
+        /lib/udev/rules.d/60-zvol.rules \
+        /lib/udev/rules.d/69-vdev.rules \
+        /lib/udev/rules.d/90-zfs.rules \
+        /lib/libgcc_s.so.1
+
+    map add_dir \
+        /etc/zfs/zed.d
+
+    add_runscript
+
+    # allow mount(8) to "autodetect" ZFS
+    echo 'zfs' >>"${BUILDROOT}/etc/filesystems"
+
+    [[ -f /etc/zfs/zpool.cache ]] && cp "/etc/zfs/zpool.cache" "${BUILDROOT}/etc/zfs/zpool.cache.org"
+    [[ -f /etc/modprobe.d/zfs.conf ]] && add_file "/etc/modprobe.d/zfs.conf"
+    [[ -f /etc/fstab ]] && add_file "/etc/fstab"
+
+    [[ -f /etc/zfs/initramfs-tools-load-key ]] && add_file "/etc/zfs/initramfs-tools-load-key"
+    if [[ -d /etc/zfs/initramfs-tools-load-key.d ]]; then
+        add_dir "/etc/zfs/initramfs-tools-load-key.d"
+        for load_key_provider in /etc/zfs/initramfs-tools-load-key.d/*; do
+            [[ -f "${load_key_provider}" ]] && add_file "${load_key_provider}"
+        done
+
+        if [[ -f /etc/zfs/initramfs-tools-load-key.d/tpm2-systemd-creds ]]; then
+            add_binary systemd-creds
+            add_checked_modules '/drivers/char/tpm/'
+
+            for tpm2_lib in tss2-{esys,rc,mu,tcti-device}; do
+                LC_ALL=C.UTF-8 \
+                    find /usr/lib/ -maxdepth 1 -name "lib${tpm2_lib}.so*" |
+                    while read -r tpm2_lib_file; do
+                        if [[ -L "${tpm2_lib_file}" ]]; then
+                            add_symlink "${tpm2_lib_file}"
+                        else
+                            add_binary "${tpm2_lib_file}"
+                        fi
+                    done
+            done
+        fi
+    fi
+
+}
+
+help() {
+    cat<<'HELPEOF'
+This hook allows you to use ZFS as your root filesystem.
+
+Command Line Setup:
+
+    You can append the following arguments to your kernel parameters list. See
+    https://wiki.archlinux.org/index.php/Kernel_parameters for more information.
+
+    To use ZFS as your boot filesystem:
+
+        zfs=bootfs or zfs=auto or root=zfs
+
+    To use a pool or dataset:
+
+        zfs=<pool/dataset>
+
+    To force importing of a ZFS pool:
+
+        zfs_force=1
+
+        If set to 1, this will use "zpool import -f" when attempting to import
+        pools.
+
+    To change the seconds of time to wait for ZFS devices to show up at boot:
+
+        zfs_wait=30
+
+    To search for devices in a directory other than "/dev":
+
+        zfs_import_dir=/dev/disk/by-uuid
+            or
+        zfs_import_dir=/dev/disk/by-partuuid
+            or
+        zfs_import_dir=/dev/disk/by-path
+            etc.
+
+    Following initcpio convention, the 'rw' option must be specified to load the
+    pool as read/write. Pools are loaded as read only by default.
+
+Examples:
+
+    To use bootfs on your pool, use
+
+        zfs=bootfs rw
+
+    This will setup your root using tank/root zfs pool.
+
+        zfs=tank/root rw
+
+Alternate key loading:
+
+    If present, /etc/zfs/initramfs-tools-load-key and regular files in
+    /etc/zfs/initramfs-tools-load-key.d/ are copied into the initramfs and
+    sourced before the normal key-loading path. These providers may load the
+    key for the encryption root required during boot.
+
+    Providers receive DATASET, ENCRYPTIONROOT, KEYLOCATION, and BOOT_DATASET.
+    ZFS and ZPOOL are set to the zfs and zpool commands. A successful provider
+    must return successfully and leave the encryption root key available.
+    Provider failure is non-fatal.
+
+    A minimal provider that reads a local keylocation file as the prompt key:
+
+        [ "${KEYLOCATION%%://*}" = "file" ] || return 1
+        keyfile="${KEYLOCATION#file://}"
+        [ -r "${keyfile}" ] || return 1
+        "${ZFS}" load-key -L prompt "${ENCRYPTIONROOT}" < "${keyfile}"
+
+    Additional payload files required by providers should be added through
+    mkinitcpio's FILES array.
+
+TPM2 provider:
+
+    zfs-utils includes a systemd-creds TPM2 provider example. It requires
+    tpm2-tss and works with the existing BusyBox initramfs; do not add
+    mkinitcpio's systemd hook for this provider.
+
+    To enable it, install the example provider into /etc/zfs:
+
+        install -Dm644 \
+            /usr/share/doc/zfs-utils/initramfs-tools-load-key.d/tpm2-systemd-creds \
+            /etc/zfs/initramfs-tools-load-key.d/tpm2-systemd-creds
+
+    The packaged example is installed at:
+
+    /usr/share/doc/zfs-utils/initramfs-tools-load-key.d/tpm2-systemd-creds.
+
+    Then create a TPM2 credential at /etc/zfs/zfs-key.creds and add it to
+    mkinitcpio.conf:
+
+        FILES+=(/etc/zfs/zfs-key.creds)
+
+    Avoid putting the ZFS passphrase directly in shell history. One option is
+    to write it to a temporary file on /run, encrypt it, then remove it:
+
+        umask 077
+        systemd-ask-password -n "ZFS passphrase:" > /run/zfs.key
+        systemd-creds encrypt --with-key=tpm2 --tpm2-device=auto \
+            --name=zfs-key /run/zfs.key /etc/zfs/zfs-key.creds
+        rm /run/zfs.key
+
+    The default credential path is /etc/zfs/zfs-key.creds, and the default
+    systemd-creds name is zfs-key. These can be changed with
+    zfs_tpm2_credential= and zfs_tpm2_credential_name= on the kernel command
+    line.
+
+    The TPM2 provider is not a mkinitcpio hook. Keep zfs in HOOKS and rebuild
+    the initramfs after enabling the provider.
+
+    The provider only tries to unlock the boot root dataset's encryption root.
+    Other encrypted datasets continue through the normal key-loading path,
+    although datasets sharing that inherited encryption root may also unlock.
+
+    Without a PCR policy, this protects against unlocking a detached disk but
+    does not attest the boot chain. Choose PCR policy, recovery, and passphrase
+    rotation procedures for your own threat model.
+
+    Keep the original passphrase available outside the TPM. Recreate the TPM2
+    credential after zfs change-key, TPM clear, or TPM storage-root-key
+    rotation.
+
+If you want to set properties for zfs-on-linux module, you should add them to
+/etc/modprobe.d/zfs.conf and then rebuild initcpio.
+
+HELPEOF
+}
+
+# vim: set ts=4 sw=4 ft=sh et:

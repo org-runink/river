@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Documentation website: build website/ with a pinned Hugo and, on main only, publish it to
+# GitHub Pages (the site's baseURL: https://docs.runink.org/river/).
+#
+#   * pull requests: build only (the job fails on any Hugo warning). Nothing is published
+#     and no secret is used. One job for every pull request on GitHub-hosted ubuntu-latest;
+#     a fork's pull request runs once a maintainer approves it, with a read-only token.
+#   * pushes to main: build, then deploy with actions/deploy-pages (OIDC; the deploy job
+#     alone holds pages: write and id-token: write, and never runs for a pull request).
+#     Pages must be enabled with "GitHub Actions" as its source; on a private repository of
+#     a Free organisation it cannot be, so the deploy job goes live only once the repository
+#     is public.
+#
+# Hugo is downloaded by version and checked against the sha256 of the release's own
+# checksums file; 0.147.3 is the version the organisation's other Hugo site pins. The theme
+# and FlexSearch are vendored in website/, so the build itself needs no network
+# (`river lint docs-vendor` checks they are the pinned copies).
+
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - "branding/logo/river-*.svg"
+      - "cli/internal/lint/docsvendor.go"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "branding/logo/river-*.svg"
+      - "cli/internal/lint/docsvendor.go"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUGO_VERSION: "0.147.3"
+  HUGO_TARBALL: hugo_extended_0.147.3_linux-amd64.tar.gz
+  # sha256 of HUGO_TARBALL, from hugo_0.147.3_checksums.txt of the v0.147.3 release.
+  HUGO_SHA256: 24d119392243d9854485bbd76422a16f65ed7817b010e3359da38aedccdd54c2
+
+jobs:
+  build:
+    name: build (Hugo 0.147.3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache: false
+
+      - name: Vendored theme and FlexSearch are the pinned ones
+        working-directory: cli
+        run: go run -mod=vendor ./cmd/river lint docs-vendor --repo ..
+
+      - name: Install Hugo (pinned version and sha256)
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -fsSLo "$HUGO_TARBALL" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/${HUGO_TARBALL}"
+          echo "${HUGO_SHA256}  ${HUGO_TARBALL}" | sha256sum -c -
+          mkdir -p hugo-bin
+          tar -xzf "$HUGO_TARBALL" -C hugo-bin hugo
+          ./hugo-bin/hugo version | grep -q "v${HUGO_VERSION}-" \
+            || { echo "::error::unexpected Hugo version"; exit 1; }
+          echo "$RUNNER_TEMP/hugo-bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        env:
+          HUGO_RESOURCEDIR: ${{ runner.temp }}/hugo-resources
+        run: |
+          set -eu
+          hugo --source website --minify --gc --panicOnWarning --noBuildLock \
+            --cacheDir "$RUNNER_TEMP/hugo-cache" --destination "$RUNNER_TEMP/public"
+          test -s "$RUNNER_TEMP/public/index.html"
+          test -s "$RUNNER_TEMP/public/docs/getting-started/index.html"
+
+      - name: Upload the site for GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/public
+
+  deploy:
+    name: deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: docs-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

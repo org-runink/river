@@ -1,0 +1,6 @@
+# Runink River — the Plasma start-up splash for every user, in the /etc/xdg layer (a user's
+# ~/.config/ksplashrc still wins). The look-and-feel package's contents/defaults says the same;
+# this makes it hold before any look-and-feel defaults have been applied for a new user.
+[KSplash]
+Engine=KSplashQML
+Theme=org.runink.river.desktop

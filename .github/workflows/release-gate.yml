@@ -1,0 +1,296 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# release-gate: the ONLY way a Runink River release becomes public.
+#
+# A maintainer uploads the ISO(s), SHA256SUMS and the offline signature SHA256SUMS.asc to a
+# DRAFT release, then dispatches this workflow with the tag. The gate publishes the release
+# only if every check passes; any failure leaves it a draft and the run summary says why.
+#
+#   1. the release is a draft; its SHA256SUMS verifies every asset it lists
+#   2. SHA256SUMS.asc verifies with the release key whose fingerprint KEYS pins (the offline
+#      maintainer signature stays the root of trust; while KEYS says PENDING the gate FAILS
+#      CLOSED, like install.sh)
+#   3. SBOMs of the image CONTENTS (every squashfs layer in the ISO) and of the source tree
+#   4. vulnerabilities, from the sources that know this image:
+#      a. its distribution packages against the Arch Linux security tracker (archaudit,
+#         build/tools/archaudit, libalpm's version rules): fails on a High or Critical
+#         advisory whose fix the image does not have. Generic scanners (grype) have no
+#         advisory data for this distribution and match its packages against unrelated
+#         upstream records, so they are not used.
+#      b. the image's own Go programs (govulncheck, binary mode): fails on any finding.
+#      A written waiver (.github/release-gate/waivers.txt) that has not expired exempts one
+#      advisory; an expired waiver fails the gate on its own.
+#   5. gitleaks over the files the image's authors add or change (`archaudit ownfiles`: not
+#      owned by a package, or different from what the package shipped): any finding fails.
+#      Nothing secret is ever baked into an image (AGENTS.md invariant 4). Reviewed
+#      exceptions for generated files live in .github/release-gate/gitleaks.toml.
+#   6. SLSA build provenance (GitHub attestation) + cosign keyless bundles over the ISO(s)
+#      and the evidence; the evidence (SBOMs, reports, EVIDENCE.SHA256SUMS) is attached to
+#      the release; then the draft is published.
+#
+# `dry_run: true` runs every check and keeps the evidence as a run artifact, but uploads and
+# publishes nothing (and tolerates a PENDING key, so the gate can be exercised before the
+# release key exists). This workflow never holds a signing key.
+#
+# Tools are pinned by version AND checksum/digest (invariant 9). The advisory data (the Arch
+# security tracker, the Go vulnerability database) is fetched fresh on every run on purpose:
+# stale data would hide new vulnerabilities. It is kept in the evidence.
+#
+# Honest SLSA level: the ISO is built outside this job (river#142 moves the build into CI),
+# so this is Build L1 with signed provenance. See docs/VERIFY.md for how users check it.
+name: release gate (verify, scan, attest, then publish)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "DRAFT release tag to gate (e.g. runink-os-2026.10)"
+        required: true
+      dry_run:
+        description: "run every check but upload and publish nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  SYFT_IMAGE: docker.io/anchore/syft:v1.51.1@sha256:95fe0835e5bebc6f8b1f8acef68d47d63d594ef4c0f25c097ff853b23cbac74c
+  GOVULNCHECK_VERSION: v1.8.0
+  AVG_URL: https://security.archlinux.org/all.json
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  KEY_URL: https://runink.org/.well-known/gpg-key.txt
+
+jobs:
+  gate:
+    # workflow_dispatch only (a maintainer, with a tag), so no pull-request code reaches it.
+    # GitHub-hosted ubuntu-latest: a fresh VM per job, so this job, which holds contents:
+    # write and publishes the release, never shares a machine with an earlier job. It needs
+    # apt and passwordless sudo (libarchive-tools, squashfs-tools; it unpacks the image as
+    # root), docker (syft), gh, gpg and curl, outbound HTTPS (release assets, the Arch
+    # security tracker, the Go vulnerability database, Sigstore), and ~20 GB of disk (the
+    # reclaim step below makes room).
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write       # read the draft, upload evidence, publish (publish only on success)
+      id-token: write       # OIDC identity for provenance and cosign keyless; NOT a signing key
+      attestations: write   # actions/attest-build-provenance
+    env:
+      TAG: ${{ inputs.tag }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: src
+
+      # A standard hosted runner leaves ~14 GB free on /; this job holds the ISO (joined from
+      # its parts), its unpacked root filesystem and the SBOMs, ~20 GB. Remove the
+      # preinstalled toolchains no step here uses (Go comes from setup-go into the emptied
+      # tool cache; docker, gh and gpg are part of the base image and stay), then check.
+      - name: Reclaim disk (preinstalled toolchains this job never uses)
+        run: |
+          set -eu
+          echo "== before"; df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell \
+            /opt/microsoft /opt/google /usr/local/lib/node_modules
+          sudo docker system prune -af >/dev/null 2>&1 || true
+          sudo mkdir -p "$RUNNER_TOOL_CACHE"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TOOL_CACHE"
+          echo "== after"; df -h /
+          free_kb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')
+          [ "$free_kb" -ge $((20 * 1024 * 1024)) ] \
+            || { echo "::error::$((free_kb / 1024 / 1024)) GB free; this job needs about 20 GB"; exit 1; }
+
+      - name: 1. The release is a draft; its SHA256SUMS verifies
+        run: |
+          set -eu
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)
+          if [ "$draft" != true ] && [ "$DRY_RUN" != true ]; then
+            echo "::error::release $TAG is already public: the gate only publishes drafts. Nothing was checked."
+            exit 1
+          fi
+          mkdir -p dist evidence
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+          ls -l dist
+          [ -f dist/SHA256SUMS ] || { echo "::error::no SHA256SUMS on $TAG"; exit 1; }
+          ( cd dist && sha256sum -c --ignore-missing SHA256SUMS )
+          # An ISO over the 2 GiB release-asset limit is published as <iso>.part-00, -01, … (each
+          # listed in SHA256SUMS, verified above): join them in order; the ISO's own sum is
+          # checked next, like a single-file ISO's.
+          for first in dist/*.iso.part-00; do
+            [ -f "$first" ] || continue
+            iso="${first%.part-00}"
+            cat "$iso".part-[0-9][0-9] > "$iso"
+            rm -f "$iso".part-[0-9][0-9]
+            ( cd dist && grep -E "  \\*?$(basename "$iso")\$" SHA256SUMS | sha256sum -c - )
+          done
+          ls dist/*.iso >/dev/null 2>&1 || { echo "::error::no .iso (or .iso.part-NN) asset on $TAG"; exit 1; }
+          for iso in dist/*.iso; do
+            grep -q " \*\?$(basename "$iso")\$" dist/SHA256SUMS \
+              || { echo "::error::$(basename "$iso") is not listed in SHA256SUMS"; exit 1; }
+          done
+
+      - name: 2. SHA256SUMS.asc verifies with the pinned release key
+        run: |
+          set -eu
+          fpr=$(sed -n 's/^Fingerprint: *\([0-9A-F]\{40\}\).*/\1/p' src/KEYS)
+          if [ -z "$fpr" ]; then
+            if [ "$DRY_RUN" = true ]; then
+              echo "::warning::KEYS has no release-key fingerprint yet (PENDING): signature not checked (dry run only)."
+              echo "SIGNATURE=pending" >> "$GITHUB_ENV"; exit 0
+            fi
+            echo "::error::KEYS has no release-key fingerprint (PENDING): the gate fails closed until the release key is published."
+            exit 1
+          fi
+          [ -f dist/SHA256SUMS.asc ] || { echo "::error::no SHA256SUMS.asc on $TAG (sign offline with river-sign)"; exit 1; }
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"; mkdir -m 700 "$GNUPGHOME"
+          curl -fsSL --proto '=https' "$KEY_URL" -o "$RUNNER_TEMP/key.asc"
+          gpg --batch --quiet --import "$RUNNER_TEMP/key.asc"
+          gpg --batch --with-colons --fingerprint "$fpr" | grep -q "^fpr:*:*:*:*:*:*:*:*:$fpr:" \
+            || { echo "::error::the key at $KEY_URL is not $fpr"; exit 1; }
+          gpg --batch --status-fd 1 --verify dist/SHA256SUMS.asc dist/SHA256SUMS > "$RUNNER_TEMP/gpg.status"
+          grep -q "^\[GNUPG:\] VALIDSIG .* $fpr\$" "$RUNNER_TEMP/gpg.status" \
+            || { echo "::error::SHA256SUMS.asc is not a valid signature by $fpr"; exit 1; }
+          echo "SIGNATURE=valid ($fpr)" >> "$GITHUB_ENV"
+
+      - name: 3. Unpack the image; SBOMs of its contents and of the source
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libarchive-tools squashfs-tools >/dev/null
+          docker run --rm -v "$PWD/src:/src:ro" -v "$PWD/evidence:/out" "$SYFT_IMAGE" \
+            scan dir:/src --source-name "river-source-${TAG}" \
+            -o spdx-json=/out/river-source.spdx.json -o cyclonedx-json=/out/river-source.cdx.json
+          for iso in dist/*.iso; do
+            name=$(basename "$iso" .iso); work="img/$name"
+            mkdir -p "$work/iso" "$work/rootfs"
+            bsdtar -xf "$iso" -C "$work/iso"
+            n=0
+            for img in $(find "$work/iso" -type f \( -name '*.img' -o -name '*.sfs' -o -name '*.squashfs' \) | sort); do
+              unsquashfs -s "$img" >/dev/null 2>&1 || continue
+              echo "unpacking $img"; sudo unsquashfs -f -q -d "$work/rootfs" "$img" >/dev/null; n=$((n + 1))
+            done
+            [ "$n" -gt 0 ] || { echo "::error::$name.iso has no squashfs layer: nothing to scan"; exit 1; }
+            [ -d "$work/rootfs/var/lib/pacman/local" ] || { echo "::error::$name.iso has no pacman database: its SBOM would be empty"; exit 1; }
+            sudo docker run --rm -v "$PWD/$work/rootfs:/rootfs:ro" -v "$PWD/evidence:/out" "$SYFT_IMAGE" \
+              scan dir:/rootfs --source-name "$name" \
+              -o spdx-json="/out/${name}.spdx.json" -o cyclonedx-json="/out/${name}.cdx.json"
+            echo "$name" >> "$RUNNER_TEMP/images"
+          done
+          sudo chown -R "$(id -u):$(id -g)" evidence
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+          cache: false
+
+      - name: 4a. Distribution packages vs. the Arch Linux security tracker (archaudit)
+        run: |
+          set -eu
+          ( cd src/build/tools/archaudit && go build -trimpath -o "$RUNNER_TEMP/archaudit" . )
+          curl -fsSL --proto '=https' "$AVG_URL" -o evidence/arch-security-tracker.json
+          rc=0
+          while read -r name; do
+            sudo "$RUNNER_TEMP/archaudit" -db "img/$name/rootfs/var/lib/pacman/local" \
+              -avg evidence/arch-security-tracker.json -waivers src/.github/release-gate/waivers.txt \
+              -report "evidence/${name}.archaudit.json" | tee "evidence/${name}.archaudit.txt" || rc=1
+          done < "$RUNNER_TEMP/images"
+          sudo chown -R "$(id -u):$(id -g)" evidence
+          [ "$rc" -eq 0 ] || { echo "::error::distribution packages: High/Critical advisories with a fix available, or an expired waiver (see *.archaudit.txt)"; exit 1; }
+
+      - name: 4b. The image's own Go programs (govulncheck, binary mode)
+        run: |
+          set -eu
+          GOBIN="$RUNNER_TEMP" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          rc=0
+          while read -r name; do
+            sudo "$RUNNER_TEMP/archaudit" ownfiles "img/$name/rootfs" | tee "evidence/${name}.ownfiles.txt" >/dev/null
+            while read -r f; do
+              p="img/$name/rootfs/$f"
+              [ "$(head -c4 "$p" 2>/dev/null | od -An -tx1 | tr -d ' ')" = 7f454c46 ] || continue
+              go version "$p" >/dev/null 2>&1 || continue   # ELF, but not a Go program
+              echo "== /$f" >> "evidence/${name}.govulncheck.txt"
+              "$RUNNER_TEMP/govulncheck" -mode binary "$p" >> "evidence/${name}.govulncheck.txt" 2>&1 || rc=1
+            done < "evidence/${name}.ownfiles.txt"
+          done < "$RUNNER_TEMP/images"
+          cat evidence/*.govulncheck.txt
+          [ "$rc" -eq 0 ] || { echo "::error::govulncheck: a Go program in the image is affected (see *.govulncheck.txt)"; exit 1; }
+
+      - name: 5. No secret baked into the image (gitleaks over the files the authors add or change)
+        run: |
+          set -eu
+          curl -fsSL --proto '=https' -o "$RUNNER_TEMP/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          rc=0
+          while read -r name; do
+            own="own/$name"; mkdir -p "$own"
+            while read -r f; do
+              sudo mkdir -p "$own/$(dirname "$f")"; sudo cp -p "img/$name/rootfs/$f" "$own/$f"
+            done < "evidence/${name}.ownfiles.txt"
+            sudo "$RUNNER_TEMP/gitleaks" dir "$own" --no-banner --redact -c src/.github/release-gate/gitleaks.toml \
+              --report-format json --report-path "evidence/${name}.gitleaks.json" || rc=1
+          done < "$RUNNER_TEMP/images"
+          sudo chown -R "$(id -u):$(id -g)" evidence
+          [ "$rc" -eq 0 ] || { echo "::error::gitleaks found a secret inside the image (the report is redacted)"; exit 1; }
+
+      - name: 6a. Evidence checksums
+        run: |
+          set -eu
+          ( cd evidence && sha256sum -- * > EVIDENCE.SHA256SUMS && cat EVIDENCE.SHA256SUMS )
+
+      - name: Keep the evidence as a run artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-gate-${{ inputs.tag }}
+          path: evidence/
+          retention-days: 90
+
+      - name: 6b. SLSA build provenance over the ISO(s) and the evidence
+        if: ${{ !inputs.dry_run }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.iso
+            evidence/*
+
+      - name: Install cosign
+        if: ${{ !inputs.dry_run }}
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: 6c. cosign keyless bundles, attach evidence, publish
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -eu
+          for f in dist/*.iso evidence/*; do
+            cosign sign-blob --yes --bundle "${f}.sigstore.json" "$f" >/dev/null
+          done
+          mkdir -p upload
+          cp evidence/* upload/
+          cp dist/*.iso.sigstore.json upload/
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber upload/*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          echo "PUBLISHED=yes" >> "$GITHUB_ENV"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### release gate: \`${TAG}\`"
+            echo "- dry run: \`${DRY_RUN}\` · signature: \`${SIGNATURE:-not checked}\` · published: \`${PUBLISHED:-no}\`"
+            echo "- a failed step above is the reason the release stayed a draft; evidence is in the run artifact"
+            echo "- verification for users: docs/VERIFY.md"
+          } >> "$GITHUB_STEP_SUMMARY"

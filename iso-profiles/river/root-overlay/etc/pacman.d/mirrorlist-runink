@@ -1,0 +1,13 @@
+# /etc/pacman.d/mirrorlist-runink — where Runink River's signed [runink] repository is served.
+# See docs/REPOSITORY.md in the Runink River repository.
+#
+# pacman tries these in order, moving to the next on any failure, a 404 included. Every file is
+# signed by the release key, so a mirror is trusted for availability only, never for content.
+#
+# 1. The GitHub release "repo-x86_64": the COMPLETE repository, and the first place a publish
+#    lands, so a node sees a new database as soon as it exists.
+Server = https://github.com/org-runink/river/releases/download/repo-x86_64
+# 2. runink.org: a PARTIAL mirror, used when GitHub fails. GitHub Pages refuses files over
+#    100 MB, so it carries the database and every package up to that size, but not the kernel
+#    or the k0s packages: while GitHub is down, those cannot be updated.
+Server = https://runink.org/river/repo/x86_64

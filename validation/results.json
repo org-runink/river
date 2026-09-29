@@ -1,0 +1,2904 @@
+{
+  "generated": "2026-09-27T17:15:40.853446611Z",
+  "requirements": [
+    {
+      "ID": "GEN-CTX",
+      "Tier": "general",
+      "Text": "context fill at ≥16384 tokens with needle retrieval",
+      "Hard": true,
+      "Floor": "needle found at ≥15.5k prompt tokens"
+    },
+    {
+      "ID": "GEN-TOON",
+      "Tier": "general",
+      "Text": "TOON output parses at temperature 0",
+      "Hard": true,
+      "Floor": "strict TOON tabular array decode, values match"
+    },
+    {
+      "ID": "GEN-JSON",
+      "Tier": "general",
+      "Text": "JSON output parses at temperature 0",
+      "Hard": true,
+      "Floor": "json.Unmarshal of the reply (code fences tolerated and reported)"
+    },
+    {
+      "ID": "GEN-NOTHINK",
+      "Tier": "general",
+      "Text": "no reasoning trace when the request carries no /no_think",
+      "Hard": true,
+      "Floor": "no \u003cthink\u003e text, empty reasoning_content"
+    },
+    {
+      "ID": "GEN-LANG",
+      "Tier": "general",
+      "Text": "answers stay in the request language (es, fr, pt, pt-BR)",
+      "Hard": true,
+      "Floor": "language-ID of each reply equals request language"
+    },
+    {
+      "ID": "GEN-TPS",
+      "Tier": "general",
+      "Text": "decode speed",
+      "Hard": true,
+      "Floor": "≥2.8 tok/s"
+    },
+    {
+      "ID": "GEN-OUT8K",
+      "Tier": "general",
+      "Text": "max_tokens=8192 admitted and streamed without error",
+      "Hard": true,
+      "Floor": "HTTP 200 + streaming; full-length time extrapolated"
+    },
+    {
+      "ID": "COD-CTX",
+      "Tier": "coder",
+      "Text": "context fill at ≥16384 tokens with needle retrieval",
+      "Hard": true,
+      "Floor": "needle found at ≥15.5k prompt tokens"
+    },
+    {
+      "ID": "COD-NOTHINK",
+      "Tier": "coder",
+      "Text": "the /no_think soft switch is honoured",
+      "Hard": true,
+      "Floor": "no non-empty \u003cthink\u003e block, empty reasoning_content"
+    },
+    {
+      "ID": "COD-STOP",
+      "Tier": "coder",
+      "Text": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+      "Hard": true,
+      "Floor": "reply ends before 'Observation:'"
+    },
+    {
+      "ID": "COD-JSON",
+      "Tier": "coder",
+      "Text": "JSON tool-call output parses",
+      "Hard": true,
+      "Floor": "object with string tool + object args"
+    },
+    {
+      "ID": "COD-TPS",
+      "Tier": "coder",
+      "Text": "decode speed",
+      "Hard": true,
+      "Floor": "≥2.8 tok/s"
+    },
+    {
+      "ID": "VIS-BBOX",
+      "Tier": "vision",
+      "Text": "bbox_2d returned in PIXEL coordinates of the input image",
+      "Hard": true,
+      "Floor": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised"
+    },
+    {
+      "ID": "VIS-MULTI",
+      "Tier": "vision",
+      "Text": "several images (JPEG + PNG) in one request",
+      "Hard": true,
+      "Floor": "both images described correctly, in order"
+    },
+    {
+      "ID": "VIS-EDGE",
+      "Tier": "vision",
+      "Text": "images up to max edge 1024 (and larger inputs resized server-side)",
+      "Hard": true,
+      "Floor": "1024-edge and 1600-edge inputs admitted"
+    },
+    {
+      "ID": "VIS-RSS",
+      "Tier": "vision",
+      "Text": "resident memory",
+      "Hard": true,
+      "Floor": "≤18 GiB (anon + file_mapped + swap, peak while serving)"
+    },
+    {
+      "ID": "VIS-TPS",
+      "Tier": "vision",
+      "Text": "decode speed",
+      "Hard": true,
+      "Floor": "≥1 tok/s"
+    },
+    {
+      "ID": "STT-AUDIO",
+      "Tier": "stt",
+      "Text": "chat audio_url data-URI WAV 16 kHz mono s16le accepted",
+      "Hard": true,
+      "Floor": "HTTP 200 with a non-empty transcript"
+    },
+    {
+      "ID": "STT-WER-EN",
+      "Tier": "stt",
+      "Text": "English transcription accuracy",
+      "Hard": true,
+      "Floor": "WER ≤0.15"
+    },
+    {
+      "ID": "STT-WER-ES",
+      "Tier": "stt",
+      "Text": "Spanish transcription accuracy",
+      "Hard": true,
+      "Floor": "WER ≤0.30 (synthetic-voice fixture)"
+    },
+    {
+      "ID": "STT-WER-FR",
+      "Tier": "stt",
+      "Text": "French transcription accuracy",
+      "Hard": true,
+      "Floor": "WER ≤0.30 (synthetic-voice fixture)"
+    },
+    {
+      "ID": "STT-WER-PT",
+      "Tier": "stt",
+      "Text": "Portuguese transcription accuracy",
+      "Hard": true,
+      "Floor": "WER ≤0.30 (synthetic-voice fixture)"
+    },
+    {
+      "ID": "EMB-DIM",
+      "Tier": "embedding",
+      "Text": "vector dimension exactly 768 (index compatibility)",
+      "Hard": true,
+      "Floor": "len(vector) == 768"
+    },
+    {
+      "ID": "EMB-PREFIX",
+      "Tier": "embedding",
+      "Text": "search_query:/search_document: prefixed ranking is sane",
+      "Hard": true,
+      "Floor": "relevant document ranks first for every query"
+    },
+    {
+      "ID": "EMB-2048",
+      "Tier": "embedding",
+      "Text": "2048-token input accepted",
+      "Hard": true,
+      "Floor": "HTTP 200 for a ~2000-token input"
+    },
+    {
+      "ID": "TTS-LANG",
+      "Tier": "tts",
+      "Text": "voices for en, es, fr, pt",
+      "Hard": true,
+      "Floor": "a voice exists for every language"
+    },
+    {
+      "ID": "TTS-VOICE",
+      "Tier": "tts",
+      "Text": "the request's voice field selects the voice",
+      "Hard": true,
+      "Floor": "voice field honoured"
+    }
+  ],
+  "runs": [
+    {
+      "label": "nomic-embed-text-v1.5-q8",
+      "tiers": [
+        "embedding"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "nomic-embed-text-v1.5.Q8_0.gguf": "3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --embeddings --pooling mean --model /models/nomic-embed-text-v1.5.Q8_0.gguf --ctx-size 2048 --batch-size 2048 --ubatch-size 2048 --threads 8 --gpu-layers 0 --no-webui --offline",
+      "max_seq_len": 2048,
+      "started": "2026-09-24T19:54:55.447233828Z",
+      "finished": "2026-09-24T19:54:57.615235999Z",
+      "wall_seconds": 2.168002171,
+      "resident": {
+        "cgroup": "libpod-2ef8caff4a42db511e774110b7e6f3af1e8d309d1e6b90798ecded2005e2fd21.scope",
+        "cgroup_memory_peak_gib": 0.74,
+        "resident_peak_gib": 0.56,
+        "samples": 3
+      },
+      "results": [
+        {
+          "id": "EMB-DIM",
+          "tier": "embedding",
+          "requirement": "vector dimension exactly 768 (index compatibility)",
+          "threshold": "len(vector) == 768",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "dim": 768
+          },
+          "seconds": 0.025177975
+        },
+        {
+          "id": "EMB-PREFIX",
+          "tier": "embedding",
+          "requirement": "search_query:/search_document: prefixed ranking is sane",
+          "threshold": "relevant document ranks first for every query",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "top1_margins": [
+              0.39,
+              0.29,
+              0.31,
+              0.19
+            ]
+          },
+          "seconds": 0.125025518
+        },
+        {
+          "id": "EMB-2048",
+          "tier": "embedding",
+          "requirement": "2048-token input accepted",
+          "threshold": "HTTP 200 for a ~2000-token input",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "chars": 8840,
+            "prompt_tokens_reported": 2017
+          },
+          "seconds": 1.818703217
+        }
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3-14b-q4km",
+      "tiers": [
+        "general",
+        "coder"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-14B-Q4_K_M.gguf": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+      },
+      "server_args": "mistralrs serve --host :: --port 8080 --no-ui --max-seqs 1 text --model-id /models --format gguf --quantized-file Qwen3-14B-Q4_K_M.gguf --max-seq-len 16384 --cpu",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T20:07:28.735314619Z",
+      "finished": "2026-09-24T20:07:47.125868689Z",
+      "wall_seconds": 18.39055407,
+      "resident": {
+        "cgroup": "libpod-15f846cd8201406d8403e9e8ada17fd28b808566c21aa4de2b1d7aa454070961.scope",
+        "resident_peak_gib": 2.59,
+        "samples": 10
+      },
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "calibration failed: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused (prompt_tokens=0)",
+          "evidence": [
+            "001-ctx-calibrate"
+          ],
+          "seconds": 0.002216067
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "002-toon"
+          ],
+          "seconds": 0.000381524
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "003-json"
+          ],
+          "seconds": 0.000208199
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "004-nothink-default"
+          ],
+          "seconds": 0.000199273
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "es: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused; fr: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused; pt: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused; pt-BR: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "005-lang-es",
+            "006-lang-fr",
+            "007-lang-pt",
+            "008-lang-pt-BR"
+          ],
+          "seconds": 0.000903991
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "009-decode"
+          ],
+          "seconds": 0.000212267
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "calibration failed: Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused (prompt_tokens=0)",
+          "evidence": [
+            "010-ctx-calibrate"
+          ],
+          "seconds": 0.000394327
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "011-nothink-switch"
+          ],
+          "seconds": 0.000223218
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "012-stop"
+          ],
+          "seconds": 0.000223448
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "013-tooljson"
+          ],
+          "seconds": 0.000292267
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "014-decode"
+          ],
+          "seconds": 0.000201397
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection refused",
+          "evidence": [
+            "015-out8k"
+          ],
+          "seconds": 0.000198852
+        }
+      ]
+    },
+    {
+      "label": "qwen3-14b-q4km-llamacpp",
+      "tiers": [
+        "general",
+        "coder"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-14B-Q4_K_M.gguf": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --model /models/Qwen3-14B-Q4_K_M.gguf --jinja --ctx-size 16384 --threads 8 --gpu-layers 0 --parallel 1 --no-webui --offline",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T20:13:00.183534514Z",
+      "finished": "2026-09-24T20:43:43.275987353Z",
+      "wall_seconds": 1843.092452839,
+      "resident": {
+        "cgroup": "libpod-8a410819f219dba2a487828f80d7dbc94243f41cef5f21351e631c192383a6be.scope",
+        "cgroup_memory_peak_gib": 17.02,
+        "resident_peak_gib": 16.67,
+        "samples": 1844
+      },
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "answer": "",
+            "fill_seconds": 1273.88,
+            "min_prompt_tokens": 15484,
+            "needle_found": false,
+            "prefill_tok_s": 12.26,
+            "prompt_tokens": 15622
+          },
+          "detail": "note: reasoning_content has 156 chars",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 1425.928660197
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "fenced": false,
+            "reply": ""
+          },
+          "detail": "first line is not a TOON tabular header: \"\"",
+          "evidence": [
+            "003-toon"
+          ],
+          "seconds": 55.703733722
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "fenced": false,
+            "reply": "",
+            "server_decode_tok_s": 0,
+            "strict_parse": false
+          },
+          "detail": "unexpected end of JSON input",
+          "evidence": [
+            "004-json"
+          ],
+          "seconds": 26.521560384
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "completion_tokens": 209,
+            "correct": true,
+            "reply": "391",
+            "think_tags_in_content": false
+          },
+          "detail": "reasoning_content has 583 chars",
+          "evidence": [
+            "005-nothink-default"
+          ],
+          "seconds": 44.802528207
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "es": {
+              "detected": "es",
+              "reply": "Mantener la cadena de frío es crucial para prevenir el crecimiento de bacterias y microorganismos que pueden caus",
+              "scores": {
+                "es": 6.999999999999999,
+                "fr": 1.4999999999999998,
+                "pt": 1.4999999999999998
+              }
+            },
+            "fr": {
+              "detected": "fr",
+              "reply": "Maintenir la chaîne du froid est essentiel pour prévenir la prolifération des bactéries et des micro-organismes path…",
+              "scores": {
+                "es": 2.1666666666666665,
+                "fr": 11.166666666666668,
+                "pt": 0.6666666666666666
+              }
+            },
+            "pt": {
+              "detected": "pt",
+              "reply": "1. Manter a cadeia de frio previne o crescimento de bactérias e microrganismos patogênicos, reduzindo o risco de doen�…",
+              "scores": {
+                "es": 2.5,
+                "fr": 1,
+                "pt": 11.5
+              }
+            },
+            "pt-BR": {
+              "detected": "pt",
+              "reply": "1. Manter a cadeia de frio previne o crescimento de bactérias e microrganismos patogênicos, reduzindo o risco de doen�…",
+              "scores": {
+                "es": 1,
+                "fr": 1,
+                "pt": 11
+              }
+            }
+          },
+          "detail": "es: reasoning_content has 1145 chars; fr: reasoning_content has 1016 chars; pt: reasoning_content has 919 chars; pt-BR: reasoning_content has 995 chars",
+          "evidence": [
+            "006-lang-es",
+            "007-lang-fr",
+            "008-lang-pt",
+            "009-lang-pt-BR"
+          ],
+          "seconds": 215.211209112
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 5.76,
+            "floor": 2.8,
+            "tokens": 196,
+            "ttft_s": 2.81
+          },
+          "detail": "client-side: SSE content chunks between first and last chunk (prefill excluded)",
+          "evidence": [
+            "010-decode"
+          ],
+          "seconds": 36.672572946
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "answer": "",
+            "fill_seconds": 1273.88,
+            "min_prompt_tokens": 15484,
+            "needle_found": false,
+            "prefill_tok_s": 12.26,
+            "prompt_tokens": 15622
+          },
+          "detail": "same server, same fill as the first context check. note: reasoning_content has 156 chars",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 0.000002395
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": EOF",
+          "evidence": [
+            "011-nothink-switch"
+          ],
+          "seconds": 0.000746428
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "finish_reason": "stop",
+            "reached_action": true,
+            "reply": "Thought: I need to read the contents of the file cmd/main.go.\nAction: read_file\nAction Input: {\"path\": \"cmd/main.go\"}",
+            "text_after_stop": false
+          },
+          "evidence": [
+            "012-stop"
+          ],
+          "seconds": 13.630897879
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "fenced": false,
+            "reply": "{\"tool\": \"read_file\", \"args\": {\"path\": \"cmd/main.go\"}}"
+          },
+          "evidence": [
+            "013-tooljson"
+          ],
+          "seconds": 6.819459241
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 5.76,
+            "floor": 2.8,
+            "tokens": 196,
+            "ttft_s": 2.81
+          },
+          "detail": "client-side: SSE content chunks between first and last chunk (prefill excluded)",
+          "evidence": [
+            "010-decode"
+          ],
+          "seconds": 0.000001022
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "admitted": true,
+            "extrapolated_8192_token_seconds": 1422,
+            "streamed_tokens_before_cancel": 48
+          },
+          "detail": "capped: stream cancelled after 48 tokens by design; EXTRAPOLATION: a full 8192-token answer at 5.76 tok/s takes ~1422 s (~24 min)",
+          "evidence": [
+            "014-out8k"
+          ],
+          "seconds": 10.414785995999999
+        }
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3-14b-q4km-llamacpp-nothink",
+      "tiers": [
+        "general",
+        "coder"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-14B-Q4_K_M.gguf": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --model /models/Qwen3-14B-Q4_K_M.gguf --jinja --chat-template-file /tpl/qwen3-14b.nothink.jinja --ctx-size 16384 --threads 8 --gpu-layers 0 --parallel 1 --no-webui --offline",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T20:46:10.141546178Z",
+      "finished": "2026-09-24T21:12:38.976179037Z",
+      "wall_seconds": 1588.834632859,
+      "resident": {
+        "cgroup": "libpod-d573bd8cc62b5b242499d0f82111ab7da2a834c029617582853a2b4b23b1c384.scope",
+        "cgroup_memory_peak_gib": 17.05,
+        "resident_peak_gib": 16.93,
+        "samples": 1589
+      },
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "answer": "AMBER-FALCON-4417",
+            "fill_seconds": 1245.96,
+            "min_prompt_tokens": 15484,
+            "needle_found": true,
+            "prefill_tok_s": 12.51,
+            "prompt_tokens": 15593
+          },
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 1417.143538945
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "fenced": false,
+            "reply": "shipments[3]{id,city,weight}:\n  101,Porto,12\n  102,Lyon,7\n  103,Recife,30"
+          },
+          "evidence": [
+            "003-toon"
+          ],
+          "seconds": 17.11838263
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "fenced": false,
+            "reply": "{\"city\": \"Porto\", \"pallets\": 12, \"urgent\": true}",
+            "server_decode_tok_s": 0,
+            "strict_parse": true
+          },
+          "evidence": [
+            "004-json"
+          ],
+          "seconds": 7.313035947
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "completion_tokens": 4,
+            "correct": true,
+            "reply": "391",
+            "think_tags_in_content": false
+          },
+          "evidence": [
+            "005-nothink-default"
+          ],
+          "seconds": 3.299640504
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "es": {
+              "detected": "es",
+              "reply": "Mantener la cadena de frío es fundamental para preservar la calidad y la seguridad de los alimentos durante su transpor…",
+              "scores": {
+                "es": 13.333333333333334,
+                "fr": 3.3333333333333335,
+                "pt": 3.3333333333333335
+              }
+            },
+            "fr": {
+              "detected": "fr",
+              "reply": "Maintenir la chaîne du froid est essentiel pour préserver la qualité et la sécurité des aliments en évitant la pro…",
+              "scores": {
+                "es": 4.5,
+                "fr": 22.5,
+                "pt": 1
+              }
+            },
+            "pt": {
+              "detected": "pt",
+              "reply": "Manter a cadeia de frio no transporte de alimentos é essencial para preservar a qualidade e a segurança dos produtos. …",
+              "scores": {
+                "es": 3.666666666666667,
+                "fr": 1.6666666666666665,
+                "pt": 16.66666666666667
+              }
+            },
+            "pt-BR": {
+              "detected": "pt",
+              "reply": "Claro! Manter a cadeia de frio é essencial para preservar a qualidade e a segurança dos alimentos durante o transporte…",
+              "scores": {
+                "es": 3.666666666666667,
+                "fr": 1.6666666666666665,
+                "pt": 19.666666666666668
+              }
+            }
+          },
+          "evidence": [
+            "006-lang-es",
+            "007-lang-fr",
+            "008-lang-pt",
+            "009-lang-pt-BR"
+          ],
+          "seconds": 65.823546218
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 5.9,
+            "floor": 2.8,
+            "tokens": 200,
+            "ttft_s": 2.08
+          },
+          "detail": "client-side: SSE content chunks between first and last chunk (prefill excluded)",
+          "evidence": [
+            "010-decode"
+          ],
+          "seconds": 35.810903308
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "answer": "AMBER-FALCON-4417",
+            "fill_seconds": 1245.96,
+            "min_prompt_tokens": 15484,
+            "needle_found": true,
+            "prefill_tok_s": 12.51,
+            "prompt_tokens": 15593
+          },
+          "detail": "same server, same fill as the first context check. ",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 0.000001553
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "completion_tokens": 31,
+            "has_func": true,
+            "think_tags_in_content": false
+          },
+          "evidence": [
+            "011-nothink-switch"
+          ],
+          "seconds": 7.342492541
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "finish_reason": "stop",
+            "reached_action": true,
+            "reply": "Thought: I need to read the contents of the file cmd/main.go.\nAction: read_file\nAction Input: {\"path\": \"cmd/main.go\"}",
+            "text_after_stop": false
+          },
+          "evidence": [
+            "012-stop"
+          ],
+          "seconds": 11.819590661
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "fenced": false,
+            "reply": "{\"tool\": \"read_file\", \"args\": {\"path\": \"cmd/main.go\"}}"
+          },
+          "evidence": [
+            "013-tooljson"
+          ],
+          "seconds": 6.060682606
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 5.9,
+            "floor": 2.8,
+            "tokens": 200,
+            "ttft_s": 2.08
+          },
+          "detail": "client-side: SSE content chunks between first and last chunk (prefill excluded)",
+          "evidence": [
+            "010-decode"
+          ],
+          "seconds": 0.000001553
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "admitted": true,
+            "extrapolated_8192_token_seconds": 1388,
+            "streamed_tokens_before_cancel": 48
+          },
+          "detail": "capped: stream cancelled after 48 tokens by design; EXTRAPOLATION: a full 8192-token answer at 5.90 tok/s takes ~1388 s (~23 min)",
+          "evidence": [
+            "014-out8k"
+          ],
+          "seconds": 9.905462224
+        }
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3-14b-q4km-llamacpp-partial",
+      "tiers": [
+        "general",
+        "coder"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-14B-Q4_K_M.gguf": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --model /models/Qwen3-14B-Q4_K_M.gguf --jinja --ctx-size 16384 --threads 8 --gpu-layers 0 --parallel 1 --no-webui --offline",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T21:13:51.344956638Z",
+      "finished": "2026-09-24T21:14:05.918177347Z",
+      "wall_seconds": 14.573220709,
+      "resident": {
+        "cgroup": "libpod-1fa3260147e79a1bfa6fe35ef27387f940c54f1bbbceef328b84fe17af069313.scope",
+        "cgroup_memory_peak_gib": 17.1,
+        "resident_peak_gib": 16.87,
+        "samples": 15
+      },
+      "results": [
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "completion_tokens": 35,
+            "has_func": true,
+            "think_tags_in_content": false
+          },
+          "evidence": [
+            "001-nothink-switch"
+          ],
+          "seconds": 7.691002031
+        }
+      ],
+      "notes": [
+        "PARTIAL run: -only COD-NOTHINK"
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3-14b-q4km-nothink",
+      "tiers": [
+        "general",
+        "coder"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-14B-Q4_K_M.gguf": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+      },
+      "server_args": "mistralrs serve --host :: --port 8080 --no-ui --max-seqs 1 --jinja-explicit /tpl/qwen3-14b.nothink.jinja text --model-id /models --format gguf --quantized-file Qwen3-14B-Q4_K_M.gguf --max-seq-len 16384 --cpu",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T20:09:06.750382097Z",
+      "finished": "2026-09-24T20:11:29.062643269Z",
+      "wall_seconds": 142.312261172,
+      "resident": {
+        "cgroup": "libpod-aacd053e327229bd51aa8b680b5391932c70f8254f10ae647ba2149ef7e84b88.scope",
+        "resident_peak_gib": 15.56,
+        "samples": 143
+      },
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": EOF",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 116.691747197
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32776-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "003-toon"
+          ],
+          "seconds": 0.000930242
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32778-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "004-json"
+          ],
+          "seconds": 0.000559037
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32786-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "005-nothink-default"
+          ],
+          "seconds": 0.000480009
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "es: Post \"http://127.0.0.1:18090/v1/chat/completions\": write tcp 127.0.0.1:32794-\u003e127.0.0.1:18090: write: connection reset by peer; fr: Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32796-\u003e127.0.0.1:18090: read: connection reset by peer; pt: Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32810-\u003e127.0.0.1:18090: read: connection reset by peer; pt-BR: Post \"http://127.0.0.1:18090/v1/chat/completions\": write tcp 127.0.0.1:32814-\u003e127.0.0.1:18090: write: connection reset by peer",
+          "evidence": [
+            "006-lang-es",
+            "007-lang-fr",
+            "008-lang-pt",
+            "009-lang-pt-BR"
+          ],
+          "seconds": 0.001658837
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32816-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "010-decode"
+          ],
+          "seconds": 0.000288781
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "same server, same fill as the first context check. Post \"http://127.0.0.1:18090/v1/chat/completions\": EOF",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 0.000001373
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32830-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "011-nothink-switch"
+          ],
+          "seconds": 0.000518641
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32834-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "012-stop"
+          ],
+          "seconds": 0.000306604
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32846-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "013-tooljson"
+          ],
+          "seconds": 0.000277569
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32858-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "014-decode"
+          ],
+          "seconds": 0.000303649
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:32864-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "015-out8k"
+          ],
+          "seconds": 0.000317875
+        }
+      ]
+    },
+    {
+      "label": "qwen3-embedding-0.6b-q8",
+      "tiers": [
+        "embedding"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3-Embedding-0.6B-Q8_0.gguf": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --embeddings --pooling last --model /models/candidates/Qwen3-Embedding-0.6B-Q8_0.gguf --ctx-size 2048 --batch-size 2048 --ubatch-size 2048 --threads 8 --gpu-layers 0 --no-webui --offline",
+      "max_seq_len": 2048,
+      "started": "2026-09-24T19:55:00.554770345Z",
+      "finished": "2026-09-24T19:55:08.9999861Z",
+      "wall_seconds": 8.445215755,
+      "resident": {
+        "cgroup": "libpod-6971c8bad6e83cbf998b6868ce2a55ca6a1c4ed0197845cef336099b2cec108e.scope",
+        "cgroup_memory_peak_gib": 2.43,
+        "resident_peak_gib": 2.27,
+        "samples": 9
+      },
+      "results": [
+        {
+          "id": "EMB-DIM",
+          "tier": "embedding",
+          "requirement": "vector dimension exactly 768 (index compatibility)",
+          "threshold": "len(vector) == 768",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "dim": 1024
+          },
+          "seconds": 0.040156895
+        },
+        {
+          "id": "EMB-PREFIX",
+          "tier": "embedding",
+          "requirement": "search_query:/search_document: prefixed ranking is sane",
+          "threshold": "relevant document ranks first for every query",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "top1_margins": [
+              0.47,
+              0.33,
+              0.3,
+              0.29
+            ]
+          },
+          "seconds": 0.362137235
+        },
+        {
+          "id": "EMB-2048",
+          "tier": "embedding",
+          "requirement": "2048-token input accepted",
+          "threshold": "HTTP 200 for a ~2000-token input",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "chars": 5969,
+            "prompt_tokens_reported": 2033
+          },
+          "seconds": 7.384192524
+        }
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3-vl-2b-q4km",
+      "tiers": [
+        "vision"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3VL-2B-Instruct-Q4_K_M.gguf": "089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae",
+        "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf": "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82"
+      },
+      "server_args": "mistralrs serve --host :: --port 8080 --no-ui multimodal --model-id /models/candidates/qwen3-vl-2b --format gguf --quantized-file Qwen3VL-2B-Instruct-Q4_K_M.gguf --mmproj mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf --tok-model-id /models/candidates/qwen3-vl-2b-assets --max-edge 1024 --max-seq-len 16384 --cpu",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T20:00:23.755272558Z",
+      "finished": "2026-09-24T20:01:21.24503018Z",
+      "wall_seconds": 57.489757622,
+      "resident": {
+        "cgroup": "libpod-e09725976efe82187372b847ddda03a0ea96be9d14ca6264115d74c1d7c68c63.scope",
+        "cgroup_memory_peak_gib": 7.19,
+        "resident_peak_gib": 6.97,
+        "samples": 58
+      },
+      "results": [
+        {
+          "id": "VIS-BBOX",
+          "tier": "vision",
+          "requirement": "bbox_2d returned in PIXEL coordinates of the input image",
+          "threshold": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "image": "1024x576 JPEG 17172 bytes",
+            "pixel-hint": {
+              "bbox": {
+                "X1": 615,
+                "X2": 860,
+                "Y1": 512,
+                "Y2": 835
+              },
+              "iou_if_normalised_0_1000": 0.93,
+              "iou_pixel": 0,
+              "looks_normalised": true
+            },
+            "plain": {
+              "bbox": {
+                "X1": 617,
+                "X2": 858,
+                "Y1": 515,
+                "Y2": 835
+              },
+              "iou_if_normalised_0_1000": 0.94,
+              "iou_pixel": 0,
+              "looks_normalised": true
+            },
+            "truth_px": {
+              "X1": 640,
+              "X2": 880,
+              "Y1": 300,
+              "Y2": 480
+            }
+          },
+          "detail": "plain: box is 0-1000 NORMALISED (IoU as pixels 0.00, as normalised 0.94); pixel-hint: box is 0-1000 NORMALISED (IoU as pixels 0.00, as normalised 0.93) (gate = the plain prompt; pixel-hint is informational)",
+          "evidence": [
+            "001-bbox-plain",
+            "002-bbox-pixel-hint"
+          ],
+          "seconds": 15.711443921
+        },
+        {
+          "id": "VIS-MULTI",
+          "tier": "vision",
+          "requirement": "several images (JPEG + PNG) in one request",
+          "threshold": "both images described correctly, in order",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "prompt_tokens": 1199,
+            "reply": "```json\n{\n  \"image1\": \"red rectangle\",\n  \"image2\": \"green circle\"\n}\n```",
+            "sizes_bytes": [
+              14801,
+              3847
+            ]
+          },
+          "evidence": [
+            "003-multi"
+          ],
+          "seconds": 24.968695733
+        },
+        {
+          "id": "VIS-EDGE",
+          "tier": "vision",
+          "requirement": "images up to max edge 1024 (and larger inputs resized server-side)",
+          "threshold": "1024-edge and 1600-edge inputs admitted",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "bytes": 38964,
+            "input": "1600x900 JPEG",
+            "prompt_tokens": 595,
+            "reply": "red"
+          },
+          "detail": "1024-edge admission is exercised by VIS-BBOX; this row adds a 1600-edge input the server must resize",
+          "evidence": [
+            "004-edge1600"
+          ],
+          "seconds": 11.617117557
+        },
+        {
+          "id": "VIS-TPS",
+          "tier": "vision",
+          "requirement": "decode speed",
+          "threshold": "≥1 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 21.93,
+            "floor": 1,
+            "tokens": 80,
+            "ttft_s": 0.16
+          },
+          "evidence": [
+            "005-vision-decode"
+          ],
+          "seconds": 3.822261715
+        },
+        {
+          "id": "VIS-RSS",
+          "tier": "vision",
+          "requirement": "resident memory",
+          "threshold": "≤18 GiB (anon + file_mapped, peak)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "cgroup": "libpod-e09725976efe82187372b847ddda03a0ea96be9d14ca6264115d74c1d7c68c63.scope",
+            "cgroup_memory_peak_gib": 7.19,
+            "resident_peak_gib": 6.97,
+            "samples": 58
+          },
+          "detail": "peak over the whole run (load, 16k fill if any, images)",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "label": "qwen3.8-27b-q3km",
+      "tiers": [
+        "general",
+        "coder",
+        "vision"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3.8-27B-Q3_K_M.gguf": "14865aaef0b6c26a013538782d366443c7298b11d5df9f0fb829d34d1963f869",
+        "mmproj-Qwen3.8-27B-BF16.gguf": "97ba9d70e7407f08c880def231fd360a312c76d0053387733f10dcf6affd75a1"
+      },
+      "server_args": "mistralrs serve --host :: --port 8080 --no-ui --jinja-explicit /models/candidates/qwen3.8-assets/chat_template.nothink.jinja multimodal --model-id /models/candidates/bartowski-q3 --format gguf --quantized-file Qwen3.8-27B-Q3_K_M.gguf --mmproj ../lmstudio/mmproj-Qwen3.8-27B-BF16.gguf --tok-model-id /models/candidates/qwen3.8-assets --max-edge 1024 --max-seq-len 16384 --cpu",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T21:16:48.13946993Z",
+      "finished": "2026-09-24T21:26:51.711515377Z",
+      "wall_seconds": 603.572045447,
+      "resident": {
+        "cgroup": "libpod-a3ccc3ba716db0fa0ef16e3a2aeec7be80e6dd119e5ce95602b7db2dcefb2f8a.scope",
+        "resident_peak_gib": 21.56,
+        "samples": 604
+      },
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": EOF",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 582.746244601
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39200-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "003-toon"
+          ],
+          "seconds": 0.001470666
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39216-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "004-json"
+          ],
+          "seconds": 0.000532217
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39230-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "005-nothink-default"
+          ],
+          "seconds": 0.000769021
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": dial tcp 127.0.0.1:18090: connect: connection reset by peer",
+          "evidence": [
+            "006-lang-es"
+          ],
+          "seconds": 0.001012537
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39242-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "007-decode"
+          ],
+          "seconds": 0.000483215
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "same server, same fill as the first context check. Post \"http://127.0.0.1:18090/v1/chat/completions\": EOF",
+          "evidence": [
+            "001-ctx-calibrate",
+            "002-ctx-fill"
+          ],
+          "seconds": 0.000001142
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": write tcp 127.0.0.1:39246-\u003e127.0.0.1:18090: write: connection reset by peer",
+          "evidence": [
+            "008-nothink-switch"
+          ],
+          "seconds": 0.000358943
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39262-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "009-stop"
+          ],
+          "seconds": 0.000495679
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39264-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "010-tooljson"
+          ],
+          "seconds": 0.000474038
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39274-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "011-decode"
+          ],
+          "seconds": 0.000478838
+        },
+        {
+          "id": "VIS-BBOX",
+          "tier": "vision",
+          "requirement": "bbox_2d returned in PIXEL coordinates of the input image",
+          "threshold": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": write tcp 127.0.0.1:39276-\u003e127.0.0.1:18090: use of closed network connection",
+          "evidence": [
+            "012-bbox-plain"
+          ],
+          "seconds": 0.01508843
+        },
+        {
+          "id": "VIS-MULTI",
+          "tier": "vision",
+          "requirement": "several images (JPEG + PNG) in one request",
+          "threshold": "both images described correctly, in order",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": write tcp 127.0.0.1:39282-\u003e127.0.0.1:18090: use of closed network connection",
+          "evidence": [
+            "013-multi"
+          ],
+          "seconds": 0.044530804
+        },
+        {
+          "id": "VIS-EDGE",
+          "tier": "vision",
+          "requirement": "images up to max edge 1024 (and larger inputs resized server-side)",
+          "threshold": "1024-edge and 1600-edge inputs admitted",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": readfrom tcp 127.0.0.1:39288-\u003e127.0.0.1:18090: write tcp 127.0.0.1:39288-\u003e127.0.0.1:18090: write: broken pipe",
+          "evidence": [
+            "014-edge1600"
+          ],
+          "seconds": 0.029710697
+        },
+        {
+          "id": "VIS-TPS",
+          "tier": "vision",
+          "requirement": "decode speed",
+          "threshold": "≥1 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": readfrom tcp 127.0.0.1:39294-\u003e127.0.0.1:18090: write tcp 127.0.0.1:39294-\u003e127.0.0.1:18090: write: broken pipe",
+          "evidence": [
+            "015-vision-decode"
+          ],
+          "seconds": 0.01215809
+        },
+        {
+          "id": "VIS-RSS",
+          "tier": "vision",
+          "requirement": "resident memory",
+          "threshold": "≤18 GiB (anon + file_mapped + swap, peak while serving)",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "cgroup": "libpod-a3ccc3ba716db0fa0ef16e3a2aeec7be80e6dd119e5ce95602b7db2dcefb2f8a.scope",
+            "resident_peak_gib": 21.56,
+            "samples": 604
+          },
+          "detail": "peak over the whole run (load, 16k fill if any, images)",
+          "seconds": 0
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "Post \"http://127.0.0.1:18090/v1/chat/completions\": read tcp 127.0.0.1:39310-\u003e127.0.0.1:18090: read: connection reset by peer",
+          "evidence": [
+            "016-out8k"
+          ],
+          "seconds": 0.000524323
+        }
+      ]
+    },
+    {
+      "label": "qwen3.8-27b-q3km-llamacpp-partial",
+      "tiers": [
+        "general",
+        "coder",
+        "vision"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Qwen3.8-27B-Q3_K_M.gguf": "14865aaef0b6c26a013538782d366443c7298b11d5df9f0fb829d34d1963f869",
+        "mmproj-Qwen3.8-27B-BF16.gguf": "97ba9d70e7407f08c880def231fd360a312c76d0053387733f10dcf6affd75a1"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --model /models/candidates/bartowski-q3/Qwen3.8-27B-Q3_K_M.gguf --mmproj /models/candidates/lmstudio/mmproj-Qwen3.8-27B-BF16.gguf --jinja --chat-template-file /models/candidates/qwen3.8-assets/chat_template.nothink.jinja --ctx-size 16384 --threads 8 --gpu-layers 0 --parallel 1 --no-webui --offline",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T21:54:29.560958278Z",
+      "finished": "2026-09-24T21:59:21.253060023Z",
+      "wall_seconds": 291.692101745,
+      "resident": {
+        "cgroup": "libpod-23e4fc58ba0e3bc6bfabdbaec38c32e7e27da2eb0b06bb443910c5bd07cdd489.scope",
+        "cgroup_memory_peak_gib": 9.91,
+        "resident_peak_gib": 9.92,
+        "samples": 292
+      },
+      "results": [
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "completion_tokens": 4,
+            "correct": true,
+            "reply": "391",
+            "think_tags_in_content": false
+          },
+          "evidence": [
+            "001-nothink-default"
+          ],
+          "seconds": 8.061530789
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "decode_tok_s": 3.74,
+            "floor": 2.8,
+            "tokens": 200,
+            "ttft_s": 6.66
+          },
+          "detail": "client-side: SSE content chunks between first and last chunk (prefill excluded)",
+          "evidence": [
+            "002-decode"
+          ],
+          "seconds": 59.813845127
+        },
+        {
+          "id": "VIS-BBOX",
+          "tier": "vision",
+          "requirement": "bbox_2d returned in PIXEL coordinates of the input image",
+          "threshold": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "image": "1024x576 JPEG 17172 bytes",
+            "pixel-hint": {
+              "bbox": {
+                "X1": 625,
+                "X2": 860,
+                "Y1": 519,
+                "Y2": 831
+              },
+              "iou_if_normalised_0_1000": 0.98,
+              "iou_pixel": 0,
+              "looks_normalised": true
+            },
+            "plain": {
+              "bbox": {
+                "X1": 625,
+                "X2": 859,
+                "Y1": 519,
+                "Y2": 832
+              },
+              "iou_if_normalised_0_1000": 0.99,
+              "iou_pixel": 0,
+              "looks_normalised": true
+            },
+            "truth_px": {
+              "X1": 640,
+              "X2": 880,
+              "Y1": 300,
+              "Y2": 480
+            }
+          },
+          "detail": "plain: box is 0-1000 NORMALISED (IoU as pixels 0.00, as normalised 0.99); pixel-hint: box is 0-1000 NORMALISED (IoU as pixels 0.00, as normalised 0.98) (gate = the plain prompt; pixel-hint is informational)",
+          "evidence": [
+            "003-bbox-plain",
+            "004-bbox-pixel-hint"
+          ],
+          "seconds": 212.846040341
+        }
+      ],
+      "notes": [
+        "PARTIAL run: -only VIS-BBOX,GEN-NOTHINK,GEN-TPS"
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "qwen3.8-27b-q4km-lmstudio",
+      "tiers": [
+        "general",
+        "coder",
+        "vision"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T22:00:41.7366923Z",
+      "finished": "2026-09-24T22:00:41.739044747Z",
+      "wall_seconds": 0.002352447,
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 7.52e-7
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 4.81e-7
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 2e-7
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 2e-7
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.7e-7
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.41e-7
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.5e-7
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.1e-7
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.2e-7
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.2e-7
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.7e-7
+        },
+        {
+          "id": "VIS-BBOX",
+          "tier": "vision",
+          "requirement": "bbox_2d returned in PIXEL coordinates of the input image",
+          "threshold": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.3e-7
+        },
+        {
+          "id": "VIS-MULTI",
+          "tier": "vision",
+          "requirement": "several images (JPEG + PNG) in one request",
+          "threshold": "both images described correctly, in order",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.5e-7
+        },
+        {
+          "id": "VIS-EDGE",
+          "tier": "vision",
+          "requirement": "images up to max edge 1024 (and larger inputs resized server-side)",
+          "threshold": "1024-edge and 1600-edge inputs admitted",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 2.1e-7
+        },
+        {
+          "id": "VIS-TPS",
+          "tier": "vision",
+          "requirement": "decode speed",
+          "threshold": "≥1 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 1.8e-7
+        },
+        {
+          "id": "VIS-RSS",
+          "tier": "vision",
+          "requirement": "resident memory",
+          "threshold": "≤18 GiB (anon + file_mapped + swap, peak while serving)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 2.5e-7
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=137) exit/oom=137 true ",
+          "seconds": 3.1e-7
+        }
+      ]
+    },
+    {
+      "label": "qwen3.8-27b-q4km-ud",
+      "tiers": [
+        "general",
+        "coder",
+        "vision"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T22:00:41.757644115Z",
+      "finished": "2026-09-24T22:00:41.760076081Z",
+      "wall_seconds": 0.002431966,
+      "results": [
+        {
+          "id": "GEN-CTX",
+          "tier": "general",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 6.92e-7
+        },
+        {
+          "id": "GEN-TOON",
+          "tier": "general",
+          "requirement": "TOON output parses at temperature 0",
+          "threshold": "strict TOON tabular array decode, values match",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 3.91e-7
+        },
+        {
+          "id": "GEN-JSON",
+          "tier": "general",
+          "requirement": "JSON output parses at temperature 0",
+          "threshold": "json.Unmarshal of the reply (code fences tolerated and reported)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2e-7
+        },
+        {
+          "id": "GEN-NOTHINK",
+          "tier": "general",
+          "requirement": "no reasoning trace when the request carries no /no_think",
+          "threshold": "no \u003cthink\u003e text, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2e-7
+        },
+        {
+          "id": "GEN-LANG",
+          "tier": "general",
+          "requirement": "answers stay in the request language (es, fr, pt, pt-BR)",
+          "threshold": "language-ID of each reply equals request language",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.6e-7
+        },
+        {
+          "id": "GEN-TPS",
+          "tier": "general",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.5e-7
+        },
+        {
+          "id": "COD-CTX",
+          "tier": "coder",
+          "requirement": "context fill at ≥16384 tokens with needle retrieval",
+          "threshold": "needle found at ≥15.5k prompt tokens",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.5e-7
+        },
+        {
+          "id": "COD-NOTHINK",
+          "tier": "coder",
+          "requirement": "the /no_think soft switch is honoured",
+          "threshold": "no non-empty \u003cthink\u003e block, empty reasoning_content",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.91e-7
+        },
+        {
+          "id": "COD-STOP",
+          "tier": "coder",
+          "requirement": "stop sequences \\nObservation: and \\n\u003c|im_end|\u003e are honoured",
+          "threshold": "reply ends before 'Observation:'",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2.5e-7
+        },
+        {
+          "id": "COD-JSON",
+          "tier": "coder",
+          "requirement": "JSON tool-call output parses",
+          "threshold": "object with string tool + object args",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2.91e-7
+        },
+        {
+          "id": "COD-TPS",
+          "tier": "coder",
+          "requirement": "decode speed",
+          "threshold": "≥2.8 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.71e-7
+        },
+        {
+          "id": "VIS-BBOX",
+          "tier": "vision",
+          "requirement": "bbox_2d returned in PIXEL coordinates of the input image",
+          "threshold": "IoU ≥0.5 vs pixel truth; FAIL if the box only matches as 0-1000 normalised",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2.2e-7
+        },
+        {
+          "id": "VIS-MULTI",
+          "tier": "vision",
+          "requirement": "several images (JPEG + PNG) in one request",
+          "threshold": "both images described correctly, in order",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.8e-7
+        },
+        {
+          "id": "VIS-EDGE",
+          "tier": "vision",
+          "requirement": "images up to max edge 1024 (and larger inputs resized server-side)",
+          "threshold": "1024-edge and 1600-edge inputs admitted",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2.3e-7
+        },
+        {
+          "id": "VIS-TPS",
+          "tier": "vision",
+          "requirement": "decode speed",
+          "threshold": "≥1 tok/s",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 2.6e-7
+        },
+        {
+          "id": "VIS-RSS",
+          "tier": "vision",
+          "requirement": "resident memory",
+          "threshold": "≤18 GiB (anon + file_mapped + swap, peak while serving)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 1.91e-7
+        },
+        {
+          "id": "GEN-OUT8K",
+          "tier": "general",
+          "requirement": "max_tokens=8192 admitted and streamed without error",
+          "threshold": "HTTP 200 + streaming; full-length time extrapolated",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: path: \"model.language_model.layers.0.mlp.down_proj.weight\" GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23) for native binding `model.language_model.layers.0.mlp.down_proj.weight`; di",
+          "seconds": 3.1e-7
+        }
+      ]
+    },
+    {
+      "label": "tts-known-gap",
+      "tiers": [
+        "tts"
+      ],
+      "endpoint": "none",
+      "model": "default",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T19:54:47.289751683Z",
+      "finished": "2026-09-24T19:54:47.290145705Z",
+      "wall_seconds": 0.000394022,
+      "results": [
+        {
+          "id": "TTS-LANG",
+          "tier": "tts",
+          "requirement": "voices for en, es, fr, pt",
+          "threshold": "a voice exists for every language",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "missing": [
+              "es",
+              "fr",
+              "pt"
+            ],
+            "voices": [
+              "en"
+            ]
+          },
+          "detail": "KNOWN GAP (source evidence, not a live probe): the shipped TTS service carries one English piper voice; es/fr/pt voices are missing",
+          "seconds": 0.000001001
+        },
+        {
+          "id": "TTS-VOICE",
+          "tier": "tts",
+          "requirement": "the request's voice field selects the voice",
+          "threshold": "voice field honoured",
+          "hard": true,
+          "status": "FAIL",
+          "detail": "KNOWN GAP (source evidence, not a live probe): the TTS service ignores the request's voice field and always uses its single configured voice",
+          "seconds": 1.51e-7
+        }
+      ]
+    },
+    {
+      "label": "voxtral-mini-3b-2507-q4km",
+      "tiers": [
+        "stt"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "max_seq_len": 16384,
+      "started": "2026-09-24T22:00:41.718029112Z",
+      "finished": "2026-09-24T22:00:41.718612215Z",
+      "wall_seconds": 0.000583103,
+      "results": [
+        {
+          "id": "STT-AUDIO",
+          "tier": "stt",
+          "requirement": "chat audio_url data-URI WAV 16 kHz mono s16le accepted",
+          "threshold": "HTTP 200 with a non-empty transcript",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: multimodal GGUF architecture `llama` is not supported by the native multimodal loader",
+          "seconds": 7.12e-7
+        },
+        {
+          "id": "STT-WER-EN",
+          "tier": "stt",
+          "requirement": "English transcription accuracy",
+          "threshold": "WER ≤0.15",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: multimodal GGUF architecture `llama` is not supported by the native multimodal loader",
+          "seconds": 3.81e-7
+        },
+        {
+          "id": "STT-WER-ES",
+          "tier": "stt",
+          "requirement": "Spanish transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: multimodal GGUF architecture `llama` is not supported by the native multimodal loader",
+          "seconds": 2.3e-7
+        },
+        {
+          "id": "STT-WER-FR",
+          "tier": "stt",
+          "requirement": "French transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: multimodal GGUF architecture `llama` is not supported by the native multimodal loader",
+          "seconds": 1.71e-7
+        },
+        {
+          "id": "STT-WER-PT",
+          "tier": "stt",
+          "requirement": "Portuguese transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "ERROR",
+          "detail": "NOT MEASURED: server did not start: exited(rc=1) exit/oom=1 false — Error: multimodal GGUF architecture `llama` is not supported by the native multimodal loader",
+          "seconds": 1.91e-7
+        }
+      ]
+    },
+    {
+      "label": "voxtral-mini-3b-2507-q4km-llamacpp",
+      "tiers": [
+        "stt"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "Voxtral-Mini-3B-2507-Q4_K_M.gguf": "4705be8ec22ca23d12632f4b4a3691faa95917d90a06d3cf3c3ec0e91958f1a8",
+        "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf": "4f24c4ef3ce929d02ed9d1cfb050ae9a7365f057c0ddec0d489580982ebe0d02"
+      },
+      "server_args": "/app/bin/llama-server --host :: --port 8080 --model /models/candidates/voxtral-3b/Voxtral-Mini-3B-2507-Q4_K_M.gguf --mmproj /models/candidates/voxtral-3b/mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf --ctx-size 8192 --threads 8 --gpu-layers 0 --no-webui --offline",
+      "max_seq_len": 8192,
+      "started": "2026-09-24T19:57:58.567889013Z",
+      "finished": "2026-09-24T20:00:01.129250157Z",
+      "wall_seconds": 122.561361144,
+      "resident": {
+        "cgroup": "libpod-6809081c031d323d8c71588c25b593b66308774346be2a69f16086f6bb238ad8.scope",
+        "cgroup_memory_peak_gib": 6.3,
+        "resident_peak_gib": 5.64,
+        "samples": 123
+      },
+      "results": [
+        {
+          "id": "STT-AUDIO",
+          "tier": "stt",
+          "requirement": "chat audio_url data-URI WAV 16 kHz mono s16le accepted",
+          "threshold": "HTTP 200 with a non-empty transcript",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "en": {
+              "protocol": "input_audio",
+              "transcript": "The delivery truck arrived at the northern warehouse before sunrise, and the driver unloaded every crate carefully."
+            },
+            "es": {
+              "protocol": "input_audio",
+              "transcript": "El camión de reparto llegó al almacén del norte antes del amanecer y el conductor descargó la caja con cuidado."
+            },
+            "fr": {
+              "protocol": "input_audio",
+              "transcript": "Le camion de livraison est arrivé à l'entrepôt de Norambé et le chauffeur a déchargé chaque caisse avec soin."
+            },
+            "pt": {
+              "protocol": "input_audio",
+              "transcript": "O caminho de entrada chegou ao armazém antes do amanhecer e o motorista descarregou cada caixa com cuidado."
+            }
+          },
+          "detail": "en: audio_url REJECTED (HTTP 400: {\"error\":{\"code\":400,\"message\":\"unsupported content[].type\",\"type\":\"invalid_request_error\"}}); transcribed only via input_audio; es: audio_url REJECTED (HTTP 400: {\"error\":{\"code\":400,\"message\":\"unsupported content[].type\",\"type\":\"invalid_request_error\"}}); transcribed only via input_audio; fr: audio_url REJECTED (HTTP 400: {\"error\":{\"code\":400,\"message\":\"unsupported content[].type\",\"type\":\"invalid_request_error\"}}); transcribed only via input_audio; pt: audio_url REJECTED (HTTP 400: {\"error\":{\"code\":400,\"message\":\"unsupported content[].type\",\"type\":\"invalid_request_error\"}}); transcribed only via input_audio",
+          "evidence": [
+            "002-stt-en-input_audio",
+            "004-stt-es-input_audio",
+            "006-stt-fr-input_audio",
+            "008-stt-pt-input_audio"
+          ],
+          "seconds": 120.073900599
+        },
+        {
+          "id": "STT-WER-EN",
+          "tier": "stt",
+          "requirement": "English transcription accuracy",
+          "threshold": "WER ≤0.15",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 0,
+            "fixture_source": "piper piper-voice-jenny/voice.onnx (neural, en_GB)",
+            "floor": 0.15,
+            "hypothesis": "The delivery truck arrived at the northern warehouse before sunrise, and the driver unloaded every crate carefully.",
+            "protocol": "input_audio",
+            "ref_words": 17,
+            "wer": 0
+          },
+          "detail": "measured over input_audio because this server rejects audio_url (see STT-AUDIO)",
+          "evidence": [
+            "002-stt-en-input_audio"
+          ],
+          "seconds": 0.000068608
+        },
+        {
+          "id": "STT-WER-ES",
+          "tier": "stt",
+          "requirement": "Spanish transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 1,
+            "fixture_source": "espeak-ng 1.52.0 voice=es (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "El camión de reparto llegó al almacén del norte antes del amanecer y el conductor descargó la caja con cuidado.",
+            "protocol": "input_audio",
+            "ref_words": 20,
+            "wer": 0.05
+          },
+          "detail": "measured over input_audio because this server rejects audio_url (see STT-AUDIO)",
+          "evidence": [
+            "004-stt-es-input_audio"
+          ],
+          "seconds": 0.000050775
+        },
+        {
+          "id": "STT-WER-FR",
+          "tier": "stt",
+          "requirement": "French transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 5,
+            "fixture_source": "espeak-ng 1.52.0 voice=fr-fr (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "Le camion de livraison est arrivé à l'entrepôt de Norambé et le chauffeur a déchargé chaque caisse avec soin.",
+            "protocol": "input_audio",
+            "ref_words": 23,
+            "wer": 0.22
+          },
+          "detail": "measured over input_audio because this server rejects audio_url (see STT-AUDIO)",
+          "evidence": [
+            "006-stt-fr-input_audio"
+          ],
+          "seconds": 0.000050183
+        },
+        {
+          "id": "STT-WER-PT",
+          "tier": "stt",
+          "requirement": "Portuguese transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 4,
+            "fixture_source": "espeak-ng 1.52.0 voice=pt-br (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "O caminho de entrada chegou ao armazém antes do amanhecer e o motorista descarregou cada caixa com cuidado.",
+            "protocol": "input_audio",
+            "ref_words": 20,
+            "wer": 0.2
+          },
+          "detail": "measured over input_audio because this server rejects audio_url (see STT-AUDIO)",
+          "evidence": [
+            "008-stt-pt-input_audio"
+          ],
+          "seconds": 0.000045966
+        }
+      ],
+      "not_evidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "label": "voxtral-mini-4b-realtime-2602",
+      "tiers": [
+        "stt"
+      ],
+      "endpoint": "http://127.0.0.1:18090/v1",
+      "model": "default",
+      "artifacts": {
+        "consolidated.safetensors": "263f178fe752c90a2ae58f037a95ed092db8b14768b0978b8c48f66979c8345d"
+      },
+      "server_args": "mistralrs serve --host :: --port 8080 --no-ui multimodal --model-id /models/voxtral-mini-4b-realtime-2602 --isq q4k --max-seq-len 8192 --cpu",
+      "max_seq_len": 8192,
+      "started": "2026-09-24T19:56:01.330543025Z",
+      "finished": "2026-09-24T19:56:47.765949849Z",
+      "wall_seconds": 46.435406824,
+      "resident": {
+        "cgroup": "libpod-0a2aea65f3311c545eb5d3a4c9f1d1bb289b748ce72dbaaa8a3eccc7891422bb.scope",
+        "cgroup_memory_peak_gib": 15.8,
+        "resident_peak_gib": 7.1,
+        "samples": 47
+      },
+      "results": [
+        {
+          "id": "STT-AUDIO",
+          "tier": "stt",
+          "requirement": "chat audio_url data-URI WAV 16 kHz mono s16le accepted",
+          "threshold": "HTTP 200 with a non-empty transcript",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "en": "The delivery truck arrived at the northern warehouse before sunrise and the driver unloaded every crate carefully.nmb.",
+            "es": "El camión de reparto llegó al almacén del norte antes del amanecer y el conductor descargó cada caja con cuinado..",
+            "fr": "The Camio delivery fleet arrive at L'Hôtel-Boulin avant d'obéir le chauffeur à décharger chaque caisse avec soi.elm?",
+            "pt": "O caminhão de entrega chegou ao armazém do norte antes do amanhecer e o motorista descarregou cada caixa com cuidado.."
+          },
+          "evidence": [
+            "001-stt-en",
+            "002-stt-es",
+            "003-stt-fr",
+            "004-stt-pt"
+          ],
+          "seconds": 39.627153398
+        },
+        {
+          "id": "STT-WER-EN",
+          "tier": "stt",
+          "requirement": "English transcription accuracy",
+          "threshold": "WER ≤0.15",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 1,
+            "fixture_source": "piper piper-voice-jenny/voice.onnx (neural, en_GB)",
+            "floor": 0.15,
+            "hypothesis": "The delivery truck arrived at the northern warehouse before sunrise and the driver unloaded every crate carefully.nmb.",
+            "ref_words": 17,
+            "wer": 0.06
+          },
+          "evidence": [
+            "001-stt-en"
+          ],
+          "seconds": 0.001690596
+        },
+        {
+          "id": "STT-WER-ES",
+          "tier": "stt",
+          "requirement": "Spanish transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 1,
+            "fixture_source": "espeak-ng 1.52.0 voice=es (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "El camión de reparto llegó al almacén del norte antes del amanecer y el conductor descargó cada caja con cuinado..",
+            "ref_words": 20,
+            "wer": 0.05
+          },
+          "evidence": [
+            "002-stt-es"
+          ],
+          "seconds": 0.000058458
+        },
+        {
+          "id": "STT-WER-FR",
+          "tier": "stt",
+          "requirement": "French transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "FAIL",
+          "measured": {
+            "errors": 17,
+            "fixture_source": "espeak-ng 1.52.0 voice=fr-fr (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "The Camio delivery fleet arrive at L'Hôtel-Boulin avant d'obéir le chauffeur à décharger chaque caisse avec soi.elm?",
+            "ref_words": 23,
+            "wer": 0.74
+          },
+          "evidence": [
+            "003-stt-fr"
+          ],
+          "seconds": 0.00004808
+        },
+        {
+          "id": "STT-WER-PT",
+          "tier": "stt",
+          "requirement": "Portuguese transcription accuracy",
+          "threshold": "WER ≤0.30 (synthetic-voice fixture)",
+          "hard": true,
+          "status": "PASS",
+          "measured": {
+            "errors": 0,
+            "fixture_source": "espeak-ng 1.52.0 voice=pt-br (formant synthesis; pessimistic)",
+            "floor": 0.3,
+            "hypothesis": "O caminhão de entrega chegou ao armazém do norte antes do amanhecer e o motorista descarregou cada caixa com cuidado..",
+            "ref_words": 20,
+            "wer": 0
+          },
+          "evidence": [
+            "004-stt-pt"
+          ],
+          "seconds": 0.000039684
+        }
+      ]
+    }
+  ],
+  "schema": "river.validation/v1",
+  "verdicts": [
+    {
+      "Label": "nomic-embed-text-v1.5-q8",
+      "Tier": "embedding",
+      "HardPass": false,
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=ERROR",
+        "GEN-TOON=ERROR",
+        "GEN-JSON=ERROR",
+        "GEN-NOTHINK=ERROR",
+        "GEN-LANG=ERROR",
+        "GEN-TPS=ERROR",
+        "GEN-OUT8K=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3-14b-q4km",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=ERROR",
+        "COD-NOTHINK=ERROR",
+        "COD-STOP=ERROR",
+        "COD-JSON=ERROR",
+        "COD-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp",
+      "Tier": "general",
+      "HardPass": false,
+      "Failed": [
+        "GEN-CTX=FAIL",
+        "GEN-TOON=FAIL",
+        "GEN-JSON=FAIL",
+        "GEN-NOTHINK=FAIL",
+        "GEN-LANG=FAIL"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp",
+      "Tier": "coder",
+      "HardPass": false,
+      "Failed": [
+        "COD-CTX=FAIL"
+      ],
+      "NotMeasured": [
+        "COD-NOTHINK=ERROR"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp-nothink",
+      "Tier": "general",
+      "HardPass": false,
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp-nothink",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp-partial",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=NOT_RUN",
+        "GEN-TOON=NOT_RUN",
+        "GEN-JSON=NOT_RUN",
+        "GEN-NOTHINK=NOT_RUN",
+        "GEN-LANG=NOT_RUN",
+        "GEN-TPS=NOT_RUN",
+        "GEN-OUT8K=NOT_RUN"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-llamacpp-partial",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=NOT_RUN",
+        "COD-STOP=NOT_RUN",
+        "COD-JSON=NOT_RUN",
+        "COD-TPS=NOT_RUN"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-14b-q4km-nothink",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=ERROR",
+        "GEN-TOON=ERROR",
+        "GEN-JSON=ERROR",
+        "GEN-NOTHINK=ERROR",
+        "GEN-LANG=ERROR",
+        "GEN-TPS=ERROR",
+        "GEN-OUT8K=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3-14b-q4km-nothink",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=ERROR",
+        "COD-NOTHINK=ERROR",
+        "COD-STOP=ERROR",
+        "COD-JSON=ERROR",
+        "COD-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3-embedding-0.6b-q8",
+      "Tier": "embedding",
+      "HardPass": false,
+      "Failed": [
+        "EMB-DIM=FAIL"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3-vl-2b-q4km",
+      "Tier": "vision",
+      "HardPass": false,
+      "Failed": [
+        "VIS-BBOX=FAIL"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q3km",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=ERROR",
+        "GEN-TOON=ERROR",
+        "GEN-JSON=ERROR",
+        "GEN-NOTHINK=ERROR",
+        "GEN-LANG=ERROR",
+        "GEN-TPS=ERROR",
+        "GEN-OUT8K=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q3km",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=ERROR",
+        "COD-NOTHINK=ERROR",
+        "COD-STOP=ERROR",
+        "COD-JSON=ERROR",
+        "COD-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q3km",
+      "Tier": "vision",
+      "HardPass": false,
+      "Failed": [
+        "VIS-RSS=FAIL"
+      ],
+      "NotMeasured": [
+        "VIS-BBOX=ERROR",
+        "VIS-MULTI=ERROR",
+        "VIS-EDGE=ERROR",
+        "VIS-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q3km-llamacpp-partial",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=NOT_RUN",
+        "GEN-TOON=NOT_RUN",
+        "GEN-JSON=NOT_RUN",
+        "GEN-LANG=NOT_RUN",
+        "GEN-OUT8K=NOT_RUN"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3.8-27b-q3km-llamacpp-partial",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=NOT_RUN",
+        "COD-NOTHINK=NOT_RUN",
+        "COD-STOP=NOT_RUN",
+        "COD-JSON=NOT_RUN",
+        "COD-TPS=NOT_RUN"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3.8-27b-q3km-llamacpp-partial",
+      "Tier": "vision",
+      "HardPass": false,
+      "Failed": [
+        "VIS-BBOX=FAIL"
+      ],
+      "NotMeasured": [
+        "VIS-MULTI=NOT_RUN",
+        "VIS-EDGE=NOT_RUN",
+        "VIS-RSS=NOT_RUN",
+        "VIS-TPS=NOT_RUN"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-lmstudio",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=ERROR",
+        "GEN-TOON=ERROR",
+        "GEN-JSON=ERROR",
+        "GEN-NOTHINK=ERROR",
+        "GEN-LANG=ERROR",
+        "GEN-TPS=ERROR",
+        "GEN-OUT8K=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-lmstudio",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=ERROR",
+        "COD-NOTHINK=ERROR",
+        "COD-STOP=ERROR",
+        "COD-JSON=ERROR",
+        "COD-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-lmstudio",
+      "Tier": "vision",
+      "HardPass": false,
+      "NotMeasured": [
+        "VIS-BBOX=ERROR",
+        "VIS-MULTI=ERROR",
+        "VIS-EDGE=ERROR",
+        "VIS-TPS=ERROR",
+        "VIS-RSS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-ud",
+      "Tier": "general",
+      "HardPass": false,
+      "NotMeasured": [
+        "GEN-CTX=ERROR",
+        "GEN-TOON=ERROR",
+        "GEN-JSON=ERROR",
+        "GEN-NOTHINK=ERROR",
+        "GEN-LANG=ERROR",
+        "GEN-TPS=ERROR",
+        "GEN-OUT8K=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-ud",
+      "Tier": "coder",
+      "HardPass": false,
+      "NotMeasured": [
+        "COD-CTX=ERROR",
+        "COD-NOTHINK=ERROR",
+        "COD-STOP=ERROR",
+        "COD-JSON=ERROR",
+        "COD-TPS=ERROR"
+      ]
+    },
+    {
+      "Label": "qwen3.8-27b-q4km-ud",
+      "Tier": "vision",
+      "HardPass": false,
+      "NotMeasured": [
+        "VIS-BBOX=ERROR",
+        "VIS-MULTI=ERROR",
+        "VIS-EDGE=ERROR",
+        "VIS-TPS=ERROR",
+        "VIS-RSS=ERROR"
+      ]
+    },
+    {
+      "Label": "tts-known-gap",
+      "Tier": "tts",
+      "HardPass": false,
+      "Failed": [
+        "TTS-LANG=FAIL",
+        "TTS-VOICE=FAIL"
+      ]
+    },
+    {
+      "Label": "voxtral-mini-3b-2507-q4km",
+      "Tier": "stt",
+      "HardPass": false,
+      "NotMeasured": [
+        "STT-AUDIO=ERROR",
+        "STT-WER-EN=ERROR",
+        "STT-WER-ES=ERROR",
+        "STT-WER-FR=ERROR",
+        "STT-WER-PT=ERROR"
+      ]
+    },
+    {
+      "Label": "voxtral-mini-3b-2507-q4km-llamacpp",
+      "Tier": "stt",
+      "HardPass": false,
+      "Failed": [
+        "STT-AUDIO=FAIL"
+      ],
+      "NotEvidence": "NOT EVIDENCE: served by llama-server, not mistral.rs; mistral.rs is the only inference engine, so this run is history and passes no gate"
+    },
+    {
+      "Label": "voxtral-mini-4b-realtime-2602",
+      "Tier": "stt",
+      "HardPass": false,
+      "Failed": [
+        "STT-WER-FR=FAIL"
+      ]
+    }
+  ]
+}

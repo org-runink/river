@@ -1,0 +1,173 @@
+name: CI
+
+# Tier 1 of the CI plan in docs/governance/CI.md: lint and hermetic checks, run by
+# scripts/ci-tier1.sh inside an EPHEMERAL ROOTLESS PODMAN container (no network, source
+# mounted read-only, a tmpfs /tmp, all capabilities dropped); plus the Go checks of
+# installer/, guide/ and the security analysers. No job needs a secret or another
+# repository, so every job behaves identically for pull requests from forks.
+#
+# Where it runs (docs/governance/CI.md, "Runners"): GitHub-hosted ubuntu-latest, for every
+# event. This public repository never runs a job on a self-hosted runner. Pull requests from
+# forks wait for a maintainer's approval before any workflow runs ("Require approval for all
+# external contributors"), then get exactly the checks a same-repository pull request gets,
+# with a read-only token and no secrets (GitHub withholds both from fork runs).
+#
+# What runs: shellcheck (warning and up) over every script, installer/overlay sync,
+# branding sync + size budget, the no-python guard, the k0s pin cross-check, the AUR
+# packaging sync (`river lint aur-sync`), and the test of build/tools/bpfdoc (the Go port
+# of the kernel's scripts/bpf_doc.py, byte-identical output on the pinned bpf.h). NOT here:
+# river lint closure (needs the pinned sync databases plus a built [runink] repo) and
+# the boot/ZFS tests, which are Tier 2 (.github/workflows/tier2-vm.yml). The installer's
+# Go tests (river-hwprobe, river-plan) run in the separate installer-go job below, and the
+# install guide agent's (guide/) in the river-guide job. The REUSE lint is its own
+# workflow, reuse.yml, so the README badge can show its status on main.
+#
+# Rule for every workflow in this repository: GitHub-hosted runners only, and nothing uses
+# pull_request_target.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tier1:
+    name: tier1 (lint, rootless podman)
+    # The CONTAINER mode (as Tier 1 ran until 2026-09-28, and again now): GitHub-hosted
+    # ubuntu-latest has rootless podman, so every event (fork pull requests included) runs the
+    # checks with --network=none, the source read-only and every capability dropped.
+    # RIVER_TIER1_NO_CONTAINER=1 (host mode) stays for laptops without podman.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: podman must be present and rootless
+        run: |
+          set -eu
+          command -v podman >/dev/null || { echo "::error::podman is not installed on this runner"; exit 1; }
+          [ "$(id -u)" != 0 ] || { echo "::error::Tier 1 must run rootless; this runner runs jobs as root"; exit 1; }
+          podman --version
+      - name: Tier 1 checks
+        run: sh scripts/ci-tier1.sh
+
+  installer-go:
+    name: installer Go (river-hwprobe, river-plan)
+    # Outside the Tier 1 container: it installs a Go toolchain, so it needs the network,
+    # which that container deliberately does not have. `go test -race` needs cgo (gcc is on
+    # the runner image). The code is stdlib-only Go in installer/ with no secrets and no
+    # other repository, so it is safe for fork pull requests.
+    # The planner's decisions are pinned by table-driven tests on
+    # fixture probes (installer/internal/planner/testdata), so a change to a minimum or to
+    # the layout table shows up here, not on someone's hardware. Same checks as `make test`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: installer/go.mod
+          cache: false
+      - name: gofmt, vet, test (race)
+        working-directory: installer
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          [ -z "$unformatted" ] || { echo "::error::gofmt needed: $unformatted"; exit 1; }
+          go vet ./...
+          go test -race -count=1 ./...
+      - name: binaries build for the lowest x86-64 level (they must run on refused CPUs)
+        working-directory: installer
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 GOAMD64=v1 go build -trimpath -o "$RUNNER_TEMP/river-hwprobe" ./hwprobe
+          CGO_ENABLED=0 GOAMD64=v1 go build -trimpath -o "$RUNNER_TEMP/river-plan" ./plan
+          "$RUNNER_TEMP/river-hwprobe" --json > "$RUNNER_TEMP/probe.json"
+          "$RUNNER_TEMP/river-plan" --probe "$RUNNER_TEMP/probe.json" --no-models --lab > /dev/null
+
+  river-guide:
+    name: river-guide (vet + test)
+    # Outside the Tier 1 container, for the same reason as installer-go (network, gcc).
+    # guide/ is a standard-library Go module with no network, no Artix tooling and no
+    # secrets. Its tests run against a fake GitHub and a fake model server.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: guide/go.mod
+          cache: false
+      - name: gofmt, vet, test (race)
+        working-directory: guide
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          [ -z "$unformatted" ] || { echo "::error::gofmt needed: $unformatted"; exit 1; }
+          go vet ./...
+          go test -race -count=1 ./...
+      - name: river-guide builds for the lowest x86-64 level (it must run on refused CPUs)
+        working-directory: guide
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 GOAMD64=v1 go build -trimpath -o "$RUNNER_TEMP/river-guide" ./cmd/river-guide
+          "$RUNNER_TEMP/river-guide" steps
+
+  go-security:
+    name: Go security analysis (gosec, govulncheck)
+    # Outside the Tier 1 container, like installer-go: it installs a Go toolchain and two
+    # analysers, so it needs the network. No secrets, persist-credentials: false.
+    #   gosec       static analysis for common weaknesses (CWE-mapped rules) over the Go that
+    #               ships in the image (installer/, guide/). G304 (file path from a variable)
+    #               is excluded: both are operator CLIs whose job is to read the paths the
+    #               operator names. Every other finding is fixed or carries a `#nosec <rule> --
+    #               <reason>` annotation at the line, so the triage is reviewable in the diff.
+    #   govulncheck known-vulnerability check (Go vulnerability database) of every Go module
+    #               in the tree, including the Go standard library it is built with.
+    # Both tools are pinned by version; `go install` verifies them against the Go checksum
+    # database. The toolchain is the current stable Go, the one release builds use.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: install gosec and govulncheck (pinned)
+        env:
+          GOSEC_VERSION: v2.29.0
+          GOVULNCHECK_VERSION: v1.8.0
+        run: |
+          set -euo pipefail
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+      - name: gosec (installer, guide)
+        run: |
+          set -euo pipefail
+          for m in installer guide; do
+            echo "== gosec $m"
+            (cd "$m" && "$(go env GOPATH)/bin/gosec" -quiet -exclude=G304 ./...)
+          done
+      - name: govulncheck (installer, guide, validation)
+        run: |
+          set -euo pipefail
+          for m in installer guide validation; do
+            echo "== govulncheck $m"
+            (cd "$m" && "$(go env GOPATH)/bin/govulncheck" ./...)
+          done
+

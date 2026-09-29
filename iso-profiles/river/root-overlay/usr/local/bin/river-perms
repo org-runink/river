@@ -1,0 +1,106 @@
+#!/bin/sh
+# river-perms — re-assert shadow-grade ownership/modes on every secret and state file,
+# and log any drift it had to correct.
+#
+# Run at every boot by the s6-rc oneshot /etc/s6/sv/river-perms (before rc-local, so before
+# anything reads these files), and by tests/assert-golden.sh in --check mode.
+#
+# The rule ("handled as /etc/shadow", AGENTS.md invariant 4): a file that holds machine
+# identity, credentials, keys or machine state is owned by the ONE principal that reads it and
+# is unreadable to everyone else — 0600 files in 0700 directories. Almost everything here is
+# root:root, because the only readers are root processes (rc.local, runink-fw, the installer
+# record). The exceptions are owned by `runink` because that user IS the reader: its own
+# secret dirs. No entry is group- or world-readable, so no 0640 is needed today; if a
+# service group ever has to read one, give it root:<group> 0640 here, never 0644.
+#
+# Drift is FIXED and LOGGED, never fatal: a boot must not stop over a mode bit, but every
+# correction is a finding — something wrote a secret with the wrong mode, and the log line
+# says what and from which mode. Log: stdout (s6 catch-all logger) + /var/log/river-perms.log.
+#
+# Usage: river-perms            fix + log (boot)
+#        river-perms --check    report only; exit 1 if anything drifted (assert-golden)
+set -u
+
+MODE=fix
+[ "${1:-}" = "--check" ] && MODE=check
+LOG=/var/log/river-perms.log
+drift=0
+
+log() {
+	echo "river-perms: $*"
+	if [ "$MODE" = fix ]; then
+		( umask 077; printf '%s river-perms: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" ) 2>/dev/null || true
+	fi
+}
+
+# want PATH OWNER GROUP MODE — assert one existing path; absent paths are not an error
+# (most entries exist only on some machines).
+want() {
+	_p="$1"; _o="$2"; _g="$3"; _m="$4"
+	[ -e "$_p" ] || return 0
+	[ -L "$_p" ] && { log "DRIFT $_p is a symlink (expected a real file) — left alone"; drift=1; return 0; }
+	id -u "$_o" >/dev/null 2>&1 || return 0
+	_have="$(stat -c '%U:%G %a' "$_p" 2>/dev/null)" || return 0
+	# stat %a drops the leading zero; compare numerically-normalised strings.
+	_want="$_o:$_g $(printf '%o' "0$_m")"
+	[ "$_have" = "$_want" ] && return 0
+	drift=1
+	if [ "$MODE" = check ]; then
+		log "DRIFT $_p is $_have, want $_want"
+	else
+		if chown "$_o:$_g" "$_p" && chmod "$_m" "$_p"; then
+			log "fixed $_p: $_have -> $_want"
+		else
+			log "FAILED to fix $_p ($_have, want $_want)"
+		fi
+	fi
+}
+
+# tree DIR OWNER GROUP — DIR and every subdir 0700, every regular file 0600.
+tree() {
+	[ -d "$1" ] || return 0
+	want "$1" "$2" "$3" 0700
+	# The loop runs in a pipeline subshell, so drift is carried out through its exit status.
+	if ! find "$1" -mindepth 1 \( -type d -o -type f \) 2>/dev/null | {
+		while read -r _e; do
+			if [ -d "$_e" ]; then want "$_e" "$2" "$3" 0700; else want "$_e" "$2" "$3" 0600; fi
+		done
+		[ "$drift" = 0 ]
+	}; then drift=1; fi
+}
+
+# --- machine config (root) ----------------------------------------------------------------
+# /etc/runink/*: install-plan.json (the installer's record), fw-open and fw-forward (runink-fw),
+# and anything a downstream distribution places there. One rule for the whole dir is auditable.
+tree /etc/runink root root
+# /var/lib/runink: machine state, including the first-boot hook sentinels (firstboot.d/) and any
+# payload a private medium carried, copied STILL ENCRYPTED by the installer (docs/PAYLOADS.md).
+tree /var/lib/runink root root
+# first-boot hook logs (river-firstboot-hooks, docs/PAYLOADS.md).
+tree /var/log/runink/firstboot.d root root
+# the graphical first boot's log (river-firstboot-ui), when an edition has one.
+want /var/log/river-firstboot-ui.log root root 0600
+
+# --- ZFS key providers (initramfs unlock; docs/ENCRYPTION.md) ----------------------------
+# The provider scripts, and any sealed key blob a future provider keeps, e.g. under
+# /etc/zfs/keys. A sealed blob is not the key, but it is still shadow-grade.
+tree /etc/zfs/initramfs-tools-load-key.d root root
+tree /etc/zfs/keys root root
+
+# --- the runink user's secrets (runink is the reader) ------------------------------------
+H=/home/runink
+want "$H/.ssh"                          runink runink 0700
+want "$H/.ssh/authorized_keys"          runink runink 0600
+tree "$H/.runink"                       runink runink   # the runink user's own secrets
+
+# --- base system files that must already be this way -------------------------------------
+want /etc/shadow  root root 0600
+want /etc/gshadow root root 0600
+for k in /etc/ssh/ssh_host_*_key; do want "$k" root root 0600; done
+
+if [ "$drift" = 0 ]; then
+	echo "river-perms: all shadow-grade paths in order"
+elif [ "$MODE" = check ]; then
+	exit 1
+fi
+exit 0

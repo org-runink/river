@@ -1,0 +1,99 @@
+# models.lock — the AI models a Runink River node serves, pinned to their upstream Hugging Face repos.
+#
+# One file per line, eight whitespace-separated columns:
+#
+#   role  repo  revision  file  size  sha256  license  dest
+#
+#   role      the inference role that loads it: general, coder, vision, stt, embedding, tts
+#   repo      Hugging Face repo, <org>/<name>
+#   revision  the exact 40-hex commit the file is fetched at, never a branch
+#   file      path inside the repo at that revision
+#   size      bytes. Checked before the hash, so a truncated file fails fast
+#   sha256    of the exact file. THIS is the pin. For LFS files it is the sha256 Hugging Face
+#             records for the LFS object, and the download is re-hashed locally. For the small
+#             non-LFS files it was computed from the file fetched at `revision`. A mirror
+#             (RIVER_MODELS_MIRROR) can only ever serve these bytes
+#   license   SPDX id from the model card (cardData.license) at that revision (tts: see below)
+#   dest      path under MODELS_DIR (/var/lib/core/models/shared on a node, mounted read-only
+#             into the inference pods at /models). `-` = the file's basename at the root
+#
+# Fetched at ISO BUILD time only, by build/models-fetch.sh (resume, sha256 verification,
+# mirror fallback). build/50-models-manifest.sh verifies MODELS_DIR against this lock and
+# writes models.manifest. An installed node never fetches a model.
+#
+# Model-card evidence (quotes pinned to each revision) and the load-test results for every
+# row are in models.evidence.json. Short form, all measured 2026-09-24:
+#
+#   coder      Qwen3-14B Q4_K_M, the model maker's own GGUF. Loads in mistral.rs 0.9.2
+#              (`serve text --format gguf`).
+#   stt        Voxtral-Mini-4B-Realtime-2602, the model maker's safetensors, quantized at load
+#              (`serve multimodal --isq q4k`). No GGUF form loads in mistral.rs 0.9.2: the
+#              maker's audio.cpp GGUF has no companion projector, and the 3B-2507 GGUF is
+#              refused by the multimodal loader. Only consolidated.safetensors is pinned
+#              (params.json makes the loader read that Mistral-format file), not the
+#              byte-identical-weights model.safetensors (another 8.9 GB).
+#   embedding  PENDING: no row. mistral.rs is the only inference engine (decided 2026-09-27),
+#              and the previously pinned nomic-embed-text-v1.5 Q8_0 GGUF does not load in it
+#              (mistral.rs 0.9.2: "Embedding models do not support GGUF or GGML format", and no
+#              nomic-bert architecture). The embedding model is being re-selected for one
+#              mistral.rs serves; its output dimension must match the vector indexes (768).
+#              models.tiers marks the tier `pending=embedding` until then.
+#
+#   vision     Qwen3-VL-2B-Instruct Q4_K_M + mmproj Q8_0, the model maker's own GGUFs, served by
+#              mistral.rs 0.9.2 (`serve multimodal --format gguf --quantized-file ... --mmproj
+#              ...`). Its tokenizer and config assets are pinned too, from the base repo at
+#              its own revision: without a LOCAL `--tok-model-id` directory mistral.rs resolves
+#              them against huggingface.co at load time, and a node never fetches. All nine
+#              were fetched at that revision and re-hashed on 2026-09-24. Known limit: bounding
+#              boxes come back 0-1000 normalised, not in pixels.
+#   tts        piper voices (medium, 22050 Hz) from rhasspy/piper-voices: en_GB jenny_dioco,
+#              es_ES davefx, fr_FR siwis, pt_BR faber, pt_PT tugão. The .onnx pins are the LFS
+#              sha256 Hugging Face records; the .onnx.json pins were computed from the files
+#              fetched at that revision. `license` here is the VOICE DATASET licence from each
+#              voice's MODEL_CARD (the repository itself is MIT), because that is the licence
+#              with obligations: fr_FR siwis is CC-BY-4.0 and jenny_dioco requires the voice
+#              to be credited as "Jenny (Dioco)" (dataset README, github.com/dioco-group/
+#              jenny-tts-dataset). `dest` renames tugão to ASCII (pt_PT-tugao-medium); the
+#              .onnx and its .onnx.json keep the same stem, which is how piper pairs them.
+#
+# general is the coder row: one Qwen3-14B process serves both roles, so it needs no row of its
+# own (models.evidence.json records the decision).
+
+# coder --------------------------------------------------------------------------------------
+coder Qwen/Qwen3-14B-GGUF 530227a7d994db8eca5ab5ced2fb692b614357fd Qwen3-14B-Q4_K_M.gguf 9001752960 500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0 apache-2.0 -
+
+# stt ----------------------------------------------------------------------------------------
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add consolidated.safetensors 8859462744 263f178fe752c90a2ae58f037a95ed092db8b14768b0978b8c48f66979c8345d apache-2.0 voxtral-mini-4b-realtime-2602/consolidated.safetensors
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add params.json 1343 2ace010ebf7f0b62c60747d91c6d140e3c7238632d3e9c63d60a2bd2065ea301 apache-2.0 voxtral-mini-4b-realtime-2602/params.json
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add tekken.json 14910348 8434af1d39eba99f0ef46cf1450bf1a63fa941a26933a1ef5dbbf4adf0d00e44 apache-2.0 voxtral-mini-4b-realtime-2602/tekken.json
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add config.json 1572 96582f5809ad179531d47f9f89d76c696058fbdeff608d6611dcb7e076ea7e93 apache-2.0 voxtral-mini-4b-realtime-2602/config.json
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add processor_config.json 384 5fbc4247e0b3b72c1b501b872c4fd6432b1f0fcc1939dcdf1fa5142c6d2ce070 apache-2.0 voxtral-mini-4b-realtime-2602/processor_config.json
+stt mistralai/Voxtral-Mini-4B-Realtime-2602 2769294da9567371363522aac9bbcfdd19447add generation_config.json 191 1fabdbadf2e0ea9e2c36e2a8460a53caa694c1324136e4158032b0a32ff6beec apache-2.0 voxtral-mini-4b-realtime-2602/generation_config.json
+
+# embedding ----------------------------------------------------------------------------------
+# PENDING (see the header): no row until a model mistral.rs serves is chosen.
+
+# vision -------------------------------------------------------------------------------------
+vision Qwen/Qwen3-VL-2B-Instruct-GGUF 52d6c8ffea26cc873ac5ad116f8631268d7eb503 Qwen3VL-2B-Instruct-Q4_K_M.gguf 1107409952 089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae apache-2.0 qwen3-vl-2b-instruct-gguf/Qwen3VL-2B-Instruct-Q4_K_M.gguf
+vision Qwen/Qwen3-VL-2B-Instruct-GGUF 52d6c8ffea26cc873ac5ad116f8631268d7eb503 mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf 445053216 f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82 apache-2.0 qwen3-vl-2b-instruct-gguf/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 chat_template.json 5502 6f8a6a55027e3da5160105556cda5dd69f6423f1c32645f6730d32de7773d0c4 apache-2.0 qwen3-vl-2b-instruct/chat_template.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 config.json 1505 bec4b3d446efa05807365c9e1cec03ac590836879d02f3a6da879971154bdd3b apache-2.0 qwen3-vl-2b-instruct/config.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 generation_config.json 269 1e241830b48b397cb0900101421df5450baddc7adf01e5fc86b5615865f3bae4 apache-2.0 qwen3-vl-2b-instruct/generation_config.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 merges.txt 1671839 599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3 apache-2.0 qwen3-vl-2b-instruct/merges.txt
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 preprocessor_config.json 390 27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516 apache-2.0 qwen3-vl-2b-instruct/preprocessor_config.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 tokenizer_config.json 10868 c2da771801886ad9ae98181793ffd3dfb7f1af30f6f7c6a4e15d7dbba52e2399 apache-2.0 qwen3-vl-2b-instruct/tokenizer_config.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 tokenizer.json 7032403 a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7 apache-2.0 qwen3-vl-2b-instruct/tokenizer.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 video_preprocessor_config.json 385 7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13 apache-2.0 qwen3-vl-2b-instruct/video_preprocessor_config.json
+vision Qwen/Qwen3-VL-2B-Instruct 89644892e4d85e24eaac8bacfd4f463576704203 vocab.json 2776833 ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910 apache-2.0 qwen3-vl-2b-instruct/vocab.json
+
+# tts ----------------------------------------------------------------------------------------
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx 63201294 469c630d209e139dd392a66bf4abde4ab86390a0269c1e47b4e5d7ce81526b01 LicenseRef-Jenny-Dioco-Attribution piper/en_GB-jenny_dioco-medium.onnx
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json 4895 a9a7a93a317c9a3cb6563e37eb057df9ef09c06188a8a4341b0fcb58cba54dd4 LicenseRef-Jenny-Dioco-Attribution piper/en_GB-jenny_dioco-medium.onnx.json
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 es/es_ES/davefx/medium/es_ES-davefx-medium.onnx 63201294 6658b03b1a6c316ee4c265a9896abc1393353c2d9e1bca7d66c2c442e222a917 CC0-1.0 piper/es_ES-davefx-medium.onnx
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 es/es_ES/davefx/medium/es_ES-davefx-medium.onnx.json 4817 0e0dda87c732f6f38771ff274a6380d9252f327dca77aa2963d5fbdf9ec54842 CC0-1.0 piper/es_ES-davefx-medium.onnx.json
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx 63201294 641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99 CC-BY-4.0 piper/fr_FR-siwis-medium.onnx
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json 4875 39479916c2db192b5ac9764daddd0c744d83e023ad890c6976c0633ae4df8959 CC-BY-4.0 piper/fr_FR-siwis-medium.onnx.json
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx 63201294 858555e3a064209c57088fe6bd70c4c3dc54d03eaa00c45d5ecaf43a33f95aa7 CC0-1.0 piper/pt_BR-faber-medium.onnx
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json 4855 7e694de195ae3fc36dd732c445eb04fb49b649854893cb5506b978f0d50a1d6f CC0-1.0 piper/pt_BR-faber-medium.onnx.json
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 pt/pt_PT/tugão/medium/pt_PT-tugão-medium.onnx 63201294 223a7aaca69a155c61897e8ada7c3b13bc306e16c72dbb9c2fed733e2b0927d4 CC0-1.0 piper/pt_PT-tugao-medium.onnx
+tts rhasspy/piper-voices c10ece1aade47bb51c153c893d14e5bf8e5b7117 pt/pt_PT/tugão/medium/pt_PT-tugão-medium.onnx.json 5026 fe0918dfc0f1a89264a6eea4afe8e95d8e9fed3cc6c81b5c2f87fcb2b50c7320 CC0-1.0 piper/pt_PT-tugao-medium.onnx.json

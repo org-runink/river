@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# DCO: every non-merge commit in a pull request must carry a
+#   Signed-off-by: Name <email>
+# trailer whose email matches the commit author (see CONTRIBUTING.md). This is the
+# Linux Foundation's Developer Certificate of Origin requirement, checked here in plain
+# git + shell so it needs no third-party app and no secrets.
+#
+# Harmless while the repository is private: it reads the PR's own commits with a
+# read-only token and fails only its own check. It is NOT yet a required status check;
+# make it one in branch protection when the repository goes public.
+#
+# Commits authored by GitHub bot accounts (login ending in "[bot]", e.g. Dependabot)
+# are exempt, matching the DCO GitHub App's default.
+#
+# Runners (docs/governance/CI.md, "Runners"): GitHub-hosted ubuntu-latest, one job for every
+# pull request. A fork's pull request runs it once a maintainer approves the run, with a
+# read-only token and no secrets; fork PRs are exactly the ones the DCO is for.
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Signed-off-by on every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          fail=0
+          count=0
+          for c in $(git rev-list --no-merges "${BASE_SHA}..${HEAD_SHA}"); do
+            count=$((count + 1))
+            author_name=$(git log -1 --format='%an' "$c")
+            author_email=$(git log -1 --format='%ae' "$c")
+            subject=$(git log -1 --format='%s' "$c")
+            case "$author_name" in
+              *'[bot]') echo "skip  ${c:0:12} (bot author: $author_name)"; continue ;;
+            esac
+            # Trailers only (not free text in the body), compared case-insensitively.
+            if git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$c" \
+                | grep -qiF "<${author_email}>"; then
+              echo "ok    ${c:0:12} ${subject}"
+            else
+              echo "::error::commit ${c:0:12} (\"${subject}\") has no Signed-off-by trailer for its author <${author_email}>"
+              fail=1
+            fi
+          done
+          echo "checked ${count} commit(s)"
+          if [ "$fail" -ne 0 ]; then
+            echo "Fix: git rebase --signoff origin/main && git push --force-with-lease (see CONTRIBUTING.md)"
+            exit 1
+          fi
+

@@ -1,0 +1,85 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-tayga — userspace NAT64 translator for the IPv6-only pod network.
+#
+# WHY THIS IS PACKAGED HERE rather than pulled from a repo: tayga is not in Arch's
+# repos (AUR only), and `Packages-Root` is a curated allow-list that must resolve
+# from the pinned mirror + [runink] localrepo. Same reason runink-k0s is vendored:
+# the golden image never fetches at runtime, so anything not in the pinned mirror
+# is built here and shipped as a runink-* package.
+#
+# WHY NAT64 AT ALL: the cluster is single-stack IPv6, and GitHub and many third-party
+# APIs publish NO AAAA records, so an IPv6-only pod cannot route to them at all (a pod
+# that resolves api.github.com, for example, crash-loops). Full rationale in the shipped
+# /etc/tayga.conf.
+#
+# WHY TAYGA AND NOT JOOL: Jool is a kernel module, and this node runs a custom
+# sovereign kernel (linux-runink, the zen-kernel 7.2.x fork), so a module would need rebuilding
+# and re-signing on every kernel bump — a permanent maintenance tax on the one
+# component that must never break. tayga is userspace over TUN, and tun.ko is
+# already in 6.18.43-1-lts, so it is inert with respect to kernel changes.
+#
+# UPSTREAM IS DORMANT. tayga 0.9.2 is from 2011 and litech.org has published
+# nothing since. That is acceptable for a NAT64 translator (RFC 6145/6146 have not
+# moved, and it is a small, well-understood C program), and it is pinned by
+# sha256 below so a silently-changed tarball fails the build. But it means no
+# upstream security fixes: if a CVE lands, the fix is to migrate to the maintained
+# fork (github.com/apalrd/tayga) or to Jool, not to wait.
+#
+# Config + bring-up ship via the profile root-overlay, NOT here:
+#   etc/tayga.conf
+#   etc/NetworkManager/dispatcher.d/61-runink-nat64
+#   var/lib/k0s/manifests/runink-coredns/coredns.yaml   (the dns64 half)
+pkgname=runink-tayga
+pkgver=0.9.2
+pkgrel=1
+pkgdesc="Userspace NAT64 translator (TUN) so the IPv6-only pod network can reach IPv4-only endpoints"
+arch=('x86_64')
+url="http://www.litech.org/tayga/"
+license=('GPL2')
+depends=('glibc')
+provides=('tayga')
+conflicts=('tayga')
+source=("http://www.litech.org/tayga/tayga-${pkgver}.tar.bz2")
+# Verified by downloading the tarball and hashing it (86022 bytes; tar lists
+# tayga-0.9.2/addrmap.c et al). Build WITHOUT --skipinteg, per runink-k0s.
+sha256sums=('2b1f7927a9d2dcff9095aff3c271924b052ccfd2faca9588b277431a44f0009c')
+
+prepare() {
+	cd "tayga-${pkgver}"
+	# GCC 14 promoted implicit function declarations to a hard error, and GCC 16
+	# defaults to C23 where they are removed from the language outright — so the
+	# -Wno-error=implicit-function-declaration below can no longer downgrade this.
+	# nat64.c calls writev() while including only <tayga.h>; the prototype lives in
+	# <sys/uio.h>. Adding the include is the correct fix — silencing the diagnostic
+	# would hide a genuinely missing prototype, and an implicit int return from
+	# writev() is a real bug on a 64-bit target, not a style complaint.
+	#
+	# Verified: without this, `makepkg` dies at nat64.o on gcc 16.1.1.
+	grep -q 'sys/uio.h' nat64.c || sed -i 's|^#include <tayga.h>|#include <sys/uio.h>\n#include <tayga.h>|' nat64.c
+}
+
+build() {
+	cd "tayga-${pkgver}"
+	# 0.9.2 predates modern C defaults: GCC 14 promoted implicit-function-declaration
+	# and incompatible-pointer-types to errors, which this source trips. Downgrading
+	# them to warnings is what every current packaging of tayga does; the alternative
+	# is patching 2011-era C for no behavioural gain.
+	./configure --prefix=/usr --sysconfdir=/etc --sbindir=/usr/bin \
+		CFLAGS="${CFLAGS} -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
+	make
+}
+
+package() {
+	cd "tayga-${pkgver}"
+	make DESTDIR="$pkgdir" install
+
+	# Mapping state must survive a restart, or every in-flight translation is lost
+	# on a network blip. tayga.conf's data-dir points here.
+	install -d "$pkgdir/var/lib/tayga"
+
+	# The shipped example config is NOT installed to /etc/tayga.conf: the profile
+	# root-overlay provides the real one, and letting the package own that path
+	# would make pacman fight the overlay on upgrade.
+	rm -f "$pkgdir/etc/tayga.conf"
+	install -Dm644 tayga.conf.example "$pkgdir/usr/share/doc/${pkgname}/tayga.conf.example"
+}

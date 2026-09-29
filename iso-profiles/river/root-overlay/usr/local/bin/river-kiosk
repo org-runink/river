@@ -1,0 +1,132 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river-kiosk — show the graphical installer (or the graphical first boot) full screen on the
+# local display, with nothing else around it.
+#
+#   river-kiosk [--vt N] [--url URL] [--run-dir DIR]
+#
+# The web view is WPE WebKit's MiniBrowser (wpewebkit) drawing straight to the display through
+# KMS/DRM: no X server, no Wayland compositor. It runs as the unprivileged `river-kiosk` user
+# (created here, groups video and input), in private mode (no history, cache or cookies on
+# disk), with a content filter that blocks everything but the loopback, so it can show the
+# installer and a first-boot setup page on [::1] and nothing from any network.
+#
+# The mouse pointer is drawn by the page, not by the display. WPE's DRM backend delivers the
+# mouse (moves, clicks, wheel) but draws no pointer on most real displays: none on the legacy
+# KMS path used here (WPE 2.52: "FIXME: support cursors in legacy mode"), none on a display
+# without a hardware cursor plane (simpledrm, most BMC and virtual VGA) and none without an
+# Xcursor theme, which the image does not carry. So the view opens the UI with the fragment
+# #kiosk, and the UI (app.js, kioskPointer) draws its own pointer at the mouse position and
+# hides the platform one. A compositor (cage) draws one too, but on a display with no GPU
+# renderer (the displays above) WPE under cage painted a black or half-drawn screen (QEMU, 2026-09-27).
+# WPE ignores absolute pointers (a BMC remote console in absolute mode, a tablet): use the
+# console's relative mouse mode.
+#
+# It keeps the kiosk up: it restarts the view if it dies, when the installer asks
+# (<run-dir>/kiosk.restart, after a keyboard change: <run-dir>/kiosk.env carries the XKB layout),
+# and after the operator comes back from another console. While another virtual terminal is
+# active (Alt+F2 for the recovery console) the view is stopped, so the text console is really
+# on screen; the installer keeps its state, and the view reconnects to it. <run-dir>/kiosk.stop
+# ends it.
+#
+# The kiosk is live-medium only (Packages-Live), except on a server installed with the graphical
+# first boot, which keeps it until that first boot finishes (20-clone-rootfs, 77-firstboot-ui).
+# Without it, this exits 1 and the caller falls back to a text console.
+set -u
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
+
+VT=""
+URL="http://[::1]:47660/"
+RUN=/run/river-installer
+MB=/usr/lib/wpe-webkit-2.0/MiniBrowser
+U=river-kiosk
+H=/run/river-kiosk
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--vt) VT="${2:?}"; shift ;;
+		--url) URL="${2:?}"; shift ;;
+		--run-dir) RUN="${2:?}"; shift ;;
+		*) echo "river-kiosk: unknown argument $1" >&2; exit 2 ;;
+	esac
+	shift
+done
+# The fragment tells the UI it is in the kiosk (it draws the pointer); the server never sees it.
+BASE="${URL%%#*}"
+case "$URL" in *"#"*) ;; *) URL="$URL#kiosk" ;; esac
+[ "$(id -u)" -eq 0 ] || { echo "river-kiosk: run as root (it drops to $U)" >&2; exit 1; }
+[ -x "$MB" ] || { echo "river-kiosk: no web view ($MB): wpewebkit is not installed" >&2; exit 1; }
+command -v river-installer >/dev/null 2>&1 || { echo "river-kiosk: river-installer not found" >&2; exit 1; }
+
+log() { echo "river-kiosk: $*"; }
+
+# The kiosk user: no login, no home on disk, allowed to open the display and the input devices.
+if ! id "$U" >/dev/null 2>&1; then
+	useradd -r -M -d "$H" -s /usr/bin/nologin -U "$U" || { log "cannot create $U"; exit 1; }
+fi
+for g in video input render; do
+	getent group "$g" >/dev/null 2>&1 && usermod -aG "$g" "$U" 2>/dev/null
+done
+install -d -m 0700 -o "$U" -g "$U" "$H"
+rm -f "$RUN/kiosk.stop" "$RUN/kiosk.restart"
+
+# Only the loopback: WebKit content-blocker rules, evaluated in order.
+cat > "$H/filter.json" <<'EOF'
+[
+  {"trigger": {"url-filter": ".*"}, "action": {"type": "block"}},
+  {"trigger": {"url-filter": "^http://\\[::1\\](:[0-9]+)?/"}, "action": {"type": "ignore-previous-rules"}},
+  {"trigger": {"url-filter": "^http://127\\.0\\.0\\.1(:[0-9]+)?/"}, "action": {"type": "ignore-previous-rules"}},
+  {"trigger": {"url-filter": "^about:blank"}, "action": {"type": "ignore-previous-rules"}}
+]
+EOF
+chown "$U:$U" "$H/filter.json"
+
+river-installer wait --url "${BASE%/}/api/state" --timeout 120s || log "the installer is not answering yet; starting anyway"
+[ -n "$VT" ] && river-installer vt "$VT"
+
+active_vt() { cat /sys/class/tty/tty0/active 2>/dev/null; }
+xkb() { # the XKB_* lines of kiosk.env, nothing else
+	[ -r "$RUN/kiosk.env" ] && grep -E '^XKB_DEFAULT_(LAYOUT|VARIANT)=[A-Za-z0-9_-]*$' "$RUN/kiosk.env"
+}
+
+pid=""
+start() {
+	# shellcheck disable=SC2046 # the XKB assignments are single words by the grep above
+	setpriv --reuid="$U" --regid="$U" --init-groups --inh-caps=-all \
+		env -i HOME="$H" XDG_RUNTIME_DIR="$H" LANG=C.UTF-8 PATH=/usr/bin \
+		WPE_DISPLAY=wpe-display-drm WPE_DRM_DISABLE_ATOMIC=1 $(xkb) \
+		"$MB" --fullscreen --private --content-filter="$H/filter.json" --bg-color='#eef3f7' "$URL" \
+		>"$H/view.log" 2>&1 &
+	pid=$!
+	log "view started (pid $pid, layout $(xkb | sed -n 's/^XKB_DEFAULT_LAYOUT=//p'))"
+}
+stop() {
+	[ -n "$pid" ] || return 0
+	kill "$pid" 2>/dev/null
+	i=0
+	while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+	kill -9 "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null
+	pid=""
+}
+trap 'stop; exit 0' TERM INT
+
+while :; do
+	if [ -e "$RUN/kiosk.stop" ]; then stop; log "stopped"; exit 0; fi
+	if [ -n "$VT" ] && [ "$(active_vt)" != "tty$VT" ]; then
+		# The operator switched to another console: give the display back to it.
+		[ -n "$pid" ] && { log "console $(active_vt) is active; pausing the view"; stop; }
+		sleep 1
+		continue
+	fi
+	if [ -e "$RUN/kiosk.restart" ]; then rm -f "$RUN/kiosk.restart"; stop; fi
+	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+		wait "$pid" 2>/dev/null
+		log "view exited; restarting"
+		pid=""
+		sleep 1
+	fi
+	[ -n "$pid" ] || start
+	sleep 1
+done

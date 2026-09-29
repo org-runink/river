@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Dependabot version updates for GitHub Actions. New workflows pin every action by full
+# commit SHA with the tag in a trailing comment; Dependabot understands that form and
+# bumps both the SHA and the comment. The older workflows (kernel-build.yml,
+# zfs-build.yml) still pin by tag (@v4); Dependabot will propose bumps for
+# them too, but converting them to SHA pins is a separate, reviewed change.
+#
+# Dependabot PRs are authored by dependabot[bot], which the DCO workflow exempts.
+# Only github-actions is configured: the repo has no go.mod/package manifests yet
+# (runtime/ is README-only). Add a gomod entry when runtime/ gains a go.mod.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope

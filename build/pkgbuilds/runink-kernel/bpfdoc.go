@@ -1,0 +1,1 @@
+../../tools/bpfdoc/main.go

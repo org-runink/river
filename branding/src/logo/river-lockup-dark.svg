@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Runink
+     SPDX-License-Identifier: LicenseRef-Runink-Trademark
+     Runink River lockup for DARK grounds, SOURCE (live text). The community mark (the M2
+     mascot, branding/logo/river-mark.svg, as drawn: its dark outline and cream and brown
+     fills carry it on the dark ground) beside a light "Runink River" wordmark (Figtree 700,
+     ink #E4E2D8) and the meaning of the name (Figtree, ink-2 #C6C7B5). `branding/render.sh`
+     (outline mode) expands the mark, outlines the text to paths and writes
+     branding/logo/river-lockup-dark.svg, which every render uses; nothing renders this file
+     directly, so no render depends on an installed font. The ink lockup for light grounds is
+     branding/logo/river-lockup.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="196" viewBox="0 0 1000 196">
+  <!-- RIVER-ART src=logo/river-mark.svg x=-8 y=-10 height=210 -->
+  <text x="226" y="106" fill="#E4E2D8" font-family="Figtree" font-weight="700" font-size="100">Runink River</text>
+  <text x="230" y="158" fill="#C6C7B5" font-family="Figtree" font-weight="500" font-size="26" letter-spacing="0.4"><tspan font-weight="700" fill="#E4E2D8" letter-spacing="3">RIVER</tspan> · Raft-Integrated Validated Event Runtime</text>
+</svg>

@@ -1,0 +1,61 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-k0s — the k0s Kubernetes distribution as a single baked static binary.
+#
+# k0s bundles its own containerd + runc + kube-router + kubelet + kube-apiserver, so the
+# host needs no separate container runtime. The binary is BAKED into the golden image
+# (never `curl | sh` at boot — sovereign nodes don't fetch from the internet at runtime).
+# Pinned in lockstep with build/config.env K0S_VERSION (river lint k0s-pin checks both).
+# The s6 service (k0s-keepalive.sh) + /etc/k0s/k0s.yaml ship via the profile root-overlay.
+# PINNED TO 1.31.2 — the 1.33 "floor" that used to be here is REVERTED, with evidence.
+#
+# That floor was right about kube-router and wrong about the remedy. It said: below 1.33,
+# kube-router is a hard-legacy build (v2.2.1/v2.4.1) that programs NetworkPolicy into
+# iptables-LEGACY while kube-proxy uses NFT, and that really did break in-cluster traffic for
+# weeks. All true.
+#
+# What it could not know: **k0s 1.33 CANNOT START on this fleet at all.** On an IPv6-only
+# cluster it dies before the apiserver, every ~5s, forever:
+#
+#     Error: unsupported operation: DNS address calculation for non-v4 CIDR: fd00:10:96::/108
+#
+# Captured 2026-09-06 by wrapping the binary in a logging shim — the box discards k0s output,
+# which is why an in-place upgrade attempt appeared to fail silently. k0s derives the CoreDNS
+# clusterIP from serviceCIDR and the 1.33 path refuses a v6 CIDR; `--disable-components=coredns`
+# does NOT skip it. 1.33.13 is the newest 1.33, so there is no patch release to move to. 1.34
+# exists but is UNTESTED against this fabric and is not something to pin on a guess.
+#
+# The netfilter problem is therefore solved WITHOUT the version bump: the profile's k0s.yaml
+# pins spec.images.kuberouter.cni to kube-router v2.5.0-iptables1.8.11-0 — the very wrapper
+# build the floor was reaching for — on the k0s that actually runs. Measured on the live box
+# 2026-09-06: legacy 865 -> 3, nft 25 -> 887, and the CI runner that had CrashLoopBackOff'd
+# 139 times came up with zero restarts.
+#
+# DO NOT bump this to 1.33 to "restore the floor" — that reintroduces a cluster that cannot
+# boot. Any future bump must FIRST prove `k0s controller` starts against
+# serviceCIDR fd00:10:96::/108.
+pkgname=runink-k0s
+pkgver=1.31.2
+pkgrel=1
+_k0sver="v1.31.2+k0s.0"
+pkgdesc="k0s Kubernetes (single static binary; bundled containerd/runc/kube-router) for the Runink River fleet"
+arch=('x86_64')
+url="https://k0sproject.io"
+license=('Apache-2.0')
+# iptables (kube-proxy iptables mode + kube-router). containerd/runc are inside the binary.
+depends=('glibc' 'iptables')
+provides=('k0s')
+options=('!strip')
+source=("k0s-${_k0sver}-amd64::https://github.com/k0sproject/k0s/releases/download/${_k0sver}/k0s-${_k0sver}-amd64")
+# Pinned sha256 for the amd64 binary (hardening — makepkg verifies this; build runink-k0s
+# WITHOUT --skipinteg). Re-pin when K0S_VERSION bumps.
+#
+# This value is cross-verified against the binary ACTUALLY RUNNING on the box
+# (sha256sum /usr/bin/k0s), not merely against a fresh download — so the image ships the
+# exact k0s that is known to boot this fabric.
+sha256sums=('c18dd5a522e98fa943c75f009d0d634ed088bb27606865fb479a94b641512085')
+
+package() {
+	install -Dm755 "$srcdir/k0s-${_k0sver}-amd64" "$pkgdir/usr/bin/k0s"
+	# k0s stores cluster/containerd state under /var/lib/k0s (on the ZFS BE).
+	install -d "$pkgdir/var/lib/k0s"
+}

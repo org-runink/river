@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "river",
+  "title": "Runink River",
+  "description": {
+    "en": "A developer workstation: the KDE Plasma desktop on an encrypted disk, with the tools to build software, kept fast and private.",
+    "es": "Una estación de trabajo para desarrolladores: el escritorio KDE Plasma en un disco cifrado, con las herramientas para crear software, rápida y privada.",
+    "fr": "Un poste de travail pour développeurs : le bureau KDE Plasma sur un disque chiffré, avec les outils pour créer des logiciels, rapide et privé.",
+    "pt": "Uma estação de trabalho para desenvolvedores: o ambiente KDE Plasma em um disco criptografado, com as ferramentas para criar software, rápida e privada."
+  },
+  "medium_label": "RIVER",
+  "plan_profile": "workstation",
+  "plan_models": false,
+  "steps": ["00-preflight", "05-hwplan-verify", "10-disk-zfs", "20-clone-rootfs", "30-target-config",
+    "32-locale-keyboard", "35-pacman-keyring", "40-boot-grub-zfs", "50-runink-user", "75-install-plan", "80-enable-s6", "90-export"],
+  "firstboot_ui": false,
+  "hostname": "runink",
+  "admin_user": "runink",
+  "icon": "/usr/share/icons/hicolor/scalable/apps/runink-river.svg"
+}

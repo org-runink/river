@@ -1,0 +1,349 @@
+# Maintainer: Daniel Paes <paes at runink dot org>
+# Contributor: Jan Alexander Steffens (heftig) <heftig@archlinux.org> (linux-zen PKGBUILD this follows)
+#
+# linux-runink: the Runink River kernel, packaged for Arch Linux in the AUR. This is NOT an
+# official Arch Linux package and is not endorsed by Arch Linux; it is a community package.
+#
+# What gets built, all from source:
+#   - the kernel.org 7.2.7 stable tarball (signed by Greg Kroah-Hartman / Linus Torvalds);
+#   - the zen-kernel v7.2.7-zen1 patch (signed by Jan Alexander Steffens, zen's maintainer),
+#     exactly as Arch's linux-zen consumes it;
+#   - the Runink River configuration (config.base + config.delta + config.require), fetched
+#     from a PINNED TAG of the public Runink River repository and checked by sha256. The tag
+#     is named after this package: v${pkgver}-${pkgrel}. config.delta carries the analytics /
+#     throughput profile and the hardening delta; config.require is the floor that prepare()
+#     asserts. Rationale and citations: docs/KERNEL.md in that repository;
+#   - bpfdoc, a Go port of the kernel's scripts/bpf_doc.py, from the same tag and pinned the
+#     same way, so the build needs `go` and no Python (see _install_bpfdoc).
+#
+# It installs next to any other kernel (its own /usr/lib/modules/<release> directory and its
+# own mkinitcpio preset, linux-runink.preset) and boots with mkinitcpio plus systemd-boot or
+# GRUB on stock Arch. Nothing here assumes or excludes an init system.
+#
+# ISA: by default the kernel is compiled with -march=x86-64-v3 (AVX2/BMI2/FMA/MOVBE, the
+# Runink River target). prepare() refuses to build that on a CPU without v3, because the
+# result would not boot there. Set RUNINK_MARCH=x86-64 (or x86-64-v2) to build a generic
+# kernel, or set RUNINK_MARCH=x86-64-v3 explicitly to cross-build for a v3 target on an older
+# build host.
+
+pkgbase=linux-runink
+_major=7.2
+_minor=7
+_zenrel=1
+_kver=${_major}.${_minor}
+pkgver=${_kver}.zen${_zenrel}
+pkgrel=1
+pkgdesc='Runink River kernel for Arch Linux (zen 7.2 stable, analytics and data-pipeline profile)'
+url='https://github.com/org-runink/river'
+arch=(x86_64)
+license=(GPL-2.0-only)
+makedepends=(
+  bc
+  binutils
+  cpio
+  gettext
+  glibc
+  go
+  libelf
+  libgcc
+  openssl
+  pahole
+  perl
+  tar
+  xxhash
+  xz
+  zlib
+  zstd
+)
+options=(
+  !debug
+  !strip
+)
+_srcname=linux-${_kver}
+_zentag=v${_kver}-zen${_zenrel}
+# The Runink River repository tag the three config files are taken from. Raw files served
+# for a tag are the committed blobs byte for byte, so the sha256 pins below hold (unlike
+# GitHub's generated archive tarballs, which are not byte-stable).
+_rivertag=v${pkgver}-${pkgrel}
+_riverraw=https://raw.githubusercontent.com/org-runink/river/${_rivertag}/build/pkgbuilds/runink-kernel
+source=(
+  "https://cdn.kernel.org/pub/linux/kernel/v${_major%%.*}.x/${_srcname}.tar."{xz,sign}
+  "https://github.com/zen-kernel/zen-kernel/releases/download/${_zentag}/linux-${_zentag}.patch.zst"{,.sig}
+  "config.base-${_rivertag}::${_riverraw}/config.base"
+  "config.delta-${_rivertag}::${_riverraw}/config.delta"
+  "config.require-${_rivertag}::${_riverraw}/config.require"
+  "bpfdoc-${_rivertag}.go::https://raw.githubusercontent.com/org-runink/river/${_rivertag}/build/tools/bpfdoc/main.go"
+)
+validpgpkeys=(
+  ABAF11C65A2970B130ABE3C479BE3E4300411886  # Linus Torvalds
+  647F28654894E3BD457199BE38DBBDC86092693E  # Greg Kroah-Hartman
+  83BC8889351B5DEBBB68416EB8AC08600F108CDF  # Jan Alexander Steffens (heftig), signs zen patches
+)
+# Kernel tarball: https://www.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc
+# zen patch: the same pin Arch's linux-zen 7.2.7.zen1-1 carries.
+sha256sums=('4ac34c47db2540ffb2713943f8d891ff1702e0ba6934525a493b7d1cad43145a'
+            'SKIP'
+            'c85f1c9dd1bf06b6766fff71effd194c7a29efa24c61e79343779d323822e1e1'
+            'SKIP'
+            '6bc535a491ae9d68b928a53f481c3f0e8a54b207612a01c4222b0acb1252b219'
+            '215e7ed5aee10bb735f7de8a5b103a798eb6185419e706c49312db51fb2cfb1a'
+            'e5913f21e21ead4f85aa2a3664f0b820ced330cfb05cf9e20a639b23fdd0951b'
+            'adf4435fc6b04da282aba07720173fa3755f6770cf06afddd16edd22dc27ca09')
+
+export KBUILD_BUILD_HOST=archlinux
+export KBUILD_BUILD_USER=$pkgbase
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+# The exact `make kernelrelease` this PKGBUILD may produce: the zen patch sets
+# EXTRAVERSION=-zen1 and localversion.* add -<pkgrel>-runink.
+_kernrel=${_kver}-zen${_zenrel}-${pkgrel}${pkgbase#linux}
+
+# x86-64 microarchitecture level passed through KCFLAGS (zen 7.2 has no ISA Kconfig menu).
+# kbuild's -mno-sse/-mno-avx still win, so no vector code runs in kernel context.
+_march=${RUNINK_MARCH:-x86-64-v3}
+
+# _require_config checks the resolved .config against config.require (SYMBOL=val[|val...];
+# "n" means not set). Every miss is printed, then the build fails.
+_require_config() {
+  local line sym want have alt ok bad=0
+  local -a alts
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    sym=${line%%=*} want=${line#*=}
+    have=$(grep -m1 "^CONFIG_${sym}=" .config | cut -d= -f2-)
+    have=${have:-n}
+    ok=0
+    IFS='|' read -ra alts <<<"$want"
+    for alt in "${alts[@]}"; do [[ $have == "$alt" ]] && ok=1; done
+    if (( ! ok )); then
+      echo "config.require: CONFIG_${sym} is '${have}', need '${want}'" >&2
+      bad=1
+    fi
+  done < "../config.require-${_rivertag}"
+  (( ! bad )) || { echo "config.require: floor not met, refusing to build" >&2; return 1; }
+  echo "config.require: floor OK"
+}
+
+# _check_march refuses to build an x86-64-v3 kernel on a host CPU without v3, unless the
+# builder asked for the level explicitly (cross-building for another machine).
+_check_march() {
+  [[ $_march == x86-64-v3 && -z ${RUNINK_MARCH:-} ]] || return 0
+  local flag
+  for flag in avx2 bmi1 bmi2 fma movbe f16c lzcnt; do
+    [[ $flag == lzcnt ]] && flag=abm
+    if ! grep -qw "$flag" /proc/cpuinfo; then
+      echo "This CPU lacks '$flag', so an x86-64-v3 kernel would not boot on it." >&2
+      echo "Rebuild with RUNINK_MARCH=x86-64 (or x86-64-v2), or set RUNINK_MARCH=x86-64-v3" >&2
+      echo "explicitly to build for a different, v3-capable machine." >&2
+      return 1
+    fi
+  done
+}
+
+# _install_bpfdoc builds bpfdoc (build/tools/bpfdoc in the Runink River repository, fetched
+# from the same tag as the configs) and installs it as scripts/bpf_doc.py. It is a
+# standard-library Go port of that script's --header mode, the only one the kernel build runs
+# (libbpf's bpf_helper_defs.h, for resolve_btfids and bpftool), and its output is
+# byte-identical. So the kernel builds without Python, exactly as the Runink River image's does.
+_install_bpfdoc() {
+  echo "Replacing scripts/bpf_doc.py with bpfdoc (Go; no Python in the kernel build)..."
+  grep -q "PrinterHelpersHeader" scripts/bpf_doc.py || {
+    echo "scripts/bpf_doc.py is not the script bpfdoc ports, refusing to build" >&2
+    return 1
+  }
+  CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS= GOCACHE="$srcdir/go-cache" GOPATH="$srcdir/go" \
+    go build -trimpath -o "$srcdir/bpfdoc" "$srcdir/bpfdoc-${_rivertag}.go"
+  install -m755 "$srcdir/bpfdoc" scripts/bpf_doc.py
+}
+
+prepare() {
+  _check_march
+
+  cd "$_srcname"
+
+  echo "Applying zen patch linux-${_zentag}.patch..."
+  patch -Np1 < "../linux-${_zentag}.patch"
+
+  _install_bpfdoc
+
+  echo "Setting version..."
+  echo "-$pkgrel" > localversion.10-pkgrel
+  echo "${pkgbase#linux}" > localversion.20-pkgname
+
+  echo "Setting config (Runink River config.base, then config.delta)..."
+  cp "../config.base-${_rivertag}" .config
+  make olddefconfig
+  local line
+  while read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    # shellcheck disable=SC2086  # each line is one scripts/config invocation
+    scripts/config $line
+  done < "../config.delta-${_rivertag}"
+  make olddefconfig
+  _require_config
+
+  make -s kernelrelease > version
+  if [[ "$(<version)" != "$_kernrel" ]]; then
+    echo "kernelrelease is '$(<version)', expected '$_kernrel', refusing to build" >&2
+    return 1
+  fi
+  echo "Prepared $pkgbase version $(<version) (-march=${_march})"
+}
+
+build() {
+  cd "$_srcname"
+  make KCFLAGS="-march=${_march}" all
+  make -C tools/bpf/bpftool vmlinux.h feature-clang-bpf-co-re=1
+}
+
+_package() {
+  pkgdesc="The Runink River kernel and modules, for Arch Linux (zen 7.2 stable, analytics profile)"
+  depends=(
+    coreutils
+    initramfs
+    kmod
+  )
+  optdepends=(
+    "$pkgbase-headers: headers and scripts for building modules"
+    'linux-firmware: firmware images needed for some devices'
+    'scx-scheds: to use sched_ext schedulers'
+    'wireless-regdb: to set the correct wireless channels of your country'
+  )
+  provides=(
+    KSMBD-MODULE
+    NTSYNC-MODULE
+    VHBA-MODULE
+    VIRTUALBOX-GUEST-MODULES
+    WIREGUARD-MODULE
+  )
+
+  cd "$_srcname"
+  local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
+
+  echo "Installing boot image..."
+  # mkinitcpio's pacman hook finds the kernel here and writes /boot/vmlinuz-linux-runink.
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+
+  # Used by mkinitcpio to name the kernel and its preset (linux-runink.preset).
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+
+  echo "Installing modules..."
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist modules_install  # depmod runs from kmod's pacman hook
+
+  rm "$modulesdir"/build
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the Runink River kernel (linux-runink)"
+  depends=(
+    binutils
+    glibc
+    libelf
+    libgcc
+    openssl
+    pahole
+    xxhash
+    zlib
+    zstd
+  )
+  provides=(LINUX-HEADERS)
+
+  cd "$_srcname"
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
+  local karch=x86
+
+  echo "Installing build files..."
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
+    localversion.* version vmlinux tools/bpf/bpftool/vmlinux.h
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/$karch" -m644 arch/$karch/Makefile
+  cp -t "$builddir" -a scripts
+  ln -srt "$builddir" "$builddir/scripts/gdb/vmlinux-gdb.py"
+
+  if [[ $(scripts/config -s CONFIG_HAVE_STACK_VALIDATION) = y ]]; then
+    install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+  fi
+
+  if [[ $(scripts/config -s CONFIG_DEBUG_INFO_BTF_MODULES) = y ]]; then
+    install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
+  fi
+
+  echo "Installing headers..."
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/$karch" -a arch/$karch/include
+  install -Dt "$builddir/arch/$karch/kernel" -m644 arch/$karch/kernel/asm-offsets.s
+
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+
+  # https://bugs.archlinux.org/task/13146
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+
+  # https://bugs.archlinux.org/task/20402
+  install -Dt "$builddir/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+  install -Dt "$builddir/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+  install -Dt "$builddir/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+
+  # https://bugs.archlinux.org/task/71392
+  install -Dt "$builddir/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  echo "Installing unstripped VDSO..."
+  make INSTALL_MOD_PATH="$pkgdir/usr" vdso_install \
+    link=  # Suppress build-id symlinks
+
+  echo "Removing unneeded architectures..."
+  local arch
+  for arch in "$builddir"/arch/*/; do
+    [[ $arch = */$karch/ ]] && continue
+    echo "Removing $(basename "$arch")"
+    rm -r "$arch"
+  done
+
+  echo "Removing documentation..."
+  rm -r "$builddir/Documentation"
+
+  echo "Removing broken symlinks..."
+  find -L "$builddir" -type l -printf 'Removing %P\n' -delete
+
+  echo "Removing loose objects..."
+  find "$builddir" -type f -name '*.o' -printf 'Removing %P\n' -delete
+
+  echo "Stripping build tools..."
+  local file
+  while read -rd '' file; do
+    case "$(file -Sib "$file")" in
+      application/x-sharedlib\;*)      # Libraries (.so)
+        strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*)        # Libraries (.a)
+        strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*)     # Binaries
+        strip -v $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) # Relocatable binaries
+        strip -v $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  echo "Stripping vmlinux..."
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+
+  echo "Adding symlink..."
+  mkdir -p "$pkgdir/usr/src"
+  ln -sr "$builddir" "$pkgdir/usr/src/$pkgbase"
+}
+
+pkgname=(
+  "$pkgbase"
+  "$pkgbase-headers"
+)
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done
+
+# vim:set ts=8 sts=2 sw=2 et:

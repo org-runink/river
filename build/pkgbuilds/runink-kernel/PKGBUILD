@@ -1,0 +1,286 @@
+# linux-runink — the Runink sovereign kernel: a fork of zen-kernel, 7.2.x stable series.
+#
+# Source: the official zen kernel (https://github.com/zen-kernel/zen-kernel), pinned to one
+# exact stable tag, v7.2.7-zen1. It is built the way Arch's linux-zen builds it: the kernel.org
+# 7.2.7 stable tarball plus the zen patch that zen publishes with each release tag. Both halves
+# are signed upstream and both signatures are checked:
+#   - linux-7.2.7.tar.xz  -> .tar.sign (of the uncompressed tar), Greg Kroah-Hartman / Linus
+#   - linux-v7.2.7-zen1.patch.zst -> .sig, Jan Alexander Steffens (heftig), zen's maintainer
+# So the kernel.org GPG signature still covers the whole base, and the ~150 KB zen delta has
+# its own maintainer signature. (The alternative, GitHub's auto-generated tag tarball, is not
+# signed by anyone and is not byte-stable; it is deliberately not used.)
+#
+# 7.2 is a MAINLINE STABLE series, not an LTS: kernel.org ends each stable series roughly 9-10
+# weeks after its .0 release. That is the owner's explicit choice over 6.18 LTS (river#84).
+# Bump on every zen stable release of the series, and rebase onto the next series (7.3.x-zen)
+# before 7.2 goes EOL on kernel.org. Each bump re-checks runink-zfs's META range.
+#
+# Config: config.base is the zen config (the linux-zen 7.1.5 config this package shipped before
+# river#84) ported to 7.2.7-zen1 by `make olddefconfig`; config.delta holds our overrides (the
+# hardening delta and the analytics / throughput profile, docs/KERNEL.md), and config.require
+# is the platform floor that prepare() asserts. The README lists the differences from the
+# 6.18.53 config it replaces. packaging/aur/linux-runink builds the same kernel for Arch Linux
+# (AUR) from these three files at a tag; `river lint aur-sync` keeps the pins equal.
+#
+# SOVEREIGN MIRROR: RUNINK_KERNEL_MIRROR / RUNINK_ZEN_MIRROR override the upstream URLs
+# (e.g. RUNINK_KERNEL_MIRROR=https://mirror.example.org/kernel). The checksums and signatures
+# below are the pin, not the URLs, so a mirror can only serve the exact same bytes.
+#
+# NO PYTHON: the kernel's one Python step for this config (libbpf's bpf_helper_defs.h, via
+# scripts/bpf_doc.py) runs build/tools/bpfdoc instead, a stdlib-only Go port that prepare()
+# compiles from the bpfdoc.go source (a link to build/tools/bpfdoc/main.go). See
+# _install_bpfdoc below.
+#
+# The package NAME stays linux-runink (see AGENTS.md, installed-node identifiers): the installer,
+# the closure-lint, the mkinitcpio preset (modules/<rel>/pkgbase) and runink-zfs's
+# /usr/lib/modules/*-runink glob all key off it.
+#
+# Based on Arch's linux-zen PKGBUILD by Jan Alexander Steffens (heftig) <heftig@archlinux.org>.
+pkgbase=linux-runink
+_major=7.2
+_minor=7
+_zenrel=1                  # zen revision of this point release: tag v7.2.7-zen1
+_kver=${_major}.${_minor}
+pkgver=${_kver}.zen${_zenrel}
+pkgrel=1
+pkgdesc='Runink River sovereign kernel (zen-kernel 7.2.x stable fork; analytics profile, hardened, signed-module-ready)'
+url='https://runink.org'
+arch=(x86_64)
+license=(GPL-2.0-only)
+makedepends=(
+  bc binutils cpio gettext glibc go libelf libgcc openssl pahole perl
+  tar xxhash xz zlib zstd
+)
+options=(!debug !strip)
+
+: "${RUNINK_KERNEL_MIRROR:=https://cdn.kernel.org/pub/linux/kernel}"
+: "${RUNINK_ZEN_MIRROR:=https://github.com/zen-kernel/zen-kernel/releases/download}"
+
+_srcname=linux-${_kver}
+_zentag=v${_kver}-zen${_zenrel}
+
+# The exact `make kernelrelease` this PKGBUILD may produce. prepare() fails on anything else:
+# a doubled or missing suffix breaks the module dir, the runink-zfs glob and package().
+# The zen patch sets EXTRAVERSION=-zen1; localversion.* add -<pkgrel>-runink.
+_kernrel=${_kver}-zen${_zenrel}-${pkgrel}${pkgbase#linux}
+
+validpgpkeys=(
+  ABAF11C65A2970B130ABE3C479BE3E4300411886  # Linus Torvalds
+  647F28654894E3BD457199BE38DBBDC86092693E  # Greg Kroah-Hartman
+  83BC8889351B5DEBBB68416EB8AC08600F108CDF  # Jan Alexander Steffens (heftig) — signs zen patches
+)
+# (Public keys are vendored in keys/pgp/ so the build does not need a keyserver:
+#  `gpg --import keys/pgp/*.asc` before makepkg; kernel-build.yml does exactly that.)
+
+source=(
+  "${RUNINK_KERNEL_MIRROR}/v${_major%%.*}.x/${_srcname}.tar."{xz,sign}
+  "${RUNINK_ZEN_MIRROR}/${_zentag}/linux-${_zentag}.patch.zst"{,.sig}
+  config.base config.delta config.require
+  bpfdoc.go
+)
+sha256sums=('4ac34c47db2540ffb2713943f8d891ff1702e0ba6934525a493b7d1cad43145a'
+            'SKIP'
+            'c85f1c9dd1bf06b6766fff71effd194c7a29efa24c61e79343779d323822e1e1'
+            'SKIP'
+            '6bc535a491ae9d68b928a53f481c3f0e8a54b207612a01c4222b0acb1252b219'
+            '215e7ed5aee10bb735f7de8a5b103a798eb6185419e706c49312db51fb2cfb1a'
+            'e5913f21e21ead4f85aa2a3664f0b820ced330cfb05cf9e20a639b23fdd0951b'
+            'adf4435fc6b04da282aba07720173fa3755f6770cf06afddd16edd22dc27ca09')
+
+export KBUILD_BUILD_HOST=runink
+export KBUILD_BUILD_USER=$pkgbase
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+# ISA: generic x86-64-v3 (AVX2/FMA/F16C/MOVBE/BMI2 — Meteor Lake has it, and it has no AVX-512,
+# which v3 does not use). zen 7.2 carries no ISA-level Kconfig (its old MNATIVE_* / GENERIC_CPU
+# menu is gone), so the level goes in through KCFLAGS, which kbuild appends after its own
+# -march=x86-64. The kernel's explicit -mno-sse/-mno-avx (plus zen's -mno-avx2
+# -fno-tree-vectorize) still win, so no FPU/vector code appears in kernel context; what v3 buys
+# is BMI/LZCNT/MOVBE/POPCNT and v3 tuning.
+_isa_kcflags=-march=x86-64-v3
+
+# _require_config checks the resolved .config against config.require (SYMBOL=val[|val...];
+# "n" = not set). Every miss is printed, then the build fails.
+_require_config() {
+  local line sym want have alt ok bad=0
+  local -a alts
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    sym=${line%%=*} want=${line#*=}
+    have=$(grep -m1 "^CONFIG_${sym}=" .config | cut -d= -f2-)
+    have=${have:-n}
+    ok=0
+    IFS='|' read -ra alts <<<"$want"
+    for alt in "${alts[@]}"; do [[ $have == "$alt" ]] && ok=1; done
+    if (( ! ok )); then
+      echo "config.require: CONFIG_${sym} is '${have}', need '${want}'" >&2
+      bad=1
+    fi
+  done < ../config.require
+  (( ! bad )) || { echo "config.require: platform floor not met — refusing to build" >&2; return 1; }
+  echo "config.require: platform floor OK"
+}
+
+# _install_bpfdoc puts bpfdoc (build/tools/bpfdoc, a Go port of scripts/bpf_doc.py) at
+# scripts/bpf_doc.py, so the kernel builds with no Python interpreter. The only thing this
+# config makes the kernel run in Python is libbpf's generation of bpf_helper_defs.h
+# (`scripts/bpf_doc.py --header --file tools/include/uapi/linux/bpf.h`), for
+# tools/bpf/resolve_btfids (CONFIG_DEBUG_INFO_BTF) and bpftool's bootstrap (vmlinux.h below);
+# the Makefiles execute the file directly, so a binary under that name runs unchanged.
+# bpfdoc's output is byte-identical to bpf_doc.py's for this kernel (its tests pin it). The
+# guard fails the build if the script it replaces no longer looks like the one ported.
+_install_bpfdoc() {
+  echo "Replacing scripts/bpf_doc.py with bpfdoc (Go; no Python in the kernel build)..."
+  grep -q "PrinterHelpersHeader" scripts/bpf_doc.py || {
+    echo "scripts/bpf_doc.py is not the script bpfdoc ports; re-port build/tools/bpfdoc" >&2
+    return 1
+  }
+  CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS= GOCACHE="$srcdir/go-cache" GOPATH="$srcdir/go" \
+    go build -trimpath -o "$srcdir/bpfdoc" "$srcdir/bpfdoc.go"
+  # (go build refuses to write over a file that is not an object file, hence the install.)
+  install -m755 "$srcdir/bpfdoc" scripts/bpf_doc.py
+}
+
+prepare() {
+  cd "$_srcname"
+
+  # makepkg has already verified the .zst against its .sig and decompressed it.
+  echo "Applying zen patch linux-${_zentag}.patch..."
+  patch -Np1 -i "../linux-${_zentag}.patch"
+
+  _install_bpfdoc
+
+  echo "Setting version..."
+  echo "-$pkgrel" > localversion.10-pkgrel
+  echo "${pkgbase#linux}" > localversion.20-pkgname   # -> "-runink"
+
+  echo "Setting config (config.base: zen config ported to 7.2)..."
+  cp ../config.base .config
+  make olddefconfig
+
+  echo "Applying Runink sovereignty/hardening deltas (config.delta)..."
+  local line
+  while read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    # shellcheck disable=SC2086
+    scripts/config $line
+  done < ../config.delta
+
+  echo "Pre-generating the module-signing key at the default path (kbuild only auto-generates
+        the DEFAULT certs/signing_key.pem; a custom MODULE_SIG_KEY path must already exist)..."
+  mkdir -p certs
+  cat > certs/x509.genkey <<'GENKEY'
+[ req ]
+default_bits = 4096
+distinguished_name = req_dn
+prompt = no
+x509_extensions = myexts
+[ req_dn ]
+CN = Runink sovereign module signing key
+[ myexts ]
+basicConstraints=critical,CA:FALSE
+keyUsage=digitalSignature
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+GENKEY
+  openssl req -new -nodes -utf8 -sha256 -days 36500 -batch -x509 \
+    -config certs/x509.genkey -outform PEM \
+    -out certs/signing_key.pem -keyout certs/signing_key.pem
+  # leave CONFIG_MODULE_SIG_KEY at its default ("certs/signing_key.pem") — now it exists.
+
+  make olddefconfig   # re-resolve after our deltas
+  _require_config
+
+  # GUARD: the kernel release must be exactly the pinned string.
+  make -s kernelrelease > version
+  if [[ "$(<version)" != "$_kernrel" ]]; then
+    echo "kernelrelease is '$(<version)', pinned '$_kernrel' — refusing to build" >&2
+    return 1
+  fi
+  echo "Prepared $pkgbase version $(<version)"
+}
+
+build() {
+  cd "$_srcname"
+  make KCFLAGS="$_isa_kcflags" all
+  make -C tools/bpf/bpftool vmlinux.h feature-clang-bpf-co-re=1
+  # The guard again, on what was actually built.
+  [[ "$(<include/config/kernel.release)" == "$_kernrel" ]] || {
+    echo "built kernel.release '$(<include/config/kernel.release)' != pinned '$_kernrel'" >&2
+    return 1
+  }
+  # Export the build signing key so runink-zfs can sign its OOT module with the SAME key
+  # (needed once MODULE_SIG_FORCE/lockdown are turned on in the staged v3).
+  install -Dm600 certs/signing_key.pem "$startdir/runink_signing.pem" 2>/dev/null || true
+}
+
+_package() {
+  pkgdesc="The $pkgdesc — kernel image + modules"
+  depends=(coreutils initramfs kmod)
+  optdepends=("$pkgbase-headers: build out-of-tree modules (runink-zfs)"
+              'wireless-regdb: correct wireless channels'
+              'scx-scheds: sched_ext schedulers (CONFIG_SCHED_CLASS_EXT=y)')
+  provides=(KSMBD-MODULE NTSYNC-MODULE VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
+  cd "$_srcname"
+  local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
+  echo "Installing boot image..."
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"   # mkinitcpio kernel name
+  echo "Installing modules..."
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist modules_install
+  rm "$modulesdir"/build
+}
+
+_package-headers() {
+  pkgdesc="Headers + scripts to build modules against $pkgbase (e.g. runink-zfs)"
+  depends=(binutils glibc libelf libgcc openssl pahole xxhash zlib zstd)
+  provides=(LINUX-HEADERS)
+  cd "$_srcname"
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build" karch=x86
+  echo "Installing build files..."
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
+    localversion.* version vmlinux tools/bpf/bpftool/vmlinux.h
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/$karch" -m644 arch/$karch/Makefile
+  cp -t "$builddir" -a scripts
+  ln -srt "$builddir" "$builddir/scripts/gdb/vmlinux-gdb.py"
+  [[ $(scripts/config -s CONFIG_HAVE_STACK_VALIDATION) = y ]] && \
+    install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+  [[ $(scripts/config -s CONFIG_DEBUG_INFO_BTF_MODULES) = y ]] && \
+    install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
+  echo "Installing headers..."
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/$karch" -a arch/$karch/include
+  install -Dt "$builddir/arch/$karch/kernel" -m644 arch/$karch/kernel/asm-offsets.s
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+  echo "Installing unstripped VDSO..."
+  make INSTALL_MOD_PATH="$pkgdir/usr" vdso_install link=
+  local arch
+  for arch in "$builddir"/arch/*/; do [[ $arch = */$karch/ ]] && continue; rm -r "$arch"; done
+  rm -r "$builddir/Documentation" 2>/dev/null || true
+  find -L "$builddir" -type l -delete
+  find "$builddir" -type f -name '*.o' -delete
+  local file
+  while read -rd '' file; do
+    case "$(file -Sib "$file")" in
+      application/x-sharedlib\;*)      strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*)        strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*)     strip -v $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) strip -v $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+  mkdir -p "$pkgdir/usr/src"; ln -sr "$builddir" "$pkgdir/usr/src/$pkgbase"
+}
+
+pkgname=("$pkgbase" "$pkgbase-headers")
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done

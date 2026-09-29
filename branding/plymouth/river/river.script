@@ -1,0 +1,76 @@
+# river.script — Plymouth "script" theme for the Runink River boot.
+#
+# Three horizontally tileable wave strips (stream0..2.png, 200px period at source scale)
+# scroll at different speeds under the Runink River lockup (logo.png), so the current
+# appears to flow. branding/render.sh renders the strips from branding/src/plymouth/*.svg
+# and logo.png from branding/src/plymouth/logo.svg (the community mark + the wordmark). One sage strand.
+
+Window.SetBackgroundTopColor(0.129, 0.129, 0.129);     # #212121  ground
+Window.SetBackgroundBottomColor(0.173, 0.180, 0.188);  # #2C2E30  surface
+
+W = Window.GetWidth();
+H = Window.GetHeight();
+
+# ── lockup ───────────────────────────────────────────────────────────────────────────────
+logo.raw = Image("logo.png");
+logo.scale = Math.Min(1, (W * 0.42) / logo.raw.GetWidth());
+logo.image = logo.raw.Scale(logo.raw.GetWidth() * logo.scale, logo.raw.GetHeight() * logo.scale);
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Math.Int(W / 2 - logo.image.GetWidth() / 2));
+logo.sprite.SetY(Math.Int(H * 0.40 - logo.image.GetHeight() / 2));
+logo.sprite.SetZ(10);
+
+# ── streams ────────────────────────────────────────────────────────────────────────────
+# Source tiles are 1600px wide; 1400px of them cover the screen, the spare 200px (one
+# period) is what the scroll consumes before it wraps back to 0 seamlessly.
+s = W / 1400;
+period = 200 * s;
+for (i = 0; i < 3; i++) {
+	raw = Image("stream" + i + ".png");
+	stream[i].image = raw.Scale(raw.GetWidth() * s, raw.GetHeight() * s);
+	stream[i].sprite = Sprite(stream[i].image);
+	stream[i].sprite.SetY(Math.Int(H * 0.62 + i * 26 * s));
+	stream[i].sprite.SetZ(5 - i);
+	stream[i].speed = (1.6 - i * 0.45) * s;
+	stream[i].offset = i * 60 * s;
+}
+
+fun refresh_callback() {
+	for (i = 0; i < 3; i++) {
+		global.stream[i].offset = stream[i].offset + stream[i].speed;
+		if (stream[i].offset >= period)
+			global.stream[i].offset = stream[i].offset - period;
+		stream[i].sprite.SetX(Math.Int(-stream[i].offset));
+	}
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# ── boot messages (e.g. "Press Ctrl-Alt-Del"), shown small under the streams ──────────
+message.sprite = Sprite();
+message.sprite.SetZ(20);
+fun message_callback(text) {
+	global.message.image = Image.Text(text, 0.776, 0.780, 0.710);  # #C6C7B5  ink-2
+	message.sprite.SetImage(message.image);
+	message.sprite.SetX(Math.Int(W / 2 - message.image.GetWidth() / 2));
+	message.sprite.SetY(Math.Int(H * 0.86));
+}
+Plymouth.SetMessageFunction(message_callback);
+
+# ── password prompt (a ZFS-encrypted root would ask here) ─────────────────────────────
+prompt.sprite = Sprite();
+prompt.sprite.SetZ(30);
+fun display_normal_callback() {
+	prompt.sprite.SetOpacity(0);
+}
+fun display_password_callback(prompt_text, bullets) {
+	line = prompt_text + "  ";
+	for (b = 0; b < bullets; b++)
+		line = line + "*";
+	global.prompt.image = Image.Text(line, 0.894, 0.886, 0.847);  # #E4E2D8  ink
+	prompt.sprite.SetImage(prompt.image);
+	prompt.sprite.SetX(Math.Int(W / 2 - prompt.image.GetWidth() / 2));
+	prompt.sprite.SetY(Math.Int(H * 0.78));
+	prompt.sprite.SetOpacity(1);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);

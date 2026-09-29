@@ -1,0 +1,18 @@
+{
+  "schema": "river.install-plan/v1",
+  "verdict": "degraded",
+  "warnings": ["only one eligible disk: no redundancy"],
+  "lab": false,
+  "profile": {"iso": "river", "class": "standard"},
+  "cpu": {"physical_cores": 16, "reserved_cores": 2, "inference_threads": 14, "isa_build": "x86-64-v3"},
+  "memory": {"total_mib": 95232, "reserved_mib": 8192, "headroom_mib": 4096, "models_mib": 30000},
+  "tiers": [{"tier": "embedding", "mandatory": true, "status": "enabled", "variant": "embed-small", "context_tokens": 8192, "threads": 4,
+             "env": {"SECRET_LOOKING": "not decoded"}}],
+  "storage": {"layout": "single", "boot_disk": "nvme0n1",
+              "disks": [{"name": "nvme0n1", "by_id": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7KHNJ0W123456X", "confirm_id": "S7KHNJ0W123456X",
+                         "size_bytes": 2000398934016, "kind": "nvme", "model": "Samsung SSD 990 PRO 2TB"}],
+              "data_vdevs": [{"type": "disk", "disks": ["nvme0n1"]}], "usable_bytes_estimate": 1900000000000,
+              "unused": [{"name": "sda", "reason": "install medium; sda1 is mounted at /run/media/alice/DCC1-80A3"}], "encryption": "aes-256-gcm"},
+  "zfs": {"arc_max_bytes": 17179869184},
+  "swap": {"zram_mib": 4096}
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Runink
+     SPDX-License-Identifier: LicenseRef-Runink-Trademark
+     The Runink tagline, SOURCE (live text, Playfair Display Italic 400). `branding/render.sh
+     --outline` outlines it to branding/logo/runink-tagline.svg. Dark-ground colour: ink-2. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="80" viewBox="0 0 1400 80">
+  <text x="0" y="56" fill="#C6C7B5" font-family="Playfair Display" font-style="italic" font-weight="400" font-size="52">Data You Can Trust. Decisions You Can Defend.</text>
+</svg>

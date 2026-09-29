@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# public-leak.allow — the exceptions `river lint public-leak` accepts
+# (cli/internal/lint/publicleak.go; the rules are in AGENTS.md, "Public repository").
+#
+# One entry per line:   rule | path-glob | matched text | reason
+#   rule          a rule id from publicleak.go, or * for every rule
+#   path-glob     path.Match syntax, or dir/** for a whole tree
+#   matched text  exactly what the rule matched (case-insensitive), or * for anything
+#   reason        why this is not a leak. Required.
+# An entry that matches nothing any more fails the lint: delete it.
+#
+# Add an entry only for a FALSE positive (an ordinary word, a kernel option, an upstream
+# author, a documentation or test address). A real leak is fixed by rewording, never listed.
+
+# The lint's tests use made-up terms and addresses; this file describes the patterns. (The
+# lint itself keeps its names as digests, so it needs no entry.)
+* | cli/internal/lint/publicleak_test.go | * | the lint's tests
+* | scripts/public-leak.allow            | * | this file
+
+# Documented example and test IPv6 unique-local prefixes: k0s's pod and service ranges
+# (fd00:10:244::/56, fd00:10:96::/108), the QEMU test networks, the cloud image's on-instance
+# address ("Rivr" in ASCII), and fd00::/8 itself in test fixtures.
+ula | ** | fd00:10   | the k0s pod/service ULA ranges the image configures
+ula | ** | fd00:5eed | the QEMU restricted test network
+ula | ** | fd52:4956 | the QEMU user-mode test network
+ula | ** | fd52:6976 | the cloud image's on-instance node address, never routed
+ula | ** | fd00:     | fd00::/8 and fd00::1 as test and example addresses
+
+# Upstream authors and identifiers that look like e-mail addresses.
+email | branding/wallpapers/emerald/**                            | rkstrdee@gmail.com | upstream author of the GPL-3.0 wallpapers (attribution the licence requires)
+email | iso-profiles/river/root-overlay/usr/share/wallpapers/**   | rkstrdee@gmail.com | the same attribution, in the rendered copies
+email | REUSE.toml                                                | rkstrdee@gmail.com | the same attribution, as SPDX-FileCopyrightText
+email | build/pkgbuilds/runink-kernel/PKGBUILD                    | heftig@archlinux.org | credit to the Arch linux-zen PKGBUILD this follows
+email | packaging/aur/linux-runink/PKGBUILD                       | heftig@archlinux.org | the same credit, in the AUR copy
+email | packaging/aur/PUBLISHING.md                               | aur@aur.archlinux.org | the AUR's own SSH endpoint
+email | installer/**                                              | sk-ssh-ed25519@openssh.com | an OpenSSH key type, not an address
+email | installer/**                                              | sk-ecdsa-sha2-nistp256@openssh.com | an OpenSSH key type, not an address
+email | .github/workflows/docs-deploy.yml                         | action@github.com | GitHub Actions' conventional commit identity
+email | docs/CLOUD-IMAGES.md                                      | river-node@PROJECT.iam.gserviceaccount.com | a placeholder service-account name
+
+# The lead maintainer's own published contact, where a named maintainer is required: the
+# maintainers table, the LF proposal's maintainer list, and the uid of the release key
+# (which carries the address itself). Nowhere else: other files point at MAINTAINERS.md.
+email | MAINTAINERS.md                          | paes@runink.org | the maintainers table (LF requires a named contact)
+email | docs/governance/lfaidata-proposal.md    | paes@runink.org | the proposal's maintainer list
+email | KEYS                                    | paes@runink.org | the uid of the published release key, stated as a fact
+
+# Private-range IPv4 addresses that are fixed by QEMU or by the image's own configuration,
+# not addresses of any real network.
+internal-ip | ** | 10.0.2.2      | QEMU user-mode networking's gateway
+internal-ip | ** | 10.0.2.3      | QEMU user-mode networking's DNS
+internal-ip | ** | 10.0.2.15     | QEMU user-mode networking's first guest address
+internal-ip | docs/*.md | 192.168.255.0 | the NAT64 (TAYGA) dynamic pool the image configures
+internal-ip | guide/redact/redact_test.go | 192.168.1.20 | a test input for the log redactor
+
+# The [runink] repository guard refuses private and server build directories; its tests must
+# feed it the downstream server profile's directory name to prove the refusal.
+server-name | cli/internal/repocmd/repocmd_test.go | runink-server | the repo guard's tests feed it the name it must refuse

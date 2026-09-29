@@ -1,0 +1,327 @@
+# runink-zfs — OpenZFS built FROM SOURCE against linux-runink-headers, as a SPLIT package:
+#
+#   runink-zfs        spl.ko / zfs.ko for linux-runink's exact KERNELRELEASE (modules only)
+#   runink-zfs-utils  the matching userland, udev rules and the mkinitcpio `zfs` hook
+#
+# Both halves come out of ONE configure + make of ONE signed tarball, so the userland and the
+# module are the same OpenZFS release by construction, not by coordination.
+#
+# The v2 unlock the sovereign kernel enables: we compile a pinned, signed OpenZFS release against
+# OUR kernel's headers, so the module set matches linux-runink's KERNELRELEASE and is regenerated
+# reproducibly on every kernel bump — no running box to scrape, no version guessing.
+#
+# Module signing (v3): if linux-runink's per-build signing key is present next to this build
+# (../runink-kernel/runink_signing.pem, exported by the kernel PKGBUILD), spl.ko/zfs.ko are
+# signed with it — the SAME key that signs the in-tree modules — so `lockdown=integrity` +
+# MODULE_SIG_FORCE become viable. Signing is best-effort here (v2): the kernel does NOT yet
+# force signatures, so an unsigned build still loads; v3 flips MODULE_SIG_FORCE and this signing
+# becomes load-bearing. See build/pkgbuilds/runink-kernel/README.md (staged v1→v2→v3).
+#
+# The compiler runs in CI (zfs-build.yml, a throwaway Artix container) or the builder
+# container — never on the installed image, which carries no C toolchain.
+pkgbase=runink-zfs
+pkgname=(runink-zfs runink-zfs-utils)
+# Built from the SIGNED OpenZFS STABLE release tarball, pinned exactly. linux-runink is the zen
+# 7.2.x stable fork (7.2.7-zen1), and OpenZFS 2.4.4's META declares Linux-Minimum 4.18 /
+# Linux-Maximum 7.2, so this stable release covers the whole 7.2 series (2.4.4 is also the
+# newest OpenZFS stable as of 2026-09-23). prepare() re-checks that range against the installed
+# linux-runink-headers and refuses to build outside it, so the 7.2 -> 7.3 rebase of
+# linux-runink fails HERE until an OpenZFS stable that declares 7.3 is pinned. (Before 6.18 LTS
+# this was a pinned master commit, 2.4.99, because the 7.1 zen kernel was newer than any stable
+# OpenZFS supported; 7.2 is inside 2.4.4's range, so no master commit is needed.)
+pkgver=2.4.4
+pkgrel=3   # 3: --with-python=no (no arc_summary/arcstat/dbufstat scripts); 2: rebuilt against linux-runink 7.2.7-zen1
+pkgdesc="OpenZFS ${pkgver} (stable) built from source against linux-runink — Runink River Server image"
+arch=(x86_64)
+url="https://openzfs.org"
+license=(CDDL-1.0)
+# Compiled against the kernel build tree that linux-runink-headers installs at
+# /usr/lib/modules/<KERNELRELEASE>/build. The release tarball ships a pre-generated ./configure,
+# so no autotools are needed. libudev + pam are the userland's link-time deps (Artix [system]).
+makedepends=(linux-runink-headers linux-runink bc perl libaio libtirpc ncurses openssl
+             libudev pam zlib util-linux-libs)
+# WHY THE USERLAND IS BUILT HERE TOO (history, in order):
+#
+# 1. This package once shipped OpenZFS's whole userland and conflicted with zfs-utils. That
+#    broke the boot: the `zfs` INITCPIO HOOK (/usr/lib/initcpio/{install,hooks}/zfs) is not
+#    part of OpenZFS upstream (its contrib/ ships initramfs-tools and dracut, no mkinitcpio);
+#    archzfs maintains it and only archzfs's zfs-utils shipped it. Verified against the built
+#    artifact: modules plus etc/zfs and zed.d, ZERO usr/lib/initcpio entries. An image built
+#    that way dies at `mkinitcpio -P` with "Hook 'zfs' cannot be found" — unbootable.
+#
+# 2. The fix for that made this package modules-only and depends=(zfs-utils), resolved from
+#    the archzfs.com repo. That repo serves zfs-utils 2.3.3, against these 2.4.4 modules.
+#    OpenZFS does not promise arbitrary userland/module pairings, and a 2.3 zpool driving a
+#    2.4 module is exactly the pairing that fails at pool import or on a feature flag at
+#    first boot. (Artix itself packages no zfs-utils at all — checked against [system],
+#    [world], [galaxy] — so archzfs was the only source.)
+#
+# 3. Now: runink-zfs-utils is built from the SAME 2.4.4 tarball in the same build, and carries
+#    the initcpio hook itself. The hook files are VENDORED from archzfs, byte-for-byte, at
+#    github.com/archzfs/archzfs commit d85933f5c001901511d730420fa78858590b1fb8
+#    (src/zfs-utils/zfs-utils.initcpio.{hook,install}; archzfs master targets OpenZFS 2.4.4),
+#    and pinned by sha256 below. Their archzfs zfsencryptssh and tpm2-systemd-creds extras are
+#    NOT shipped: the first needs dropbear/netconf hooks this image lacks, the second is a
+#    systemd-creds key provider, and this is an s6 image.
+#    The package function mirrors archzfs's package_zfs-utils (same configure paths, same
+#    removals, same modules-load.d/zfs.conf), with two deliberate differences: systemd is
+#    configured OFF and asserted absent (s6 invariant), and pyzfs is off (no python runtime
+#    dependency on the node).
+#
+# The version pin is `runink-zfs-utils=${pkgver}` on runink-zfs, and runink-zfs-utils
+# provides zfs-utils=${pkgver} / conflicts with zfs-utils — so archzfs's 2.3.3 cannot be
+# co-installed, cannot satisfy the dependency, and is not needed by any profile.
+#
+# The remaining module conflict is real: zfs-dkms is an alternative source of the same modules.
+# !strip: stripping a signed .ko discards its signature. runink-zfs-utils overrides this.
+options=(!strip !debug)
+# SOVEREIGN MIRROR: RUNINK_ZFS_MIRROR overrides the upstream URL; the sha256 + signature are the
+# pin, so a mirror can only serve the same bytes.
+: "${RUNINK_ZFS_MIRROR:=https://github.com/openzfs/zfs/releases/download}"
+source=("${RUNINK_ZFS_MIRROR}/zfs-${pkgver}/zfs-${pkgver}.tar.gz"{,.asc}
+        zfs-utils.initcpio.install    # vendored from archzfs @ d85933f5 (see above)
+        zfs-utils.initcpio.hook)      # vendored from archzfs @ d85933f5 (see above)
+# sha256 matches upstream's signed zfs-2.4.4.sha256.asc; the .asc verifies with the key below.
+sha256sums=('2a3c70d55a37cc71618a95a60e81ad66530201eb118d37741dc92efcf848c8b1'
+            'SKIP'
+            'c9d53245ce68ccc3e75ccec5390391a92227096e1771943ab0aaf64f977db7c0'
+            '0192bab80bf4bc028034b9e98b18975a0b1fd2acacae8ff8910f5cac0bf2488e')
+validpgpkeys=(4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027)  # Tony Hutter (OpenZFS release signing)
+# (public key vendored in keys/pgp/; zfs-build.yml imports it before makepkg)
+_srcdir="zfs-${pkgver}"
+
+# _kernrelease resolves linux-runink's exact KERNELRELEASE (the module dir name), so the module
+# set always matches whatever linux-runink-headers is installed — never a hardcoded version.
+_kernrelease() {
+  local d
+  for d in /usr/lib/modules/*-runink; do
+    [[ -e "$d/build/Makefile" ]] && { basename "$d"; return 0; }
+  done
+  return 1
+}
+
+# GUARD: the installed linux-runink must sit inside the kernel range this OpenZFS release
+# declares in META. configure checks this too, but only deep in its output; fail early and
+# say why.
+prepare() {
+  cd "$_srcdir"
+  local kver kmaj kmin min max
+  kver="$(_kernrelease)" || { echo "runink-zfs: linux-runink-headers not installed" >&2; return 1; }
+  IFS=. read -r kmaj kmin _ <<<"${kver%%-*}"
+  min="$(sed -n 's/^Linux-Minimum: *//p' META)"
+  max="$(sed -n 's/^Linux-Maximum: *//p' META)"
+  _vle() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" == "$1" ]]; }
+  if ! _vle "$min" "$kmaj.$kmin" || ! _vle "$kmaj.$kmin" "$max"; then
+    echo "runink-zfs: OpenZFS ${pkgver} supports Linux ${min}..${max}, kernel is ${kver}" >&2
+    return 1
+  fi
+  echo "runink-zfs: kernel ${kver} is inside OpenZFS ${pkgver}'s range ${min}..${max}"
+}
+
+build() {
+  cd "$_srcdir"
+  local kver kbuild
+  kver="$(_kernrelease)" || { echo "runink-zfs: linux-runink-headers not installed" >&2; return 1; }
+  kbuild="/usr/lib/modules/${kver}/build"
+  echo "runink-zfs: building against linux-runink ${kver} (${kbuild})"
+
+  # ONE configure for both packages (--with-config=all is the default: kernel + user).
+  # Paths mirror archzfs's zfs-utils build (--libexecdir=/usr/lib, zfsexecdir=/usr/lib/zfs,
+  # localstatedir=/var), so an existing node that swaps zfs-utils for runink-zfs-utils keeps
+  # every file where it was. Deliberate differences from archzfs: systemd and SysV init
+  # OFF (s6 image; package_runink-zfs-utils asserts no systemd artefact survives), and pyzfs
+  # OFF (no python runtime dependency on the node). --with-python=no also drops the four
+  # interpreter scripts (zarcstat, zarcsummary, dbufstat, zilstat) that 2.4.4-2 shipped to a node
+  # with no interpreter, and lets the build run without one (verify-kernel-zfs.sh checks).
+  ./configure \
+    --prefix=/usr --sysconfdir=/etc --sbindir=/usr/bin --libdir=/usr/lib \
+    --datadir=/usr/share --includedir=/usr/include --with-udevdir=/usr/lib/udev \
+    --libexecdir=/usr/lib --with-zfsexecdir=/usr/lib/zfs --with-mounthelperdir=/usr/bin \
+    --localstatedir=/var --without-libunwind \
+    --with-linux="${kbuild}" --with-linux-obj="${kbuild}" \
+    --enable-linux-builtin=no --enable-systemd=no --enable-sysvinit=no --enable-pyzfs=no \
+    --with-python=no
+  make
+
+  # v3-ready: sign the OOT modules with the kernel's build key if it's present (same key as the
+  # in-tree modules). Best-effort in v2 (sigs not forced yet).
+  local key="${startdir}/../runink-kernel/runink_signing.pem"
+  local signer="${kbuild}/scripts/sign-file"
+  if [[ -f "$key" && -x "$signer" ]]; then
+    echo "runink-zfs: signing modules with linux-runink build key"
+    find module -name '*.ko' -exec "$signer" sha512 "$key" "$key" {} \;   # = MODULE_SIG_HASH
+  else
+    echo "runink-zfs: kernel signing key not found — modules unsigned (fine until v3 MODULE_SIG_FORCE)"
+  fi
+}
+
+package_runink-zfs() {
+  pkgdesc="OpenZFS ${pkgver} kernel modules (spl, zfs) built against linux-runink — Runink River Server image"
+  # Pinned to the userland built from this same tarball. `=${pkgver}` (not a bare name): a
+  # zfs-utils of any other release must never satisfy it — that skew is what this split fixes.
+  depends=("runink-zfs-utils=${pkgver}")
+  provides=(zfs)
+  conflicts=(zfs-dkms)
+  install=runink-zfs.install
+
+  cd "$_srcdir"
+  make DESTDIR="$pkgdir" install
+  local kver; kver="$(_kernrelease)"
+
+  # MERGED-USR FIXUP — without this the package cannot be installed at all.
+  #
+  # OpenZFS's `make install` follows the kernel convention and writes modules to
+  # $DESTDIR/lib/modules/<kver>/. Everything below operates on
+  # $pkgdir/usr/lib/modules/<kver>/, which `make install` never populated — so the real
+  # modules stayed under lib/ while this function created a stray marker beside them under
+  # usr/lib/. The built package therefore contained BOTH paths:
+  #
+  #   lib/modules/<kernelrelease>/extra/{spl,zfs}.ko.zst   (the real modules)
+  #   usr/lib/modules/...                                       (the marker)
+  #
+  # Artix is merged-usr: /lib is a SYMLINK to /usr/lib. pacman refuses to extract a real
+  # directory over a symlink, so `pacman -U` on this package fails outright. Measured on
+  # the artifact from run 33984684885. This package has never been installable, which is
+  # the likeliest reason the linux-runink/runink-zfs pair was built and then never adopted
+  # by any profile — the swap could not have worked.
+  if [ -d "$pkgdir/lib/modules" ]; then
+    install -d "$pkgdir/usr/lib"
+    cp -a "$pkgdir/lib/modules/." "$pkgdir/usr/lib/modules/"
+    rm -rf "$pkgdir/lib/modules"
+    rmdir "$pkgdir/lib" 2>/dev/null || true
+  fi
+  # Nothing may remain under a real /lib — that is precisely what pacman rejects.
+  if [ -e "$pkgdir/lib" ]; then
+    echo "runink-zfs: \$pkgdir/lib still exists after the merged-usr fixup:" >&2
+    find "$pkgdir/lib" | head -20 >&2
+    return 1
+  fi
+
+  # Move the built modules into the kernel's extra/ dir and zstd-compress, matching the golden
+  # image's module layout.
+  install -d "$pkgdir/usr/lib/modules/${kver}/extra"
+  find "$pkgdir/usr/lib/modules/${kver}" -name '*.ko' -print0 | while IFS= read -r -d '' ko; do
+    mv "$ko" "$pkgdir/usr/lib/modules/${kver}/extra/"
+  done
+  find "$pkgdir/usr/lib/modules/${kver}/extra" -name '*.ko' -exec zstd -19 --rm -q {} \;
+  # Prune empty upstream module subdirs OpenZFS created outside extra/.
+  find "$pkgdir/usr/lib/modules/${kver}" -type d -empty -delete 2>/dev/null || true
+
+  # Record the pinned kernel release for the .install depmod hook.
+  echo "${kver}" > "$pkgdir/usr/lib/modules/${kver}/.runink-zfs-kver" 2>/dev/null || true
+
+  # MODULES ONLY — delete everything `make install` laid down that is NOT a kernel module.
+  #
+  # The userland from this same `make install` is packaged by package_runink-zfs-utils
+  # below. Shipping it here as well would make every userland file a pacman file conflict
+  # between the two halves of this split, so the modules package keeps modules and nothing
+  # else. (Historically: this package once shipped the userland and conflicted with
+  # zfs-utils, which removed the initcpio hook and made the image unbootable — see the
+  # header.)
+  #
+  # Done as an allowlist — keep usr/lib/modules, drop the rest — rather than a list of
+  # things to remove. A denylist silently ships whatever a future OpenZFS release adds.
+  find "$pkgdir" -mindepth 1 -maxdepth 1 ! -name usr -exec rm -rf {} + 2>/dev/null || true
+  if [ -d "$pkgdir/usr" ]; then
+    find "$pkgdir/usr" -mindepth 1 -maxdepth 1 ! -name lib -exec rm -rf {} + 2>/dev/null || true
+  fi
+  if [ -d "$pkgdir/usr/lib" ]; then
+    find "$pkgdir/usr/lib" -mindepth 1 -maxdepth 1 ! -name modules -exec rm -rf {} + 2>/dev/null || true
+  fi
+
+  # Assert the result really is modules-and-nothing-else. Without this the allowlist above
+  # could silently stop matching (a path move upstream) and we would be back to shipping a
+  # conflicting userland.
+  _stray="$(find "$pkgdir" -mindepth 1 -type f ! -path "$pkgdir/usr/lib/modules/*" | head -5)"
+  if [ -n "$_stray" ]; then
+    echo "runink-zfs: non-module files survived the modules-only prune:" >&2
+    printf '  %s\n' $_stray >&2
+    return 1
+  fi
+  if ! find "$pkgdir/usr/lib/modules" -name 'zfs.ko*' | grep -q .; then
+    echo "runink-zfs: no zfs.ko in the package — the build produced no module" >&2
+    return 1
+  fi
+}
+
+package_runink-zfs-utils() {
+  pkgdesc="OpenZFS ${pkgver} userland, udev rules and mkinitcpio zfs hook, matched to runink-zfs — s6, no systemd units"
+  # Userland binaries are ordinary ELF — strip them (the global !strip exists for signed .ko).
+  options=(strip !debug)
+  # archzfs's zfs-utils depends list, minus systemd/systemd-libs (Artix splits libudev out of
+  # systemd-libs as its own package, so it is named directly).
+  depends=(bash coreutils diffutils findutils gawk glibc grep inetutils kmod libgcc libtirpc
+           libudev openssl pam sed util-linux util-linux-libs zlib)
+  optdepends=("mkinitcpio: the zfs initcpio hook (ZFS root)"
+              "nfs-utils: NFS sharing"
+              "samba: SMB sharing"
+              "smartmontools: SMART health information in zpool status")
+  # provides the versioned name so anything that asks for zfs-utils gets THIS build, and
+  # conflicts so archzfs's (2.3.3 at the time of writing) can never be installed beside it.
+  provides=("zfs-utils=${pkgver}")
+  conflicts=(zfs-utils)
+  backup=(etc/zfs/zed.d/zed.rc etc/default/zfs etc/modules-load.d/zfs.conf)
+
+  cd "$_srcdir"
+  make DESTDIR="$pkgdir" install
+
+  # Kernel half: packaged by runink-zfs. Modules (and OpenZFS's merged-usr-hostile lib/
+  # tree), plus the kernel-module headers `make install` drops under /usr/src.
+  rm -rf "$pkgdir/lib" "$pkgdir/usr/lib/modules" "$pkgdir/usr/src"
+
+  # Same removals archzfs's package_zfs-utils makes: SysV init scripts, initramfs-tools
+  # (Debian's initramfs; this image uses mkinitcpio) and upstream's systemd modules-load.d.
+  rm -rf "$pkgdir/etc/init.d" "$pkgdir/usr/share/initramfs-tools" "$pkgdir/usr/lib/modules-load.d"
+  # s6 image: no dracut either. Upstream's dracut 90zfs module carries its own systemd
+  # .service units, so it goes rather than being "unused".
+  rm -rf "$pkgdir/usr/lib/dracut"
+  # The man page for the systemd mount generator installs unconditionally; the generator
+  # itself is not built (--enable-systemd=no), so the page documents nothing on this image.
+  rm -f "$pkgdir"/usr/share/man/man8/zfs-mount-generator.8*
+  # Test suite (archzfs splits it into zfs-tests; nothing here needs it).
+  rm -rf "$pkgdir/usr/share/zfs/zfs-tests" "$pkgdir/usr/share/zfs/test-runner" \
+         "$pkgdir/usr/share/zfs/runfiles"
+  rm -f "$pkgdir"/usr/share/zfs/*.sh
+
+  # Autoload the module at boot, as archzfs does (the overlay's modules-load.d/k0s.conf
+  # relies on the same mechanism).
+  install -d "$pkgdir/etc/modules-load.d"
+  printf '%s\n' zfs > "$pkgdir/etc/modules-load.d/zfs.conf"
+
+  # The mkinitcpio `zfs` hook — the one thing OpenZFS upstream does not ship. Vendored from
+  # archzfs (see the header); the mkinitcpio.conf.d/zfs.conf HOOKS lines in both profiles'
+  # overlays name it `zfs`, and 40-boot-grub-zfs.sh's `mkinitcpio -P` resolves it here.
+  install -Dm644 "$srcdir/zfs-utils.initcpio.hook"    "$pkgdir/usr/lib/initcpio/hooks/zfs"
+  install -Dm644 "$srcdir/zfs-utils.initcpio.install" "$pkgdir/usr/lib/initcpio/install/zfs"
+
+  # ── assertions — fail the build rather than ship a package that breaks the image ──────
+  local f bad=0
+  # merged-usr: pacman refuses a real /lib, /bin or /sbin over Artix's symlinks.
+  for f in lib bin sbin; do
+    if [ -e "$pkgdir/$f" ]; then
+      echo "runink-zfs-utils: \$pkgdir/$f exists (merged-usr)" >&2; bad=1
+    fi
+  done
+  # s6 invariant: no systemd units, generators, presets or dirs of any kind.
+  _sd="$(find "$pkgdir" \( -iname '*systemd*' -o -name '*.service' -o -name '*.target' \
+          -o -name '*.timer' -o -name '*.socket' -o -name '*.mount' -o -name '*.preset' \) | head -5)"
+  if [ -n "$_sd" ]; then
+    echo "runink-zfs-utils: systemd artefacts in the package (s6 image):" >&2
+    printf '  %s\n' "$_sd" >&2; bad=1
+  fi
+  # No kernel modules — those belong to runink-zfs.
+  if find "$pkgdir" -name '*.ko*' | grep -q .; then
+    echo "runink-zfs-utils: kernel modules in the userland package" >&2; bad=1
+  fi
+  # What the image boots with.
+  for f in usr/bin/zpool usr/bin/zfs usr/bin/zed usr/bin/mount.zfs usr/bin/zgenhostid \
+           usr/lib/udev/vdev_id usr/lib/udev/zvol_id \
+           usr/lib/udev/rules.d/60-zvol.rules usr/lib/udev/rules.d/69-vdev.rules \
+           usr/lib/udev/rules.d/90-zfs.rules \
+           usr/lib/initcpio/hooks/zfs usr/lib/initcpio/install/zfs; do
+    [ -e "$pkgdir/$f" ] || { echo "runink-zfs-utils: missing /$f" >&2; bad=1; }
+  done
+  ls "$pkgdir"/usr/lib/libzfs.so.* >/dev/null 2>&1 \
+    || { echo "runink-zfs-utils: missing /usr/lib/libzfs.so.*" >&2; bad=1; }
+  [ "$bad" -eq 0 ] || return 1
+}

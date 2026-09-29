@@ -1,0 +1,83 @@
+# GRUB theme for Runink River (the live ISO menu and the installed system).
+#
+# Installed to /boot/grub/themes/river/ by installer/lib/40-boot-grub-zfs.sh (from the
+# profile's root-overlay copy under /usr/share/runink/branding/grub/river/), and copied
+# into the live ISO's /boot/grub/themes/river/ by the grub.sh patch in
+# scripts/patch-artools.go. background.jpg and every PNG here are rendered from
+# branding/src/grub/*.svg by branding/render.sh (the background carries the Runink River
+# community mark and wordmark) — edit the SVG, never a render.
+#
+# JPEG: background.jpg is BASELINE (GRUB's jpeg reader has no progressive support). Both
+# boot paths load the reader: grub-mkconfig's 00_header emits `insmod jpeg` for a theme
+# directory holding *.jpg, and the live grub.cfg (iso-profiles/river/grub/grub.cfg) does.
+#
+# GRUB cannot animate. The only motion is the countdown: the __timeout__ progress bar
+# drains while GRUB_TIMEOUT runs out, then the kernel takes over (Plymouth's flowing
+# streams).
+#
+# Fonts: only "Unifont Regular 16" is referenced. grub-install ships unicode.pf2 and both
+# the installed grub.cfg (gfxterm) and the Artix live cfg load it, so no .pf2 has to be
+# generated at build time.
+
+title-text: ""
+desktop-image: "background.jpg"
+# crop, not stretch: the art is 16:9, and stretching it onto a 4:3 mode (1024x768, the live
+# menu's) squashed the mark into a wide, flat puppy. crop keeps the aspect ratio and
+# trims the sides, which hold only the river lines (the lockup sits inside x 240..1680).
+desktop-image-scale-method: "crop"
+desktop-image-h-align: "center"
+desktop-image-v-align: "center"
+desktop-color: "#212121"
+terminal-font: "Unifont Regular 16"
+terminal-left: "10%"
+terminal-top: "30%"
+terminal-width: "80%"
+terminal-height: "60%"
+message-font: "Unifont Regular 16"
+message-color: "#C6C7B5"
+message-bg-color: "#212121"
+
++ boot_menu {
+	left = 25%
+	top = 36%
+	width = 50%
+	height = 40%
+	item_font = "Unifont Regular 16"
+	item_color = "#C6C7B5"
+	selected_item_font = "Unifont Regular 16"
+	selected_item_color = "#212121"
+	selected_item_pixmap_style = "select_*.png"
+	item_height = 36
+	item_padding = 14
+	item_spacing = 6
+	icon_width = 0
+	icon_height = 0
+	item_icon_space = 0
+	scrollbar = false
+}
+
+# The countdown. GRUB fills this bar from GRUB_TIMEOUT down to zero; id __timeout__ is
+# what binds it to the timer. It disappears the moment a key is pressed. GRUB also hands the
+# bar the countdown text, which makes it at least one text line tall whatever `height` says
+# (about 28 px), so the label sits ABOVE it: below, the bar covered the label.
++ progress_bar {
+	id = "__timeout__"
+	left = 36%
+	top = 79%
+	width = 28%
+	height = 6
+	show_text = false
+	bar_style = "progress_bar_*.png"
+	highlight_style = "progress_highlight_*.png"
+}
+
++ label {
+	id = "__timeout__"
+	left = 28%
+	top = 73%
+	width = 44%
+	align = "center"
+	font = "Unifont Regular 16"
+	color = "#B2B3A4"
+	text = "Booting in %d s   ·   Enter to boot now   ·   e to edit"
+}

@@ -1,0 +1,107 @@
+# Maintainer: Daniel Paes <paes at runink dot org>
+#
+# zfs-linux-runink: OpenZFS kernel modules (spl.ko, zfs.ko) built from the signed OpenZFS
+# release tarball against ONE exact linux-runink release, in the archzfs zfs-linux-<flavour>
+# style. This is a community AUR package, not an official Arch Linux or archzfs package.
+#
+# Userland: this package ships modules only and depends on the AUR's `zfs-utils` at the SAME
+# OpenZFS version (zfs-utils=${_zfsver}), which also provides the mkinitcpio `zfs` hook. It
+# does not duplicate zfs-utils.
+#
+# Alternative: `zfs-dkms` (AUR) builds the same modules for every installed kernel, including
+# linux-runink, on the target machine. The two install the same modules and so conflict; pick
+# one. This package pins the kernel exactly and needs no compiler at install time; zfs-dkms
+# follows kernel upgrades by itself.
+#
+# Pacing: linux-runink is only bumped while OpenZFS's META (Linux-Minimum/Linux-Maximum)
+# covers the new kernel, and prepare() below re-checks that range, so a kernel outside it
+# fails here, before any module is built.
+
+pkgname=zfs-linux-runink
+_zfsver=2.4.4
+_kernver=7.2.7.zen1-1                      # linux-runink ${pkgver}-${pkgrel}, exactly
+_kernrel=7.2.7-zen1-1-runink               # its `uname -r` / module directory
+pkgver=${_zfsver}_${_kernver//-/.}
+pkgrel=1
+pkgdesc="OpenZFS kernel modules for linux-runink ${_kernver} (Runink River kernel for Arch Linux)"
+arch=(x86_64)
+url='https://openzfs.org'
+license=(CDDL-1.0)
+depends=(
+  kmod
+  "zfs-utils=${_zfsver}"
+  "linux-runink=${_kernver}"
+)
+makedepends=("linux-runink-headers=${_kernver}")
+provides=(
+  zfs
+  spl
+  "ZFS-MODULE=${_zfsver}"
+  "SPL-MODULE=${_zfsver}"
+)
+conflicts=(
+  zfs-dkms
+  zfs-dkms-git
+  zfs-dkms-rc
+  spl-dkms
+  spl-dkms-git
+)
+source=("https://github.com/openzfs/zfs/releases/download/zfs-${_zfsver}/zfs-${_zfsver}.tar.gz"{,.asc})
+sha256sums=('2a3c70d55a37cc71618a95a60e81ad66530201eb118d37741dc92efcf848c8b1'
+            'SKIP')
+validpgpkeys=(
+  4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027  # Tony Hutter (OpenZFS release signing)
+  C33DF142657ED1F7C328A2960AB9E991C6AF658B  # Brian Behlendorf (OpenZFS release signing)
+)
+
+_kbuild=/usr/lib/modules/${_kernrel}/build
+
+prepare() {
+  cd "zfs-${_zfsver}"
+
+  [[ -e ${_kbuild}/Makefile ]] || {
+    echo "linux-runink-headers ${_kernver} is not installed (${_kbuild} missing)" >&2
+    return 1
+  }
+
+  # The kernel must lie inside the range this OpenZFS release declares. configure checks it
+  # too, but only deep in its output; fail early and say why.
+  local kmaj kmin min max
+  IFS=. read -r kmaj kmin _ <<<"${_kernrel%%-*}"
+  min=$(sed -n 's/^Linux-Minimum: *//p' META)
+  max=$(sed -n 's/^Linux-Maximum: *//p' META)
+  _vle() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" == "$1" ]]; }
+  if ! _vle "$min" "$kmaj.$kmin" || ! _vle "$kmaj.$kmin" "$max"; then
+    echo "OpenZFS ${_zfsver} supports Linux ${min}..${max}; linux-runink is ${_kernrel}" >&2
+    return 1
+  fi
+  echo "linux-runink ${_kernrel} is inside OpenZFS ${_zfsver}'s range ${min}..${max}"
+}
+
+build() {
+  cd "zfs-${_zfsver}"
+  ./configure --prefix=/usr --sysconfdir=/etc --sbindir=/usr/bin --libdir=/usr/lib \
+    --datadir=/usr/share --includedir=/usr/include --with-udevdir=/usr/lib/udev \
+    --libexecdir=/usr/lib --with-config=kernel \
+    --with-linux="${_kbuild}" --with-linux-obj="${_kbuild}"
+  make
+}
+
+package() {
+  cd "zfs-${_zfsver}"
+  make DESTDIR="$pkgdir" INSTALL_MOD_PATH="$pkgdir/usr" install
+
+  # Kernel-module headers for building against spl/zfs: not needed at runtime (archzfs
+  # removes them the same way).
+  rm -rf "$pkgdir/usr/src"
+
+  # Arch is merged-usr: nothing may land under a real /lib.
+  if [[ -e $pkgdir/lib ]]; then
+    echo "package has a real /lib (merged-usr violation)" >&2
+    return 1
+  fi
+  if ! find "$pkgdir/usr/lib/modules/${_kernrel}" -name 'zfs.ko*' | grep -q .; then
+    echo "no zfs.ko for ${_kernrel} in the package" >&2
+    return 1
+  fi
+}

@@ -1,0 +1,111 @@
+name: build linux-runink — sovereign kernel (Artix container)
+
+# The golden node is a HARDENED runtime (no podman, no base-devel), so it cannot build its
+# own kernel. This builds linux-runink OFF-box on a CI runner inside an official
+# Artix container (pacman/makepkg native), and uploads the .pkg.tar.zst so it can be repo-add'd
+# into localrepo + baked into the next golden ISO. Manual-dispatch only — a kernel build is heavy.
+#
+# Runs on GitHub-hosted ubuntu-latest (workflow_dispatch only, so no pull-request code
+# reaches it). A standard hosted runner has 4 vCPU, 16 GB of RAM and ~14 GB free on /; the
+# build needs ~30 GB (source + objects ~25-30 GB plus compiler temps), so the first step
+# removes the preinstalled toolchains it never uses. On 2026-09-05 that took the runner from
+# 14 GB to 38 GB free, and the build finished in ~4 h 10 min (the timeout is 5 h).
+on:
+  workflow_dispatch:
+    inputs:
+      pkgdir:
+        description: 'pkgbuild dir under build/pkgbuilds'
+        type: string
+        default: runink-kernel
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # kernel compile on a 4-vCPU hosted runner (~4 h 10 min, 2026-09-05)
+    env:
+      # Through env, never spliced into a script (template injection).
+      PKGDIR: ${{ inputs.pkgdir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A full kernel build (src + objects ~25-30 GB, plus the compiler's /tmp .s
+      # spill) overflows the hosted runner's ~14 GB root disk — the last run died on
+      # drivers/ufs with "No space left on device" 3h in. /mnt is on the same root disk
+      # (it was once a separate ~70 GB volume): reclaim root, then stage the whole build
+      # (workspace + container TMPDIR) under /mnt/os-build, one place to watch.
+      - name: Reclaim disk + stage build workspace on /mnt
+        run: |
+          set -euo pipefail
+          echo "== before =="; df -h / /mnt
+          case "$PKGDIR" in *[!A-Za-z0-9._-]*|""|.*) echo "::error::bad pkgdir: $PKGDIR"; exit 1 ;; esac
+          # A throwaway GitHub-hosted VM: its preinstalled toolchains can go.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /opt/hostedtoolcache /usr/local/share/boost "${AGENT_TOOLSDIRECTORY:-}" || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo mkdir -p /mnt/os-build /mnt/os-build/tmp
+          sudo chown -R "$USER:$USER" /mnt/os-build
+          # Copy the pkgbuild tree (only what makepkg needs) onto the big volume.
+          cp -a build /mnt/os-build/build
+          echo "== after =="; df -h / /mnt
+
+      - name: makepkg linux-runink inside an Artix container
+        run: |
+          set -euo pipefail
+          # Mount the /mnt-staged tree as /os and pin the container's TMPDIR onto it too,
+          # so the src, .o objects, and the compiler's /tmp .s files all land on /mnt.
+          docker run --rm -v "/mnt/os-build:/os" -e TMPDIR=/os/tmp -e PKGDIR \
+            -w "/os/build/pkgbuilds/${PKGDIR}" \
+            docker.io/artixlinux/artixlinux:latest bash -euo pipefail -c '
+              echo "== refresh + toolchain (base-devel + kernel makedeps; go builds build/tools/bpfdoc; RUST is disabled in config.delta) =="
+              pacman-key --init >/dev/null 2>&1 || true
+              pacman -Sy --noconfirm --needed \
+                base-devel bc cpio go libelf pahole perl tar xz zstd kmod openssl \
+                xxhash zlib bison flex diffutils inetutils
+              echo "== no Python: base-devel pulls it in (debugedit -> gdb); remove it (build/kernel-builder.Containerfile) =="
+              py="$(pacman -Qq | grep -E "^python(-|$)" || true)"
+              if [ -n "$py" ]; then
+                pacman -Rdd --noconfirm $py $(pacman -Qi $py | sed -n "s/^Required By *: //p" \
+                  | tr " " "\n" | grep -vxE "None|python(-.*)?" | sort -u)
+              fi
+              if command -v python3 || command -v python; then echo "Python is still installed" >&2; exit 1; fi
+              echo "MAKEFLAGS=-j$(nproc)" >> /etc/makepkg.conf   # parallel compile
+              echo "== a non-root build user (makepkg refuses root) =="
+              useradd -m -G wheel builder
+              printf "builder ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers.d/builder
+              chown -R builder:builder /os/build/pkgbuilds/${PKGDIR}
+              # /os/tmp is on the 70 GB /mnt volume; make it writable by the builder user so
+              # the compiler/linker temporaries land there, not on the small container root.
+              mkdir -p /os/tmp && chmod 1777 /os/tmp
+              echo "== disk before build ==" && df -h /os /tmp
+              echo "== makepkg (fetches kernel.org 7.2.x + the signed zen patch; ~1-2h) =="
+              # NOTE: `su` RESETS the environment, so the container-level `-e TMPDIR=/os/tmp`
+              # is DROPPED for the builder shell — a prior run therefore spilled gcc/ld .s
+              # temps onto the small root /tmp and died 3h in ("No space left on device" in
+              # drivers/md + drivers/ufs). Re-export TMPDIR inside the su command so every
+              # temporary (like the src/.o objects) stays on /mnt.
+              #
+              # Integrity is ENFORCED (no --skipinteg): sha256 pins every source, the
+              # kernel.org tarball is GPG-verified against the vendored GKH/Linus keys and the
+              # zen patch against the vendored heftig key.
+              su builder -c "export TMPDIR=/os/tmp && cd /os/build/pkgbuilds/${PKGDIR} && gpg --batch --import keys/pgp/*.asc && makepkg -f --nodeps --noconfirm"
+              echo "== built packages =="
+              ls -lh /os/build/pkgbuilds/${PKGDIR}/*.pkg.tar.zst
+            '
+
+      - name: Collect the built packages
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # The build ran on /mnt (see the staging step), so the artifacts are there.
+          cp "/mnt/os-build/build/pkgbuilds/${PKGDIR}"/*.pkg.tar.zst out/
+          sha256sum out/*.pkg.tar.zst | tee out/SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-runink-pkgs
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14

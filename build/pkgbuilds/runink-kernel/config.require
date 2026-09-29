@@ -1,0 +1,174 @@
+# config.require — the platform FLOOR. prepare() checks the final .config against every line
+# and fails the build if any symbol is missing or has the wrong value. config.delta says what
+# we CHANGE; this file says what must be TRUE afterwards, whatever the base config did. Before
+# this file existed every entry below came only from the upstream base config, and nothing
+# noticed if a rebase dropped one.
+#
+# Format: SYMBOL=value[|value...]   (value "n" means "is not set" or absent)
+#         A quoted string value must match exactly.
+
+# --- ISA: generic x86-64-v3 (see README); never -march=native ---------------------------
+X86_NATIVE_CPU=n
+
+# --- cgroups v2 (k0s/kubelet, inference cgroup confinement) ------------------------------
+CGROUPS=y
+MEMCG=y
+BLK_CGROUP=y
+CGROUP_SCHED=y
+FAIR_GROUP_SCHED=y
+CFS_BANDWIDTH=y
+CGROUP_PIDS=y
+CGROUP_FREEZER=y
+CGROUP_DEVICE=y
+CGROUP_CPUACCT=y
+CPUSETS=y
+CGROUP_HUGETLB=y
+CGROUP_PERF=y
+CGROUP_MISC=y
+
+# --- Namespaces (containers; USER_NS for bubblewrap and werf's rootless buildah) ---------
+NAMESPACES=y
+UTS_NS=y
+IPC_NS=y
+USER_NS=y
+USER_NS_UNPRIVILEGED=y
+PID_NS=y
+NET_NS=y
+TIME_NS=y
+SECCOMP=y
+SECCOMP_FILTER=y
+POSIX_MQUEUE=y
+KEYS=y
+
+# --- eBPF floor ---------------------------------------------------------------------------
+BPF_SYSCALL=y
+BPF_JIT=y
+BPF_JIT_ALWAYS_ON=y
+DEBUG_INFO_BTF=y
+BPF_LSM=y
+CGROUP_BPF=y
+BPF_EVENTS=y
+XDP_SOCKETS=y
+NET_CLS_BPF=y|m
+NET_ACT_BPF=y|m
+SCHED_CLASS_EXT=y
+LSM="landlock,lockdown,yama,integrity,bpf"
+
+# --- Netfilter / nftables (runink-fw, k0s iptables-nft, kube-router) ----------------------
+NETFILTER=y
+NF_CONNTRACK=y|m
+NF_NAT=y|m
+NF_TABLES=y|m
+NF_TABLES_INET=y
+NF_TABLES_IPV6=y
+NFT_CT=y|m
+NFT_NAT=y|m
+NFT_MASQ=y|m
+NFT_COMPAT=y|m
+NFT_REJECT=y|m
+IP_NF_IPTABLES=y|m
+IP6_NF_IPTABLES=y|m
+IP6_NF_FILTER=y|m
+IP6_NF_NAT=y|m
+IP6_NF_TARGET_MASQUERADE=y|m
+NETFILTER_XT_MARK=y|m
+NETFILTER_XT_MATCH_COMMENT=y|m
+NETFILTER_XT_MATCH_CONNTRACK=y|m
+NETFILTER_XT_MATCH_MULTIPORT=y|m
+NETFILTER_XT_MATCH_ADDRTYPE=y|m
+NETFILTER_XT_MATCH_STATISTIC=y|m
+NETFILTER_XT_MATCH_PHYSDEV=y|m
+NETFILTER_XT_TARGET_MASQUERADE=y|m
+NETFILTER_XT_SET=y|m
+IP_SET=y|m
+IP_SET_HASH_IP=y|m
+IP_SET_HASH_NET=y|m
+IP_SET_HASH_IPPORT=y|m
+IP_VS=y|m
+
+# --- Networking (IPv6-only fabric, CNI, overlays) ----------------------------------------
+IPV6=y
+BRIDGE=y|m
+BRIDGE_NETFILTER=y|m
+VETH=y|m
+VXLAN=y|m
+WIREGUARD=y|m
+OVERLAY_FS=y|m
+
+# --- OpenZFS prerequisites (runink-zfs builds against these headers) --------------------
+MODULES=y
+BLOCK=y
+KALLSYMS=y
+ZLIB_DEFLATE=y
+ZLIB_INFLATE=y
+DEBUG_LOCK_ALLOC=n
+
+# --- Hardening that config.delta sets. Asserted because two of these lines silently did
+#     nothing in the zen 7.1.5 build: `--set-val FORTIFY_SOURCE 1` on a bool was reset to n by
+#     olddefconfig, and KEXEC_HANDOVER re-selected KEXEC_FILE after we disabled it. -------
+FORTIFY_SOURCE=y
+KEXEC=n
+KEXEC_FILE=n
+HIBERNATION=n
+DEVMEM=n
+PROC_KCORE=n
+LEGACY_PTYS=n
+SLAB_MERGE_DEFAULT=n
+INIT_ON_ALLOC_DEFAULT_ON=y
+INIT_ON_FREE_DEFAULT_ON=y
+HARDENED_USERCOPY=y
+STRICT_KERNEL_RWX=y
+STRICT_MODULE_RWX=y
+RANDOMIZE_BASE=y
+STACKPROTECTOR_STRONG=y
+SECURITY_DMESG_RESTRICT=y
+SECURITY_LOCKDOWN_LSM=y
+MODULE_SIG=y
+MODULE_SIG_ALL=y
+MODULE_SIG_SHA512=y
+MODULE_SIG_HASH="sha512"
+LOCALVERSION=""
+LOCALVERSION_AUTO=n
+RUST=n
+
+# --- Analytics / throughput profile (config.delta, docs/KERNEL.md "Analytics profile") ----
+ZEN_INTERACTIVE=n
+PREEMPT_LAZY=y
+PREEMPT=n
+PREEMPT_DYNAMIC=y
+HZ_250=y
+HZ=250
+NO_HZ_FULL=y
+TRANSPARENT_HUGEPAGE=y
+TRANSPARENT_HUGEPAGE_MADVISE=y
+TRANSPARENT_HUGEPAGE_ALWAYS=n
+HUGETLBFS=y
+HUGETLB_PAGE=y
+TCP_CONG_BBR=y
+DEFAULT_BBR=y
+DEFAULT_TCP_CONG="bbr"
+NET_SCH_FQ=y
+DEFAULT_FQ=y
+DEFAULT_NET_SCH="fq"
+SCHED_AUTOGROUP=n
+WQ_POWER_EFFICIENT_DEFAULT=n
+NUMA=y
+NUMA_BALANCING=y
+NUMA_BALANCING_DEFAULT_ENABLED=y
+LRU_GEN=y
+LRU_GEN_ENABLED=y
+ZSWAP=y
+PSI=y
+PSI_DEFAULT_DISABLED=n
+IO_URING=y
+SCHED_CLASS_EXT=y
+# Secure defaults kept: every CPU mitigation compiled in and on by default.
+CPU_MITIGATIONS=y
+MITIGATION_PAGE_TABLE_ISOLATION=y
+MITIGATION_RETPOLINE=y
+MITIGATION_SPECTRE_BHI=y
+MITIGATION_MDS=y
+MITIGATION_SRSO=y
+MITIGATION_RETBLEED=y
+MITIGATION_GDS=y
+MITIGATION_RFDS=y

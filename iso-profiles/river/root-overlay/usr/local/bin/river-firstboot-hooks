@@ -1,0 +1,205 @@
+#!/bin/sh
+# river-firstboot-hooks — hand a freshly installed node over to its downstream platform.
+#
+# Launched in the background by /etc/s6/rc.local on every boot (and again by the graphical
+# first boot's Retry button). On an image with k0s it waits (bounded) for the k0s API; on one
+# without (Runink River itself) it does not wait. Then it runs
+# every executable regular file in /usr/local/lib/runink/firstboot.d/, in lexical order, as
+# root, until that hook is done (docs/PAYLOADS.md, "First-boot hand-off" and "First-boot setup
+# pages"). Enrollment is not required: an air-gapped node installed from a medium with
+# downstream payloads has no enrollment file, and its hook is how the downstream's own setup
+# tool is put in front of the operator.
+#
+# Each hook gets:
+#   RIVER_PAYLOADS_DIR   /var/lib/runink/payloads (the medium's payloads, still encrypted;
+#                        absent when the medium carried none)
+#   RIVER_K0S_READY      1 when the k0s API answered /readyz, 0 when the wait timed out
+#   KUBECONFIG           /var/lib/k0s/pki/admin.conf
+#   PATH                 with /usr/bin (k0s) and the downstream tree's bin/
+#   RIVER_ROLE           the role the installer's operator chose, when the edition offers roles
+#   RIVER_SETUP_ANSWERS  only on a scripted install that supplied one (runink-autoinstall
+#                        --setup-answers): the answers file, root 0600. It is shredded once
+#                        EVERY hook is done, so a hook that fails can use it again.
+#   RIVER_PAGE_DIR       only while a GRAPHICAL first boot is pending (the graphical installer
+#                        wrote /var/lib/runink/firstboot-ui) AND this boot has a display: an
+#                        empty root 0700 directory on /run where the hook may register a setup
+#                        page (setup.json); the page later writes `done` there.
+# Hooks run with stdin from /dev/null: no hook may wait for a console.
+#
+# The hook's exit status (the contract a downstream builds against):
+#   0, with $RIVER_PAGE_DIR/setup.json   REGISTERED: retired (<hook>.done) only when the page
+#                                        writes $RIVER_PAGE_DIR/done
+#   0, without setup.json                DONE: <hook>.done at once; never run again
+#   75 (EX_TEMPFAIL)                     DEFERRED: not marked, runs again at the next boot,
+#                                        headless boots included
+#   anything else                        FAILED: logged, not marked; the graphical first boot
+#                                        shows it with Retry; runs again at the next boot
+# Each outcome is also written to /run/runink/firstboot-status/<hook> ("<outcome> <rc>"),
+# which the graphical first boot reads. Output goes to /var/log/runink/firstboot.d/<hook>.log.
+#
+# Hooks live under /usr/local/lib (package-owned, 0755), NOT /etc/runink: river-perms keeps
+# every file under /etc/runink 0600, which would make a hook unexecutable.
+# Hooks must not need the network and must return promptly (a hook that starts a
+# long-running tool backgrounds it itself).
+#
+# RIVER_FIRSTBOOT_ROOT prefixes every path (river test firstboot-hooks); empty on a node.
+set -u
+
+R="${RIVER_FIRSTBOOT_ROOT:-}"
+HOOKS="$R/usr/local/lib/runink/firstboot.d"
+STATE="$R/var/lib/runink/firstboot.d"
+LOGS="$R/var/log/runink/firstboot.d"
+K0S="$R/usr/bin/k0s"
+WAIT="${RIVER_FIRSTBOOT_K0S_WAIT:-600}"
+ANSWERS="$STATE/setup-answers"
+ROLEFILE="$R/etc/runink/role"
+# The graphical first boot (river-installer firstboot) is pending while this file exists.
+UI_PENDING="$R/var/lib/runink/firstboot-ui"
+PAGES="$R/run/runink/firstboot-pages"
+STATUS="$R/run/runink/firstboot-status"
+LOCK="$R/run/runink/firstboot-hooks.lock"
+
+log() { echo "firstboot-hooks: $*"; }
+
+hooks() {
+	for _h in "$HOOKS"/*; do
+		[ -f "$_h" ] && [ -x "$_h" ] && printf '%s\n' "$_h"
+	done
+}
+shred_answers() {
+	[ -f "$ANSWERS" ] || return 0
+	shred -u "$ANSWERS" 2>/dev/null || rm -f "$ANSWERS"
+	log "$1"
+}
+status() { # HOOK OUTCOME RC
+	( umask 077; mkdir -p "$STATUS" && printf '%s %s\n' "$2" "$3" > "$STATUS/$1.tmp" && mv "$STATUS/$1.tmp" "$STATUS/$1" )
+}
+
+if [ ! -d "$HOOKS" ] || [ -z "$(hooks)" ]; then
+	# Nothing will ever read the answers on this image: do not keep them.
+	shred_answers "no first-boot hook; setup answers shredded unused"
+	exit 0
+fi
+pending=0
+for h in $(hooks); do
+	[ -e "$STATE/$(basename "$h").done" ] || pending=$((pending + 1))
+done
+if [ "$pending" -eq 0 ]; then
+	shred_answers "setup answers shredded"
+	exit 0
+fi
+
+umask 077
+mkdir -p "$STATE" "$LOGS" "$R/run/runink"
+chmod 0700 "$STATE" "$LOGS"
+# One runner at a time: rc.local's, or the graphical first boot's Retry.
+if ! mkdir "$LOCK" 2>/dev/null; then
+	log "another run is in progress; nothing to do"
+	exit 0
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+
+ready=0
+i=0
+# No k0s on this image: nothing to wait for (RIVER_K0S_READY=0).
+[ -x "$K0S" ] || i="$WAIT"
+while [ "$i" -lt "$WAIT" ]; do
+	if [ -x "$K0S" ] && "$K0S" kubectl --kubeconfig /var/lib/k0s/pki/admin.conf get --raw='/readyz' >/dev/null 2>&1; then
+		ready=1
+		break
+	fi
+	i=$((i + 5))
+	sleep 5
+done
+if [ ! -x "$K0S" ]; then log "no k0s on this image; running the hooks (RIVER_K0S_READY=0)"
+elif [ "$ready" = 0 ]; then log "k0s API not ready after ${WAIT}s; running the hooks anyway (RIVER_K0S_READY=0)"; fi
+
+# Setup pages: only while the graphical first boot is pending, and only on a boot that has a
+# display to show them on (a KMS or framebuffer device). A headless boot runs the hooks without
+# RIVER_PAGE_DIR; a hook that wants its page exits 75 to run again at a boot that has one. The
+# parent is traversable (0711) so a page server that dropped privileges still reaches its own
+# (chowned) directory; nobody can list it.
+ui=0
+if [ -e "$UI_PENDING" ] && { [ -e "$R/dev/dri/card0" ] || [ -e "$R/dev/fb0" ]; }; then
+	ui=1
+	mkdir -p "$PAGES"
+	chmod 0711 "$PAGES"
+fi
+role=""
+[ -r "$ROLEFILE" ] && role="$(head -n 1 "$ROLEFILE")"
+
+waiting=""
+for h in $(hooks); do
+	name="$(basename "$h")"
+	[ -e "$STATE/$name.done" ] && continue
+	log "running $name"
+	status "$name" running 0
+	answers=""
+	[ -f "$ANSWERS" ] && answers="$ANSWERS"
+	pagedir=""
+	if [ "$ui" = 1 ]; then
+		pagedir="$PAGES/$name"
+		rm -rf "$pagedir"
+		mkdir -m 0700 "$pagedir"
+	fi
+	rc=0
+	env ${pagedir:+RIVER_PAGE_DIR="$pagedir"} ${role:+RIVER_ROLE="$role"} \
+		RIVER_PAYLOADS_DIR=/var/lib/runink/payloads RIVER_K0S_READY="$ready" \
+		RIVER_SETUP_ANSWERS="$answers" KUBECONFIG=/var/lib/k0s/pki/admin.conf \
+		PATH="/usr/bin:/usr/local/share/runink/core/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/bin" \
+		"$h" >> "$LOGS/$name.log" 2>&1 < /dev/null || rc=$?
+	if [ "$rc" -eq 75 ]; then
+		log "$name deferred (exit 75); it runs again at the next boot"
+		status "$name" deferred 75
+		[ -n "$pagedir" ] && rm -rf "$pagedir"
+	elif [ "$rc" -ne 0 ]; then
+		log "$name FAILED (rc=$rc); it runs again at the next boot — see $LOGS/$name.log"
+		status "$name" failed "$rc"
+		[ -n "$pagedir" ] && rm -rf "$pagedir"
+	elif [ -n "$pagedir" ] && [ -f "$pagedir/setup.json" ] && [ ! -e "$pagedir/done" ]; then
+		log "$name registered a setup page; it is done when the page finishes"
+		status "$name" registered 0
+		waiting="$waiting $name"
+	else
+		: > "$STATE/$name.done"
+		[ -n "$pagedir" ] && rm -rf "$pagedir"
+		log "$name done"
+		status "$name" "done" 0
+	fi
+done
+
+# Wait for the registered pages. Each one is done when its page writes `done`; the page
+# directory (with the registration and its token) is deleted then. The wait ends when the
+# graphical first boot is no longer pending (the operator finished or skipped it): a hook
+# whose page never finished stays not-done and runs again at the next boot.
+while [ -n "$waiting" ]; do
+	still=""
+	for name in $waiting; do
+		if [ -f "$PAGES/$name/done" ] && [ ! -L "$PAGES/$name/done" ]; then
+			: > "$STATE/$name.done"
+			rm -rf "${PAGES:?}/$name"
+			log "$name done (its setup page finished)"
+			status "$name" "done" 0
+		else
+			still="$still $name"
+		fi
+	done
+	waiting="$still"
+	[ -n "$waiting" ] || break
+	if [ ! -e "$UI_PENDING" ]; then
+		log "graphical first boot ended; not finished:$waiting (they run again at the next boot)"
+		for name in $waiting; do
+			rm -rf "${PAGES:?}/$name"
+			status "$name" deferred 0
+		done
+		break
+	fi
+	sleep "${RIVER_FIRSTBOOT_POLL:-2}"
+done
+
+all=1
+for h in $(hooks); do
+	[ -e "$STATE/$(basename "$h").done" ] || all=0
+done
+[ "$all" = 1 ] && shred_answers "every hook is done; setup answers shredded"
+exit 0

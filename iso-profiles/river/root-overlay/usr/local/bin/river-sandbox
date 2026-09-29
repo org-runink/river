@@ -1,0 +1,161 @@
+#!/bin/sh
+# river-sandbox — run a command confined by bubblewrap (bwrap), the RIVER step sandbox.
+#
+#   river-sandbox [--net] [--rw DIR]... -- cmd [args...]
+#
+#   --net      keep the host network namespace (--share-net). Default: no network at all.
+#   --rw DIR   bind DIR read-write at the same path. Repeatable. Typically the checkout,
+#              e.g. `river-sandbox --rw "$GITHUB_WORKSPACE" -- go build ./...`.
+#
+# Who calls it: anything that runs code this machine does not trust (a checkout's build, code
+# a model wrote, a downloaded tool), and the future `riverd`, which confines each pipeline step
+# with it (see runtime/README.md).
+#
+# What the command gets:
+#   - every namespace unshared (user, ipc, pid, net, uts, cgroup); --share-net only with
+#     --net; no capabilities (--cap-drop ALL); nested user namespaces DISABLED
+#     (--disable-userns), so confined code cannot use the host's userns permission to build
+#     its own sandbox-escape surface;
+#   - dies with its parent, new session (no TIOCSTI into the caller's terminal);
+#   - an empty environment except PATH, HOME, LANG (and TMPDIR);
+#   - /usr read-only (plus the /bin /lib /lib64 /sbin symlinks) and a MINIMAL read-only
+#     slice of /etc — identity, dynamic loader, CA store, time zone, DNS;
+#   - fresh tmpfs /tmp and HOME, a new /proc and a minimal /dev.
+#
+# What it NEVER gets, even when asked via --rw: /etc/runink (machine secrets), a CI runner's
+# .credentials/.runner files, the runink user's secret dirs, or any k0s / /var/lib/rancher
+# state (the deny-list stays whole on every image: a downstream may add those). A --rw that
+# would expose one of those is refused, not trimmed.
+#
+# Needs unprivileged user namespaces (left at the kernel default; see
+# sysctl.d/10-runink-hardening.conf).
+set -eu
+
+me=river-sandbox
+die() {
+	echo "$me: $*" >&2
+	exit 2
+}
+usage() {
+	echo "usage: $me [--net] [--rw DIR]... -- cmd [args...]" >&2
+	exit 2
+}
+
+command -v bwrap >/dev/null 2>&1 || die "bwrap not found (package bubblewrap)"
+
+RUNINK_USER="runink"
+RUNINK_HOME="/home/$RUNINK_USER"
+RUNNER_DIR="$RUNINK_HOME/actions-runner"
+
+# Files that must never be reachable from inside: refuse DIR if it is (an ancestor of) one.
+secret_files="$RUNNER_DIR/.credentials $RUNNER_DIR/.credentials_rsaparams $RUNNER_DIR/.runner $RUNNER_DIR/.env"
+# Trees that must never be reachable: refuse DIR if it is inside, equal to, or above one.
+secret_dirs="/etc/runink /etc/k0s /var/lib/k0s /var/lib/rancher /run/k0s $RUNINK_HOME/.runink $RUNINK_HOME/edge $RUNINK_HOME/.ssh /root"
+
+# is_within PATH BASE — PATH equals BASE or lies below it.
+is_within() {
+	case "$1" in
+	"$2" | "$2"/*) return 0 ;;
+	esac
+	return 1
+}
+
+net=0
+rw_list=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--net) net=1 ;;
+	--rw)
+		[ $# -ge 2 ] || usage
+		[ -d "$2" ] || die "--rw $2: not a directory"
+		# Resolve symlinks so a link cannot smuggle a forbidden tree past the checks.
+		d="$(cd "$2" && pwd -P)" || die "--rw $2: cannot resolve"
+		[ "$d" != / ] || die "--rw /: refusing to bind the whole filesystem"
+		case "$d" in
+		*"
+"*) die "--rw: path contains a newline" ;;
+		esac
+		for f in $secret_files; do
+			is_within "$f" "$d" && die "--rw $d: would expose $f"
+		done
+		for s in $secret_dirs; do
+			if is_within "$d" "$s" || is_within "$s" "$d"; then
+				die "--rw $d: overlaps protected $s"
+			fi
+		done
+		# The runner install itself is off limits; only its job workspace (_work) is not.
+		if is_within "$d" "$RUNNER_DIR" && ! is_within "$d" "$RUNNER_DIR/_work"; then
+			die "--rw $d: inside the runner install; bind the job workspace under $RUNNER_DIR/_work"
+		fi
+		rw_list="$rw_list
+$d"
+		shift
+		;;
+	--) shift && break ;;
+	-h | --help) usage ;;
+	*) usage ;;
+	esac
+	shift
+done
+[ $# -gt 0 ] || usage
+
+home=/home/sandbox
+
+# Start from the chdir target: the caller's cwd when it is inside a --rw dir, else HOME.
+cwd="$(pwd -P 2>/dev/null || echo /)"
+chdir="$home"
+
+# Build the bwrap argv in "$@" (POSIX sh has no arrays). The command goes after "--".
+n=$#
+set -- "$@" \
+	--unshare-all --unshare-user --disable-userns \
+	--die-with-parent --new-session --cap-drop ALL \
+	--hostname river-sandbox \
+	--clearenv \
+	--setenv PATH /usr/local/bin:/usr/bin \
+	--setenv HOME "$home" \
+	--setenv LANG C.UTF-8 \
+	--setenv TMPDIR /tmp \
+	--ro-bind /usr /usr \
+	--symlink usr/bin /bin \
+	--symlink usr/bin /sbin \
+	--symlink usr/lib /lib \
+	--symlink usr/lib /lib64 \
+	--proc /proc \
+	--dev /dev \
+	--tmpfs /tmp \
+	--tmpfs "$home"
+[ "$net" -eq 1 ] && set -- "$@" --share-net
+
+# The /etc allow-list. Nothing else under /etc is visible (no shadow, sudoers, ssh keys,
+# NetworkManager connections, and never /etc/runink or /etc/k0s).
+for e in passwd group nsswitch.conf hosts host.conf ld.so.cache ld.so.conf localtime \
+	ssl ca-certificates; do
+	set -- "$@" --ro-bind-try "/etc/$e" "/etc/$e"
+done
+# resolv.conf is usually a symlink into /run (NetworkManager); bind its target's content.
+if [ "$net" -eq 1 ] && [ -e /etc/resolv.conf ]; then
+	set -- "$@" --ro-bind "$(readlink -f /etc/resolv.conf)" /etc/resolv.conf
+fi
+
+# Read-write binds last, so they land on top of the tmpfs mounts above.
+old_ifs=$IFS
+IFS='
+'
+for d in $rw_list; do
+	[ -n "$d" ] || continue
+	set -- "$@" --bind "$d" "$d"
+	is_within "$cwd" "$d" && chdir="$cwd"
+done
+IFS=$old_ifs
+set -- "$@" --chdir "$chdir" --
+
+# Rotate the original command (the first $n words) to the end, after "--".
+while [ "$n" -gt 0 ]; do
+	a="$1"
+	shift
+	set -- "$@" "$a"
+	n=$((n - 1))
+done
+
+exec bwrap "$@"

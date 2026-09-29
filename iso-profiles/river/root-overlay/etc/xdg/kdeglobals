@@ -1,0 +1,14 @@
+# Runink River — system-wide KDE defaults (the /etc/xdg layer of the kdeglobals cascade; a
+# user's ~/.config/kdeglobals still wins).
+#
+# Selecting the Runink River look-and-feel is how the defaults reach every NEW user: Plasma's
+# image wallpaper takes its default from the active look-and-feel package's contents/defaults
+# ([Wallpaper] Image=River), and so does the start-up splash ([ksplashrc] Theme=
+# org.runink.river.desktop, contents/splash/Splash.qml). org.runink.river.desktop is a thin
+# package: defaults, metadata, the splash and a layout script (Breeze's own default layout
+# plus the community mark, icon runink-river, on the Kickoff button); it falls back to Breeze
+# for its lock screen and logout, exactly as Breeze Dark itself does. Skeleton appletsrc files
+# were rejected: a skel layout with a desktop containment suppresses the default layout
+# script, so the panel would have to be hand-maintained in skel too.
+[KDE]
+LookAndFeelPackage=org.runink.river.desktop

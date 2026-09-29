@@ -1,0 +1,98 @@
+{
+  "schema": "river.hwprobe/v1",
+  "probed_at": "2026-09-24T00:00:00Z",
+  "host": {
+    "vendor": "ExampleVendor",
+    "product": "edge-4c-16g",
+    "virtual": false
+  },
+  "firmware": {
+    "uefi": true,
+    "secure_boot": false
+  },
+  "cpu": {
+    "vendor": "GenuineIntel",
+    "model": "Example Core 4C",
+    "psabi_level": 3,
+    "psabi": "x86-64-v3",
+    "sockets": 1,
+    "physical_cores": 4,
+    "threads": 8,
+    "avx2": true,
+    "avx512f": false,
+    "avx512_bf16": false,
+    "avx512_vnni": false,
+    "avx_vnni": false,
+    "amx_tile": false,
+    "amx_bf16": false,
+    "amx_int8": false
+  },
+  "memory": {
+    "total_bytes": 16642998272,
+    "available_bytes": 14978698444,
+    "swap_total_bytes": 0
+  },
+  "gpus": [],
+  "disks": [
+    {
+      "name": "sda",
+      "path": "/dev/sda",
+      "by_id": "/dev/disk/by-id/ata-Example_SATA_SSD_256G_SSD0256",
+      "size_bytes": 256060514304,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "sata",
+      "kind": "ssd",
+      "model": "Example SATA SSD 256G",
+      "serial": "SSD0256",
+      "confirm_id": "SSD0256",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "sdb",
+      "path": "/dev/sdb",
+      "by_id": "/dev/disk/by-id/usb-Example_USB_Stick_USBBOOT1",
+      "size_bytes": 31004295168,
+      "rotational": true,
+      "removable": true,
+      "read_only": false,
+      "transport": "usb",
+      "kind": "hdd",
+      "model": "Example USB Stick",
+      "serial": "USBBOOT1",
+      "confirm_id": "USBBOOT1",
+      "boot_media": true,
+      "in_use": true,
+      "zfs_member": false,
+      "eligible": false,
+      "ineligible_reasons": [
+        "boot medium of this installer",
+        "sdz mounted as the live medium at /run/archiso/bootmnt",
+        "USB-attached",
+        "removable media"
+      ]
+    }
+  ],
+  "nics": [
+    {
+      "name": "enp1s0",
+      "mac": "02:00:00:00:10:01",
+      "driver": "example",
+      "physical": true,
+      "wireless": false,
+      "operstate": "up",
+      "carrier": true,
+      "speed_mbps": 1000,
+      "ipv6_enabled": true,
+      "ipv6_link_local": true,
+      "ipv6_global": true
+    }
+  ],
+  "tpm": {
+    "present": false
+  }
+}

@@ -1,0 +1,17 @@
+# base/keys/owner/fingerprint — the RIVER root of trust.
+#
+# The full 40-hex fingerprint of the OWNER's personal OpenPGP PRIMARY key (the Arch-packager
+# model: one accountable person signs packages, repo databases and release artifacts). Every
+# signature base/river-sign makes must verify back to this primary key, whichever signing
+# subkey produced it.
+#
+# It is the same key KEYS publishes (the release-signing key, river#144): one key signs
+# packages, repo databases and each release's SHA256SUMS. Change this line, KEYS and
+# KEY_FPR_PINNED in install.sh together, in one commit.
+#
+# The public key itself goes next to this file as <fingerprint>.asc (armored export), and is
+# what the image ships in its trusted keyring. The private key is NEVER in this repo, in CI,
+# or on a build host — see docs/OWN-BASE.md "Security: signing and the key hierarchy".
+#
+# Format: the first non-comment line, 40 uppercase hex, no spaces (river-sign checks it).
+95C0A7B97D547413E42660DDB06FE75626F15BF3

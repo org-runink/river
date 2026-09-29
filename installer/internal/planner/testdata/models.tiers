@@ -1,0 +1,20 @@
+# FIXTURE models.tiers for the planner tests. The sizes are ILLUSTRATIVE, chosen to look
+# like common quantized open-weight models of each size class. They are NOT the models an
+# image ships; the image's models.tiers is written from its models.lock.
+#
+# Non-model reserves (defaults shown; a manifest may override them).
+reserve=os       mib=1024
+reserve=k0s      mib=2048
+reserve=platform mib=6144
+
+# Mandatory tiers.
+tier=embedding variant=embed-small   rank=1 resident_mib=1024  kv_mib_per_1k=112 ctx_min=2048  ctx_max=2048
+tier=stt       variant=stt-4b        rank=1 resident_mib=3072  kv_mib_per_1k=104 ctx_min=4096  ctx_max=16384
+tier=tts       variant=tts-small     rank=1 resident_mib=256   kv_mib_per_1k=0   ctx_min=0     ctx_max=0     threads_max=2
+
+# Optional tiers, rank 1 preferred, higher ranks are the fallbacks.
+tier=general   variant=general-27b   rank=1 resident_mib=17408 kv_mib_per_1k=256 ctx_min=16384 ctx_max=32768
+tier=general   variant=general-8b    rank=2 resident_mib=5000  kv_mib_per_1k=144 ctx_min=16384 ctx_max=32768
+tier=coder     variant=coder-14b     rank=1 resident_mib=9000  kv_mib_per_1k=160 ctx_min=16384 ctx_max=32768
+tier=vision    variant=vision-8b     rank=1 resident_mib=8192  kv_mib_per_1k=144 ctx_min=8192  ctx_max=16384
+tier=vision    variant=vision-2b     rank=2 resident_mib=2560  kv_mib_per_1k=112 ctx_min=8192  ctx_max=16384

@@ -1,0 +1,62 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-installer — the installer's hardware probe and planner, built from THIS repo.
+#
+# river-hwprobe + river-plan (installer/, Go standard library only, MIT) are built by
+# build/20-installer-binaries.sh into $RUNINK_OUT/installer-bin, with GOAMD64=v1 so they run
+# on the CPUs they refuse. The live ISO runs them before anything touches a disk, and the
+# installed node keeps them for re-planning; see docs/INSTALLER-HARDWARE.md.
+# river-netsetup (sh, over nmcli) and river-netcheck (its Go connectivity check) are the
+# network-first step every live session starts with (docs/INSTALL.md, "Network first"); the
+# installed node keeps them to reconfigure its network.
+#
+# Kept apart from runink-runtime on purpose: runink-runtime carries only the host binaries a
+# downstream payload stages (none on a base image), while these ship on EVERY image.
+pkgname=runink-installer
+pkgver=2026.09
+pkgrel=1
+pkgdesc="Runink River installer: hardware probe, planner, payload tools, cloud first-boot agent, network-first setup and LAN-install pairing and the graphical installer (river-hwprobe, river-plan, river-modelpack, river-payloadpack, river-cloud-init, river-netcheck, river-netsetup, river-pair, river-pair-announce, river-installer)"
+arch=('x86_64')
+url="https://github.com/org-runink/river"
+license=('MIT')
+depends=('glibc' 'networkmanager')
+options=('!strip')  # built with -ldflags='-s -w'
+
+package() {
+  local out="${RUNINK_OUT:?set RUNINK_OUT to build/artifacts}"
+  # Every command is REQUIRED: runink-install refuses to plan without them, so a package
+  # without them is a broken installer, not a variation. RUNINK_ALLOW_PARTIAL=1 is the
+  # deliberate escape hatch, matching build/build-all.sh.
+  local missing="" b
+  # river-pair-announce refuses to run anywhere but the live medium, and its s6 session
+  # template is in the live overlay only (iso-profiles/river/live-overlay/usr/local/lib/river-pair),
+  # so on an installed node it is inert; river-pair lets a node drive LAN installs.
+  for b in river-hwprobe river-plan river-modelpack river-payloadpack river-cloud-init river-netcheck river-netsetup river-pair river-pair-announce river-installer; do
+    if [ -s "$out/installer-bin/$b" ]; then
+      install -Dm755 "$out/installer-bin/$b" "$pkgdir/usr/local/bin/$b"
+    else
+      missing="$missing $b"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    if [ "${RUNINK_ALLOW_PARTIAL:-0}" = 1 ]; then
+      echo "runink-installer: WARNING: missing:$missing (RUNINK_ALLOW_PARTIAL=1)" >&2
+    else
+      echo "runink-installer: missing:$missing — run build/20-installer-binaries.sh; refusing to package" >&2
+      return 1
+    fi
+  fi
+  # The planner's model tiers (resident sizes, KV cost, context bounds) and the lock they
+  # reference, read by river-plan. A downstream payload that serves models stages them in
+  # $RUNINK_OUT (it knows its model set); otherwise they are taken from the repo root when
+  # present. Absent both, the installer plans hardware and storage only and says so
+  # (docs/INSTALLER-HARDWARE.md).
+  local f src
+  for f in models.tiers models.lock; do
+    src=""
+    if [ -f "$out/$f" ]; then src="$out/$f"
+    elif [ -f "$startdir/../../../$f" ]; then src="$startdir/../../../$f"
+    fi
+    [ -n "$src" ] && install -Dm644 "$src" "$pkgdir/usr/local/share/runink/$f"
+  done
+  return 0
+}

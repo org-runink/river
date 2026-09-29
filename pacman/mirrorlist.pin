@@ -1,0 +1,29 @@
+# mirrorlist.pin — pinned mirror snapshots for reproducible builds.
+#
+# artools/buildiso resolves packages from whatever mirrors are configured. To make the
+# golden image reproducible, pin to a dated snapshot rather than "latest". Two mirrorlists
+# are rendered into /etc/pacman.d/ at build time (see pacman.conf.in Includes):
+#
+#   mirrorlist-artix  -> Artix (system/world/galaxy)
+#   mirrorlist-arch   -> Arch (extra; for the few packages Artix mirrors from Arch)
+#
+# Update PIN_DATE deliberately. The kernel (linux-runink) and its ZFS module (runink-zfs)
+# are NOT from these mirrors: they are pinned in their PKGBUILDs and bumped together.
+
+PIN_DATE="2026-07-01"
+
+# --- Artix (use an archive/snapshot mirror if the mirror supports it) ---
+# Example canonical mirrors; swap for a snapshot mirror when one is available.
+ARTIX_MIRRORS='
+Server = https://mirror1.artixlinux.org/repos/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artix-linux/$repo/os/$arch
+'
+
+# --- Arch snapshot (archive.archlinux.org exposes dated snapshots) ---
+ARCH_SNAPSHOT="https://archive.archlinux.org/repos/${PIN_DATE//-//}/\$repo/os/\$arch"
+
+# --- archzfs: no longer used (2026-09-22) ---
+# ZFS userland + the initcpio hook are runink-zfs-utils, split from build/pkgbuilds/runink-zfs
+# and pinned to the same signed OpenZFS release as the modules. The hook files are vendored
+# from archzfs at a pinned commit (see that PKGBUILD); the archzfs REPO is not configured.
+ARCHZFS_NOTE="archzfs repo not used; ZFS userland is runink-zfs-utils (same tarball as runink-zfs)"

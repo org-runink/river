@@ -1,0 +1,8 @@
+Upstream source-signing public keys, one armored export per key, named <FINGERPRINT>.asc
+(40 uppercase hex, the PRIMARY key). base/sources.lock pins which key must have signed
+which source; base/river-build dearmors the one key into a private keyring per check and
+never touches a user keyring. Empty today: the three starter sources (skalibs, execline,
+s6) are from skarnet.org, which publishes no signatures (see the nosig lines in the lock).
+
+These keys vouch for UPSTREAM bytes only. The key that vouches for what RIVER itself ships
+is the owner's, in ../owner/.

@@ -1,0 +1,8 @@
+# nvchecker configuration: reports new OpenZFS stable releases. A bump also needs the new
+# release's META Linux-Maximum to cover linux-runink's kernel (prepare() checks it).
+[zfs-linux-runink]
+source = "github"
+github = "openzfs/zfs"
+use_max_tag = true
+include_regex = 'zfs-\d+\.\d+\.\d+'
+prefix = "zfs-"

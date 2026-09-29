@@ -1,0 +1,69 @@
+name: Tier 2 (VM boot)
+
+# Tier 2 of docs/governance/CI.md: build the ISO and boot it in a short-lived QEMU/KVM
+# microVM.
+#
+# DOES NOT FIT A STANDARD GITHUB-HOSTED RUNNER, so it is workflow_dispatch ONLY and is never
+# triggered by a pull request. `make iso-in-builder` compiles every component from source
+# (the kernel alone took ~4 h 10 min on a hosted runner's 4 vCPUs), then builds the ISO, in
+# ONE job: it needs ~40 GB of disk (a hosted runner has ~14 GB free, ~38 GB after reclaiming
+# the preinstalled toolchains), more time than a hosted job may run (6 h), and more RAM than
+# a runner's 16 GB (the runner spec asked for ~30 GiB). A dispatched run is expected to fail
+# on disk or time; the workflow stays for the day the project points it at a larger
+# GitHub-hosted runner (a paid runner size). Tier 2 today is the maintainers' local path:
+# build/local-iso.sh (docs/BUILD.md), then tests/tier2-boot-smoke.sh <iso> or
+# build/qemu-gui-test.sh on the workstation.
+#
+# Runner: GitHub-hosted ubuntu-latest only. This public repository runs no job on a
+# self-hosted runner (docs/governance/CI.md, "Runners"). The runner has /dev/kvm; the udev
+# rule below (GitHub's documented one) makes it usable by the runner user. No secrets are
+# used, and nothing uses pull_request_target.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tier2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boot:
+    name: tier2 (ISO build + VM boot smoke)
+    if: github.repository_owner == 'org-runink'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Make /dev/kvm usable by the runner user
+        run: |
+          set -eu
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          [ -w /dev/kvm ] || { echo "::error::/dev/kvm is not usable on this runner"; exit 1; }
+      - name: Reclaim disk and install qemu + OVMF
+        run: |
+          set -eu
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell \
+            /opt/microsoft /opt/google /usr/local/lib/node_modules
+          sudo docker system prune -af >/dev/null 2>&1 || true
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-x86 ovmf
+          df -h /; free -g
+      - name: Build the ISO in the ephemeral builder container
+        run: make iso-in-builder
+      - name: Boot it in a throwaway microVM
+        env:
+          OVMF: /usr/share/OVMF/OVMF_CODE_4M.fd   # Ubuntu's path (ovmf package)
+        run: |
+          set -eu
+          iso=$(find . "$HOME/artools-workspace" -maxdepth 4 -name '*.iso' -newer Makefile 2>/dev/null | head -1)
+          [ -n "$iso" ] || { echo "::error::no ISO produced"; exit 1; }
+          sh tests/tier2-boot-smoke.sh "$iso" 900

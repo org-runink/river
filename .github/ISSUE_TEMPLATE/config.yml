@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "❓ Ask a Question"
+    url: https://github.com/org-runink/river/discussions/new?category=q-a
+    about: "Start a discussion if you have a question about River."
+  - name: "💡 Share an Idea"
+    url: https://github.com/org-runink/river/discussions/new?category=ideas
+    about: "Propose a feature or improvement in discussions first."
+  - name: "🔐 Report Security Issue"
+    url: mailto:security@runink.org
+    about: "Report vulnerabilities privately to security@runink.org"
+  - name: "📖 View Contribution Guide"
+    url: https://runink.org/docs/governance/
+    about: "Read the full contribution guidelines and code of conduct."

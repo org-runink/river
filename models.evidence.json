@@ -1,0 +1,934 @@
+{
+  "schema": 1,
+  "generated": "2026-09-24",
+  "about": "Model-card evidence and load-test validation for every role in models.lock. Quotes are verbatim from the model card (README.md) or config file at the pinned revision; `source` URLs are pinned to that revision. Raw copies of every quoted file, with sha256, are listed under raw_evidence (paths relative to MODELS_DIR/evidence on the build host).",
+  "test_environment": {
+    "engine": "mistral.rs 0.9.2 (git d184053f2441f897cf81429b98b0d868f4d96ff3), CPU build, container image",
+    "host": "AMD Ryzen 7 8840U, 8 cores / 16 threads, 25 GiB RAM, no GPU",
+    "threads": "RAYON_NUM_THREADS=8 OMP_NUM_THREADS=8",
+    "memory_guard": "every server was killed if host MemAvailable fell below the stated floor",
+    "throughput_prompt": "a 504-505 token English prompt, temperature 0, max_tokens 64; TTFT = total_prompt_time_sec, decode = avg_compl_tok_per_sec from the server's usage block",
+    "target_scaling": "Decode on CPU is memory-bandwidth bound: Qwen3-14B Q4_K_M decoded at 4.23 tok/s here, the same as the ~4.2 tok/s previously recorded for that model on the 22-thread target node, so decode numbers are taken as ~1.0x on the target. Prefill is compute bound and scales with threads: target TTFT is estimated as this host's TTFT x 8/12 (12 threads is the pin a general tier gets on the target), a best case.",
+    "engine_policy": "mistral.rs is the only inference engine (decided 2026-09-27). A result measured on any other engine is NOT EVIDENCE and is kept only as history (validation/results.json marks such runs not_evidence)."
+  },
+  "requirements": {
+    "general": [
+      "context >= 16384 tokens (32768 preferred)",
+      "output up to 8192 tokens",
+      "no reasoning trace unless the caller asks for one (callers send no /no_think)",
+      "valid JSON at temperature 0",
+      "languages en, es, fr, pt",
+      "decode >= 2.8 tok/s",
+      "image inputs go to the vision role"
+    ],
+    "coder": [
+      "context >= 16384 tokens",
+      "honours /no_think",
+      "honours stop sequences \"\\nObservation:\" and \"\\n<|im_end|>\"",
+      "JSON output",
+      "decode >= 2.8 tok/s"
+    ],
+    "vision": [
+      "bbox_2d boxes in PIXEL coordinates of the input image, JSON",
+      "several JPEG/PNG images per request, max edge 1024",
+      "resident memory <= 18 GiB",
+      "decode >= 1 tok/s"
+    ],
+    "stt": [
+      "OpenAI chat turn with an audio_url data-URI WAV, 16 kHz mono s16le",
+      "follows the transcription instruction",
+      "languages en, es, fr, pt"
+    ],
+    "embedding": [
+      "768 dimensions, to match the existing vector indexes",
+      "input <= 2048 tokens",
+      "search_query: / search_document: prefixes"
+    ]
+  },
+  "roles": {
+    "general": {
+      "status": "pinned-as-coder",
+      "candidates": [
+        {
+          "id": "qwen3.8-27b",
+          "verdict": "FAILS the general requirements: decode below the 2.8 tok/s floor; thinks by default",
+          "model": {
+            "repo": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "gguf_tried": [
+              {
+                "repo": "unsloth/Qwen3.8-27B-GGUF",
+                "revision": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+                "file": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+                "size": 16464440224,
+                "sha256": "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
+                "quantizer": "Unsloth (Unsloth Dynamic mix)",
+                "result": "does not load: GGUF tensor `blk.0.ffn_down.weight` uses dtype IQ4_XS (23); mistral.rs 0.9.2 direct GGUF loading supports F32, F16, BF16, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1 and Q2_K through Q8_K"
+              },
+              {
+                "repo": "unsloth/Qwen3.8-27B-GGUF",
+                "revision": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+                "file": "mmproj-F16.gguf",
+                "size": 927607488,
+                "sha256": "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+              },
+              {
+                "repo": "lmstudio-community/Qwen3.8-27B-GGUF",
+                "revision": "5a7da681f60570ab5b439a587e912d2e5eddb582",
+                "file": "Qwen3.8-27B-Q4_K_M.gguf",
+                "size": 16810714336,
+                "sha256": "e00082f779fa385cee8c68a3ec8833a75778cc87272240b942f74e0b8243e520",
+                "quantizer": "LM Studio team, llama.cpp b10430 (standard K-quant types)",
+                "result": "loads, pipeline modalities Text + Vision + Video; could not be served on the 25 GiB test host above a 2.8 GiB MemAvailable floor (resident ~20 GiB with the projector)"
+              },
+              {
+                "repo": "lmstudio-community/Qwen3.8-27B-GGUF",
+                "revision": "5a7da681f60570ab5b439a587e912d2e5eddb582",
+                "file": "mmproj-Qwen3.8-27B-BF16.gguf",
+                "size": 931145856,
+                "sha256": "97ba9d70e7407f08c880def231fd360a312c76d0053387733f10dcf6affd75a1"
+              },
+              {
+                "repo": "bartowski/Qwen3.8-27B-GGUF",
+                "revision": "0c92138c51f112d2f0dc84d5f6d1ebe4b9912b9a",
+                "file": "Qwen3.8-27B-Q3_K_M.gguf",
+                "size": 13404051168,
+                "sha256": "14865aaef0b6c26a013538782d366443c7298b11d5df9f0fb829d34d1963f869",
+                "quantizer": "bartowski (standard K-quant types)",
+                "result": "loads and serves (used as the measurable proxy for the Q4_K_M)"
+              }
+            ]
+          },
+          "card": {
+            "license": {
+              "value": "apache-2.0",
+              "quote": "license: apache-2.0",
+              "source": "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md"
+            },
+            "context_window": {
+              "max_position_embeddings": 262144,
+              "quote": "Context Length: 262,144 natively and extensible up to 1,000,000 tokens.",
+              "yarn_note": "All the notable open-source frameworks implement static YaRN, which means the scaling factor remains constant regardless of input length, **potentially impacting performance on shorter texts.**",
+              "sources": [
+                "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md",
+                "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json"
+              ]
+            },
+            "architecture": {
+              "note": "hybrid attention: 64 layers, 16 full-attention + 48 linear-attention (full_attention_interval 4), 4 KV heads x head_dim 256 on the full-attention layers",
+              "source": "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json"
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image",
+                "video"
+              ],
+              "output": [
+                "text"
+              ],
+              "quote": "Native support for image and video understanding, from STEM diagrams and documents to hour-scale videos.",
+              "source": "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md"
+            },
+            "sampling": {
+              "thinking": "Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`",
+              "non_thinking": "Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`",
+              "source": "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md"
+            },
+            "thinking_toggle": {
+              "quotes": [
+                "Thinking mode is on by default and can be disabled per request",
+                "Qwen3.8 models operate in thinking mode by default, generating thinking content signified by `<think>\\n...</think>\\n\\n` before producing the final response."
+              ],
+              "source": "https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md"
+            }
+          },
+          "validation": {
+            "measured_on": "bartowski Q3_K_M (13.40 GB) + lmstudio BF16 mmproj; Q4_K_M numbers are extrapolated by file size (decode is bandwidth bound)",
+            "decode_tok_s": {
+              "measured_q3_k_m": [
+                3.09,
+                3.15
+              ],
+              "extrapolated_q4_k_m_test_host": 2.5,
+              "estimated_q4_k_m_target": 2.5,
+              "floor": 2.8,
+              "result": "FAIL"
+            },
+            "ttft_500_tokens_s": {
+              "measured_q3_k_m": [
+                90.7,
+                73.9
+              ],
+              "prefill_tok_s": [
+                5.55,
+                6.82
+              ],
+              "estimated_target_12_threads": "50-60",
+              "note": "prefill is ~8x slower than the 14B dense model on this CPU backend (49 tok/s)"
+            },
+            "thinking_default": {
+              "stock_template_no_flags": "thinks: 39 completion tokens, reasoning_content populated, content \"\\n\\nParis\"",
+              "per_request_enable_thinking_false": "PASS: content \"Paris\", 2 tokens, no reasoning",
+              "server_side_default_flip_template": "FAIL: a template testing `enable_thinking is defined and enable_thinking is true` still thinks, so mistral.rs 0.9.2 passes enable_thinking=true when a request omits it",
+              "server_side_forced_off_template": "PASS: `--jinja-explicit` with the thinking branch forced off gave \"Paris\" (2 tokens) and valid JSON at temperature 0 with no request flags; this also removes per-request opt-in",
+              "result": "PASS only with a forced-off template"
+            },
+            "context_load": {
+              "max_seq_len_32768": "loaded (Q3_K_M)",
+              "max_seq_len_16384": "loaded (Q3_K_M)",
+              "kv_mib_per_1k_computed": 64,
+              "kv_note": "only the 16 full-attention layers keep a KV cache: 2 x 16 x 4 x 256 x 2 bytes x 1024 = 64 MiB per 1k tokens; the linear-attention state is constant-size"
+            },
+            "json_temp0": "PASS (forced-off template): {\"city\": \"Lisbon\", \"country\": \"Portugal\"}",
+            "memory": {
+              "q4_k_m_with_projector_resident_mib_estimate": 20000,
+              "note": "did not fit under the test host's floor; above the 18 GiB vision budget"
+            }
+          }
+        },
+        {
+          "id": "qwen3-14b-shared",
+          "verdict": "RECOMMENDED alternative: the coder's pinned Qwen3-14B-Q4_K_M.gguf served with a forced non-thinking template; zero extra disk",
+          "model": {
+            "repo": "Qwen/Qwen3-14B-GGUF",
+            "revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+            "file": "Qwen3-14B-Q4_K_M.gguf",
+            "note": "same file and card evidence as roles.coder"
+          },
+          "validation": {
+            "engine_flags": "serve --host :: --port 8080 --no-ui --max-seqs 2 --jinja-explicit <qwen3-nothink.jinja> text --model-id /models --format gguf --quantized-file Qwen3-14B-Q4_K_M.gguf --max-seq-len 32768 --dtype bf16 --cpu",
+            "template": "the model's own chat_template (Qwen/Qwen3-14B@40c069824f4251a91eefaf281ebe4c544efd3e18 tokenizer_config.json) with `{%- if enable_thinking is defined and enable_thinking is false %}` replaced by `{%- if true %}`, so the empty <think></think> block is always emitted",
+            "load": "PASS: /health after 81 s with --max-seq-len 32768",
+            "no_reasoning_without_flags": "PASS: plain prompt, no /no_think, no enable_thinking: \"Paris.\" (3 tokens, empty reasoning)",
+            "json_temp0": "PASS: {\"city\": \"Lisbon\", \"country\": \"Portugal\"}",
+            "languages": {
+              "es": "PASS \"La capital de España es Madrid.\"",
+              "fr": "PASS \"La capitale de la France est Paris.\"",
+              "pt": "PASS \"A capital do Brasil é Brasília.\""
+            },
+            "decode_tok_s": {
+              "measured_bf16_dtype": 2.75,
+              "measured_default_dtype_same_file": 4.23,
+              "floor": 2.8,
+              "result": "PASS at the default dtype; do NOT pass --dtype bf16 (it was 35% slower on this CPU backend)",
+              "note": "the default-dtype figure is the coder run of the same file; a default-dtype run with this template was queued and NOT measured"
+            },
+            "ttft_500_tokens_s": {
+              "measured_bf16_dtype": 19.4,
+              "measured_default_dtype_same_file": 10.2
+            },
+            "memory_mib": {
+              "serving_rss": 11611,
+              "load_peak_vmhwm": 20042
+            }
+          }
+        }
+      ],
+      "decision": {
+        "decided": "2026-09-24",
+        "note": "One Qwen3-14B Q4_K_M process serves general and coder; the file is the coder row of models.lock, so general has no row of its own."
+      }
+    },
+    "coder": {
+      "status": "pinned",
+      "model": {
+        "repo": "Qwen/Qwen3-14B-GGUF",
+        "revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+        "files": [
+          {
+            "file": "Qwen3-14B-Q4_K_M.gguf",
+            "size": 9001752960,
+            "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+          }
+        ],
+        "quantizer": "Qwen (the model maker)",
+        "quant_type": "Q4_K_M (GGUF)",
+        "base_model": {
+          "repo": "Qwen/Qwen3-14B",
+          "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+          "url": "https://huggingface.co/Qwen/Qwen3-14B/tree/40c069824f4251a91eefaf281ebe4c544efd3e18"
+        }
+      },
+      "card": {
+        "license": {
+          "value": "apache-2.0",
+          "quote": "license: apache-2.0",
+          "source": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/blob/530227a7d994db8eca5ab5ced2fb692b614357fd/README.md"
+        },
+        "context_window": {
+          "max_position_embeddings": 40960,
+          "quote": "Context Length: 32,768 natively and [131,072 tokens with YaRN](#processing-long-texts).",
+          "yarn_note": "We advise adding the `rope_scaling` configuration only when processing long contexts is required.",
+          "sources": [
+            "https://huggingface.co/Qwen/Qwen3-14B-GGUF/blob/530227a7d994db8eca5ab5ced2fb692b614357fd/README.md",
+            "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/config.json"
+          ]
+        },
+        "languages": {
+          "quote": "Support of 100+ languages and dialects with strong capabilities for multilingual instruction following and translation.",
+          "source": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md"
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "tool_calling": {
+          "quote": "Expertise in agent capabilities, enabling precise integration with external tools in both thinking and unthinking modes",
+          "source": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md"
+        },
+        "structured_output": {
+          "claim": "no explicit JSON-mode claim in the card; JSON validated below"
+        },
+        "sampling": {
+          "thinking": "For thinking mode, use `Temperature=0.6`, `TopP=0.95`, `TopK=20`, and `MinP=0` (the default setting in `generation_config.json`). **DO NOT use greedy decoding**",
+          "non_thinking": "For non-thinking mode, we suggest using `Temperature=0.7`, `TopP=0.8`, `TopK=20`, and `MinP=0`.",
+          "quantized": "We recommend setting `presence_penalty` to 1.5 for quantized models to suppress repetitive outputs.",
+          "source": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md"
+        },
+        "thinking_toggle": {
+          "quotes": [
+            "By default, Qwen3 has thinking capabilities enabled",
+            "you can add `/think` and `/no_think` to user prompts or system messages to switch the model's thinking mode from turn to turn",
+            "When `enable_thinking=False`, the soft switches are not valid."
+          ],
+          "source": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md"
+        }
+      },
+      "validation": {
+        "engine_flags": "serve --host :: --port 8080 --no-ui --max-seqs 2 --prefix-cache-n 0 text --model-id /models --format gguf --quantized-file Qwen3-14B-Q4_K_M.gguf --max-seq-len 16384 --cpu",
+        "load": "PASS: /health after 78 s with --max-seq-len 16384",
+        "decode_tok_s": {
+          "measured": 4.23,
+          "floor": 2.8,
+          "result": "PASS",
+          "note": "default dtype, 8 threads, 505-token prompt; target estimate ~4.2 (bandwidth bound)"
+        },
+        "ttft_500_tokens_s": {
+          "measured": 10.2,
+          "prefill_tok_s": 49.4,
+          "estimated_target_12_threads": 6.8
+        },
+        "no_think": "PASS: prompt ending in /no_think returned {\"ok\": true, \"n\": 3} with an empty reasoning block",
+        "json": "PASS",
+        "stop_sequences": {
+          "result": "PARTIAL",
+          "detail": "with stop [\"\\nObservation:\", \"\\n<|im_end|>\"] generation ended (finish_reason stop) but the returned text still ended in \"\\nObservation: The\": the matched stop string and one further token were NOT stripped. Callers must cut at the stop string themselves."
+        },
+        "memory_mib": {
+          "serving_rss": 12036,
+          "load_peak_vmhwm": 19542,
+          "note": "rss after two requests; the load peak is transient"
+        },
+        "kv_mib_per_1k_computed": 160
+      }
+    },
+    "vision": {
+      "status": "pinned",
+      "candidates": [
+        {
+          "id": "qwen3.8-27b",
+          "verdict": "FAILS pixel-box and memory requirements",
+          "model": {
+            "see": "roles.general.candidates[0].model"
+          },
+          "validation": {
+            "image_input": "PASS: JPEG (800x600) and PNG accepted with --max-edge 1024",
+            "bbox_2d_format": {
+              "result": "FAIL (relative, not pixels)",
+              "prompt": "Detect the red rectangle and the blue circle. Output a JSON array where each item is {\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"...\"}.",
+              "truth_pixels": {
+                "red rectangle": [
+                  100,
+                  150,
+                  300,
+                  350
+                ],
+                "blue circle": [
+                  520,
+                  320,
+                  680,
+                  480
+                ]
+              },
+              "returned": {
+                "red rectangle": [
+                  125,
+                  250,
+                  376,
+                  584
+                ],
+                "blue circle": [
+                  650,
+                  532,
+                  851,
+                  802
+                ]
+              },
+              "interpretation": "0-1000 normalized coordinates (x/800*1000, y/600*1000)"
+            },
+            "multi_image": "PASS: two images in one turn (1574 prompt tokens), each described correctly",
+            "latency": {
+              "single_image_request_s": 166.3,
+              "two_image_request_s": 314.8,
+              "decode_tok_s_q3_k_m": 3.1
+            },
+            "memory": "FAIL: Q4_K_M + projector ~20 GiB resident, above the 18 GiB budget"
+          }
+        },
+        {
+          "id": "qwen2.5-vl-7b",
+          "verdict": "GGUF does not load; safetensors+ISQ not measured",
+          "model": {
+            "repo": "ggml-org/Qwen2.5-VL-7B-Instruct-GGUF",
+            "revision": "508edd0afaa66bb9e9f40587acc2184f02daf1f6",
+            "files": [
+              {
+                "file": "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+                "size": 4683072032,
+                "sha256": "9258bf05b12686d097ff3b6b18d968ab393649780aa2b3cd67fec43d50554392"
+              },
+              {
+                "file": "mmproj-Qwen2.5-VL-7B-Instruct-Q8_0.gguf",
+                "size": 853119712,
+                "sha256": "2ddb555391bae966e412deab9e07b58afa18bcc06930ba0f1c78a3695ab9e506"
+              }
+            ],
+            "quantizer": "ggml-org (the llama.cpp maintainers); the model maker publishes no GGUF",
+            "quant_type": "Q4_K_M + Q8_0 projector",
+            "base_model": {
+              "repo": "Qwen/Qwen2.5-VL-7B-Instruct",
+              "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/cc594898137f460bfe9f0759e9844b3ce807cfb5"
+            },
+            "load_note": "multimodal GGUF needs `--tok-model-id <local dir>` holding the base repo's config/tokenizer/preprocessor files, or mistral.rs fetches them from huggingface.co"
+          },
+          "card": {
+            "license": {
+              "value": "apache-2.0",
+              "quote": "license: apache-2.0",
+              "source": "https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/cc594898137f460bfe9f0759e9844b3ce807cfb5/README.md"
+            }
+          },
+          "validation": {
+            "gguf": {
+              "result": "does not load",
+              "detail": "\"GGUF component `general.type` must be `mmproj`, got `clip-vision`\": every published Qwen2.5-VL-7B projector checked (ggml-org, unsloth, lmstudio-community, bartowski) carries general.type=clip-vision"
+            },
+            "safetensors_isq": {
+              "result": "NOT MEASURED",
+              "detail": "the maker's 5 safetensors shards (16,584,414,560 bytes, sha256-verified at Qwen/Qwen2.5-VL-7B-Instruct@cc594898137f460bfe9f0759e9844b3ce807cfb5) are downloaded; the `serve multimodal --isq q4k` load test did not get a slot on the shared test host before the deadline"
+            },
+            "why_it_matters": "The card claims: \"Qwen2.5-VL can accurately localize objects in an image by generating bounding boxes or points, and it can provide stable JSON outputs for coordinates and attributes.\" (https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/cc594898137f460bfe9f0759e9844b3ce807cfb5/README.md). The card does not state the coordinate frame; Qwen2.5-VL is the family expected to emit absolute pixel boxes (its technical report), which is UNVERIFIED here. Qwen3-VL and Qwen3.8 were measured returning 0-1000 relative boxes."
+          }
+        },
+        {
+          "id": "qwen3-vl-2b",
+          "verdict": "loads (1.55 GB, apache-2.0), fast (16 tok/s), multi-image works; FAILS the pixel-box requirement (0-1000 relative)",
+          "model": {
+            "repo": "Qwen/Qwen3-VL-2B-Instruct-GGUF",
+            "revision": "52d6c8ffea26cc873ac5ad116f8631268d7eb503",
+            "files": [
+              {
+                "file": "Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+                "size": 1107409952,
+                "sha256": "089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae"
+              },
+              {
+                "file": "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+                "size": 445053216,
+                "sha256": "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82"
+              }
+            ],
+            "quantizer": "Qwen (the model maker)",
+            "license": "apache-2.0"
+          },
+          "validation": {
+            "load": "PASS with --tok-model-id (local Qwen/Qwen3-VL-2B-Instruct@89644892 assets)",
+            "image_answer": "PASS: \"The image features a solid blue circle centered on a red square background.\" (39.5 s)",
+            "hazard": "a paletted/greyscale PNG panics the request path: \"rgb8 or rgba8 are the only supported image types\"; send RGB/RGBA",
+            "bbox_2d": {
+              "result": "RELATIVE 0-1000 (not pixels)",
+              "returned": {
+                "red rectangle": [
+                  120,
+                  242,
+                  380,
+                  590
+                ],
+                "blue circle": [
+                  645,
+                  528,
+                  852,
+                  805
+                ]
+              }
+            },
+            "multi_image": "PASS (2 images, 1570 prompt tokens, 59.6 s)",
+            "decode_tok_s": 16.1,
+            "single_image_request_s": 28.3,
+            "memory_mib": {
+              "serving_rss": 6605,
+              "load_peak_vmhwm": 7041
+            }
+          }
+        }
+      ],
+      "rejected_alternatives": [
+        {
+          "repo": "Qwen/Qwen2.5-VL-3B-Instruct",
+          "reason": "license qwen-research (not an open-source license)"
+        }
+      ],
+      "decision": {
+        "decided": "2026-09-24",
+        "model": {
+          "repo": "Qwen/Qwen3-VL-2B-Instruct-GGUF",
+          "revision": "52d6c8ffea26cc873ac5ad116f8631268d7eb503",
+          "files": [
+            "Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
+          ]
+        },
+        "assets": {
+          "repo": "Qwen/Qwen3-VL-2B-Instruct",
+          "revision": "89644892e4d85e24eaac8bacfd4f463576704203"
+        },
+        "note": "Owner decision among the candidates below; pinned in models.lock (role vision). Least-bad: bounding boxes are 0-1000 normalised, not pixels; inputs must be RGB."
+      }
+    },
+    "stt": {
+      "status": "pinned",
+      "model": {
+        "repo": "mistralai/Voxtral-Mini-4B-Realtime-2602",
+        "revision": "2769294da9567371363522aac9bbcfdd19447add",
+        "files": [
+          {
+            "file": "consolidated.safetensors",
+            "size": 8859462744,
+            "sha256": "263f178fe752c90a2ae58f037a95ed092db8b14768b0978b8c48f66979c8345d"
+          },
+          {
+            "file": "params.json",
+            "size": 1343,
+            "sha256": "2ace010ebf7f0b62c60747d91c6d140e3c7238632d3e9c63d60a2bd2065ea301"
+          },
+          {
+            "file": "tekken.json",
+            "size": 14910348,
+            "sha256": "8434af1d39eba99f0ef46cf1450bf1a63fa941a26933a1ef5dbbf4adf0d00e44"
+          },
+          {
+            "file": "config.json",
+            "size": 1572,
+            "sha256": "96582f5809ad179531d47f9f89d76c696058fbdeff608d6611dcb7e076ea7e93"
+          },
+          {
+            "file": "processor_config.json",
+            "size": 384,
+            "sha256": "5fbc4247e0b3b72c1b501b872c4fd6432b1f0fcc1939dcdf1fa5142c6d2ce070"
+          },
+          {
+            "file": "generation_config.json",
+            "size": 191,
+            "sha256": "1fabdbadf2e0ea9e2c36e2a8460a53caa694c1324136e4158032b0a32ff6beec"
+          }
+        ],
+        "quantizer": "none shipped: the model maker's bf16 weights, quantized in memory at load (mistral.rs --isq q4k)",
+        "quant_type": "safetensors bf16 on disk; q4k (sensitive tensors q6k) in RAM",
+        "base_model": {
+          "repo": "mistralai/Voxtral-Mini-4B-Realtime-2602",
+          "revision": "2769294da9567371363522aac9bbcfdd19447add",
+          "url": "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/tree/2769294da9567371363522aac9bbcfdd19447add"
+        }
+      },
+      "card": {
+        "license": {
+          "value": "apache-2.0",
+          "quote": "license: apache-2.0",
+          "source": "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/README.md"
+        },
+        "context_window": {
+          "max_position_embeddings": 131072,
+          "params_model_max_length": 131072,
+          "sliding_window": 8192,
+          "quote": "A single text-token is worth 80ms. Hence, make sure to set your `--max-model-len` accordingly.",
+          "sources": [
+            "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/README.md",
+            "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/params.json"
+          ]
+        },
+        "languages": {
+          "quote": "It supports **13 languages**",
+          "benchmark_table_languages": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "hi",
+            "it",
+            "nl",
+            "pt",
+            "zh",
+            "ja",
+            "ko",
+            "ru"
+          ],
+          "source": "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/README.md"
+        },
+        "modalities": {
+          "input": [
+            "audio",
+            "text"
+          ],
+          "output": [
+            "text"
+          ],
+          "audio_sample_rate_hz": 16000,
+          "quote_sample_rate": "\"sampling_rate\": 16000",
+          "sample_rate_source": "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/processor_config.json",
+          "latency_quote": "We recommend using a delay of 480ms as we found it to be the sweet spot of performance and low latency."
+        },
+        "tool_calling": {
+          "claim": "none in the card (transcription model)"
+        },
+        "structured_output": {
+          "claim": "none in the card"
+        },
+        "sampling": {
+          "quote": "Always set the temperature to 0.0",
+          "source": "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602/blob/2769294da9567371363522aac9bbcfdd19447add/README.md"
+        },
+        "thinking_toggle": {
+          "claim": "not a reasoning model"
+        }
+      },
+      "validation": {
+        "engine_flags": "serve --host :: --port 8080 --no-ui multimodal --model-id /models/voxtral-mini-4b-realtime-2602 --isq q4k --cpu",
+        "load": "PASS: /health after 25-31 s (in-memory q4k quantization, sensitive tensors q6k)",
+        "request_shape": "PASS: OpenAI chat turn, content [{type: audio_url, audio_url: {url: data:audio/wav;base64,...}}, {type: text, text: 'Transcribe this audio verbatim.'}], 16 kHz mono s16le WAV",
+        "english": {
+          "result": "PASS",
+          "expected": "Hello, this is a short transcription test from River.",
+          "got": "Hello, this is a short transcription test from River..",
+          "seconds": [
+            5.6,
+            7.5
+          ]
+        },
+        "spanish": {
+          "result": "PASS",
+          "expected": "Hola, esta es una prueba corta de transcripción.",
+          "got": "Hola, esta es una prueba corta de transcripción..",
+          "seconds": [
+            4.1,
+            4.9
+          ]
+        },
+        "french": {
+          "result": "INCONCLUSIVE",
+          "expected": "Bonjour, ceci est un court test de transcription.",
+          "got": "Bonjour, ceci est Atou Test de transcription..",
+          "note": "espeak-ng synthetic voice; re-test with recorded speech"
+        },
+        "portuguese": {
+          "result": "INCONCLUSIVE",
+          "expected": "Olá, este é um teste curto de transcrição.",
+          "got": "Hola, es Giancestitudo di Transcrição..",
+          "note": "espeak-ng pt-br synthetic voice; re-test with recorded speech"
+        },
+        "memory_mib": {
+          "serving_rss": 7079,
+          "load_peak_vmhwm": 12943
+        },
+        "kv_mib_per_1k_computed": 104,
+        "rejected_forms": [
+          {
+            "repo": "mistral-experimental/AudioCPP-Voxtral-Mini-4B-Realtime-2602-GGUF",
+            "revision": "4c3212f91349c32211172ce332f266a6e9501018",
+            "file": "voxtral-mini-4b-realtime-2602-q4_k.gguf",
+            "size": 3097662432,
+            "sha256": "8cafef18ea3e4cad81da8ffc4e72b69d2eab2c159c2e68428e2e088accbfc7f8",
+            "reason": "does not load: \"No companion projector was found for this multimodal GGUF; pass `--mmproj <filename>`\" (single-file audio.cpp GGUF, no llama.cpp-style projector)"
+          },
+          {
+            "repo": "ggml-org/Voxtral-Mini-3B-2507-GGUF",
+            "revision": "20616573013f28229fff61de74359d3eeff61f6a",
+            "files": [
+              "Voxtral-Mini-3B-2507-Q4_K_M.gguf (sha256 4705be8ec22ca23d12632f4b4a3691faa95917d90a06d3cf3c3ec0e91958f1a8)",
+              "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf (sha256 4f24c4ef3ce929d02ed9d1cfb050ae9a7365f057c0ddec0d489580982ebe0d02)"
+            ],
+            "reason": "does not load: \"multimodal GGUF architecture `llama` is not supported by the native multimodal loader\""
+          }
+        ]
+      }
+    },
+    "embedding": {
+      "status": "pending",
+      "pending": "no engine: mistral.rs is the only engine; the embedding model is being re-selected for one mistral.rs serves (dimension must match the vector indexes, 768). models.lock has no embedding row; models.tiers says pending=embedding.",
+      "former_model": {
+        "repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
+        "revision": "0188c9bf409793f810680a5a431e7b899c46104c",
+        "files": [
+          {
+            "file": "nomic-embed-text-v1.5.Q8_0.gguf",
+            "size": 146146432,
+            "sha256": "3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7"
+          }
+        ],
+        "quantizer": "Nomic AI (the model maker)",
+        "quant_type": "Q8_0 (GGUF)",
+        "base_model": {
+          "repo": "nomic-ai/nomic-embed-text-v1.5",
+          "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+          "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/tree/e9b6763023c676ca8431644204f50c2b100d9aab"
+        }
+      },
+      "former_model_note": "pinned until 2026-09-27, removed from models.lock: mistral.rs 0.9.2 cannot serve it (\"Embedding models do not support GGUF or GGML format\", and no nomic-bert architecture)",
+      "card": {
+        "license": {
+          "value": "apache-2.0",
+          "quote": "license: apache-2.0",
+          "source": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/blob/0188c9bf409793f810680a5a431e7b899c46104c/README.md"
+        },
+        "context_window": {
+          "n_positions": 8192,
+          "max_trained_positions": 2048,
+          "quote": "llama.cpp will default to 2048 tokens of context with these files. For the full 8192 token context length, you will have to choose a context extension method.",
+          "sources": [
+            "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/blob/0188c9bf409793f810680a5a431e7b899c46104c/README.md",
+            "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/blob/e9b6763023c676ca8431644204f50c2b100d9aab/config.json"
+          ]
+        },
+        "output_dimension": {
+          "value": 768,
+          "config_n_embd": 768,
+          "matryoshka_quote": "nomic-embed-text-v1.5: Resizable Production Embeddings with Matryoshka Representation Learning",
+          "source": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/blob/e9b6763023c676ca8431644204f50c2b100d9aab/README.md"
+        },
+        "task_prefixes": {
+          "required": [
+            "search_query: ",
+            "search_document: ",
+            "clustering: ",
+            "classification: "
+          ],
+          "quote": "you embed your documents as `search_document: <text here>` and embed your user queries as `search_query: <text here>`.",
+          "source": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/blob/e9b6763023c676ca8431644204f50c2b100d9aab/README.md"
+        },
+        "languages": {
+          "claim": "the card makes no multilingual claim (English training data)"
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "embedding"
+          ]
+        }
+      },
+      "rejected_alternatives": [
+        {
+          "repo": "mistralrs-community/Qwen3-Embedding-0.6B-UQFF",
+          "revision": "5e34ba24ccc4fc55af93c9a7c61b5a2eeb485a47",
+          "reason": "dim 1024 != 768, requires re-index",
+          "note": "q8_0 UQFF (0.79 GB with residual + tokenizer) loads in mistral.rs 0.9.2 via `serve embedding --from-uqff q8_0-0.uqff` once uqff_report.json is left out, and returned 1024-dim vectors"
+        },
+        {
+          "repo": "Qwen/Qwen3-Embedding-0.6B-GGUF",
+          "revision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
+          "reason": "dim 1024 != 768, requires re-index; and mistral.rs 0.9.2 refuses it: \"Embedding models do not support GGUF or GGML format\""
+        }
+      ],
+      "validation": {
+        "not_evidence": "NOT EVIDENCE: every result below was measured on llama.cpp, not mistral.rs, the only inference engine. Kept as history; it passes no gate.",
+        "engine": "llama.cpp llama-server; mistral.rs 0.9.2 cannot serve it (\"Embedding models do not support GGUF or GGML format\", and no nomic-bert architecture)",
+        "engine_flags": "--embeddings --pooling mean --model /models/nomic-embed-text-v1.5.Q8_0.gguf --ctx-size 2048 --batch-size 2048 --ubatch-size 2048 --gpu-layers 0",
+        "dimension": {
+          "result": "PASS",
+          "measured": 768
+        },
+        "prefixes": "search_query: / search_document: accepted as plain text (they are part of the input, per the card)",
+        "input_2048_tokens": {
+          "result": "PASS only with --batch-size 2048 --ubatch-size 2048",
+          "detail": "at llama-server's default 512-token batch a 1962-token input fails: \"input (1962 tokens) is too large to process. increase the physical batch size (current batch size: 512)\"; with 2048/2048 it returns a 768-dim vector"
+        },
+        "memory_mib": {
+          "serving_rss_default_batch": 238,
+          "serving_rss_batch_2048": 556
+        },
+        "kv_mib_per_1k_computed": 36
+      }
+    }
+  },
+  "lock_role_names": {
+    "stt": "tier stt (installer alias: voice)",
+    "embedding": "tier embedding (installer alias: embed)"
+  },
+  "raw_evidence": {
+    "base": "MODELS_DIR/evidence (build host)",
+    "files": [
+      {
+        "path": "coder/qwen3-nothink.jinja",
+        "sha256": "dd93685ae58618d508b46d357461a7748c92ff1e524b25253f7c045de1884562",
+        "bytes": 4118
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B@40c069824f4251a91eefaf281ebe4c544efd3e18/config.json",
+        "sha256": "e73c3664ca09b10a673fef0c22e8a6b456201d49bd4713c9691f775720e8857a",
+        "bytes": 728
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B@40c069824f4251a91eefaf281ebe4c544efd3e18/generation_config.json",
+        "sha256": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "bytes": 239
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B@40c069824f4251a91eefaf281ebe4c544efd3e18/README.md",
+        "sha256": "7ef503e68996a4e32007fedc7d8e198846e9b1f36620d38a79b89934100b1250",
+        "bytes": 16670
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B@40c069824f4251a91eefaf281ebe4c544efd3e18/tokenizer_config.json",
+        "sha256": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "bytes": 9732
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B-GGUF@530227a7d994db8eca5ab5ced2fb692b614357fd/params",
+        "sha256": "52610851456960402dc4ce4966dbea0eb83bb1d72c3eeeaefaafe09b4690ad9c",
+        "bytes": 270
+      },
+      {
+        "path": "coder/Qwen_Qwen3-14B-GGUF@530227a7d994db8eca5ab5ced2fb692b614357fd/README.md",
+        "sha256": "3e0df8a0e59bc900f7bcbc943b3163830abec87a19d2bca94651868362def947",
+        "bytes": 7497
+      },
+      {
+        "path": "embedding/nomic-ai_nomic-embed-text-v1.5@e9b6763023c676ca8431644204f50c2b100d9aab/config.json",
+        "sha256": "9ab00bd92cee80a569f708140b7b6c1661a65891ff3765b1519e181ba2f2c92b",
+        "bytes": 2538
+      },
+      {
+        "path": "embedding/nomic-ai_nomic-embed-text-v1.5@e9b6763023c676ca8431644204f50c2b100d9aab/README.md",
+        "sha256": "4430178908fbd574fdb6457e302d23e643d733ed036b5777180b0806946767b2",
+        "bytes": 71843
+      },
+      {
+        "path": "embedding/nomic-ai_nomic-embed-text-v1.5-GGUF@0188c9bf409793f810680a5a431e7b899c46104c/README.md",
+        "sha256": "2e1a99a21b550c6cdd965859790d0d10cca21a48800c8c83d6345afebb49cd98",
+        "bytes": 4747
+      },
+      {
+        "path": "general-vision/lmstudio-community_Qwen3.8-27B-GGUF@5a7da681f60570ab5b439a587e912d2e5eddb582/README.md",
+        "sha256": "cc923ed73316e9f41ccd67a6296a093db01ac8be9a494fa68276ce557e62c99b",
+        "bytes": 2106
+      },
+      {
+        "path": "general-vision/qwen3.8-chat_template.nothink.jinja",
+        "sha256": "5b477ec3f2dbab7d4d8a1cb4492d8fc4ffbf1df9df35d6a580fe5df5c63a5cf8",
+        "bytes": 8851
+      },
+      {
+        "path": "general-vision/Qwen_Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json",
+        "sha256": "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+        "bytes": 4312
+      },
+      {
+        "path": "general-vision/Qwen_Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/generation_config.json",
+        "sha256": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+        "bytes": 202
+      },
+      {
+        "path": "general-vision/Qwen_Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/preprocessor_config.json",
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "bytes": 390
+      },
+      {
+        "path": "general-vision/Qwen_Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md",
+        "sha256": "57e4bdb258ee1a7d2635c5174ebd4e56abe392505cdb5f8bbb356b0dc4293641",
+        "bytes": 65012
+      },
+      {
+        "path": "general-vision/Qwen_Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/tokenizer_config.json",
+        "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+        "bytes": 17928
+      },
+      {
+        "path": "general-vision/unsloth_Qwen3.8-27B-GGUF@4ca720788d1e01f1bff70c033e0d0028fd02e502/config.json",
+        "sha256": "45d9009888b40b71af58ac82f7151393c113b4eabb870ca3c3bbd237667d18cc",
+        "bytes": 3760
+      },
+      {
+        "path": "general-vision/unsloth_Qwen3.8-27B-GGUF@4ca720788d1e01f1bff70c033e0d0028fd02e502/README.md",
+        "sha256": "66088b22a4db15353288f45a570279f76d7d8b7f349a64dd28698b867c9bd2bb",
+        "bytes": 7455
+      },
+      {
+        "path": "vision-candidates/Qwen_Qwen2.5-VL-7B-Instruct@cc594898137f460bfe9f0759e9844b3ce807cfb5/config.json",
+        "sha256": "77d9ec7321cc572e3579e2c84799c9cadaded63c49ce93b101733349fc330c43",
+        "bytes": 1374
+      },
+      {
+        "path": "vision-candidates/Qwen_Qwen2.5-VL-7B-Instruct@cc594898137f460bfe9f0759e9844b3ce807cfb5/README.md",
+        "sha256": "1fa65dbb08bc9ffe0b020409c8686f08b23008c5a68554353305fd2de6f2b81e",
+        "bytes": 18574
+      },
+      {
+        "path": "vision-fallback/Qwen_Qwen3-VL-2B-Instruct@89644892e4d85e24eaac8bacfd4f463576704203/config.json",
+        "sha256": "bec4b3d446efa05807365c9e1cec03ac590836879d02f3a6da879971154bdd3b",
+        "bytes": 1505
+      },
+      {
+        "path": "vision-fallback/Qwen_Qwen3-VL-2B-Instruct@89644892e4d85e24eaac8bacfd4f463576704203/generation_config.json",
+        "sha256": "1e241830b48b397cb0900101421df5450baddc7adf01e5fc86b5615865f3bae4",
+        "bytes": 269
+      },
+      {
+        "path": "vision-fallback/Qwen_Qwen3-VL-2B-Instruct@89644892e4d85e24eaac8bacfd4f463576704203/preprocessor_config.json",
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "bytes": 390
+      },
+      {
+        "path": "vision-fallback/Qwen_Qwen3-VL-2B-Instruct@89644892e4d85e24eaac8bacfd4f463576704203/README.md",
+        "sha256": "5fc5be1ca9a3910399bd6239ee5086ab5d82a2a59c5d2b00e887a8835cc110e4",
+        "bytes": 7136
+      },
+      {
+        "path": "vision-fallback/Qwen_Qwen3-VL-2B-Instruct-GGUF@52d6c8ffea26cc873ac5ad116f8631268d7eb503/README.md",
+        "sha256": "2f7f75122a301c7022d16f23c98023c1cc31aca3296fcb62b4e77999a3406421",
+        "bytes": 7855
+      },
+      {
+        "path": "voice/mistralai_Voxtral-Mini-4B-Realtime-2602@2769294da9567371363522aac9bbcfdd19447add/config.json",
+        "sha256": "96582f5809ad179531d47f9f89d76c696058fbdeff608d6611dcb7e076ea7e93",
+        "bytes": 1572
+      },
+      {
+        "path": "voice/mistralai_Voxtral-Mini-4B-Realtime-2602@2769294da9567371363522aac9bbcfdd19447add/generation_config.json",
+        "sha256": "1fabdbadf2e0ea9e2c36e2a8460a53caa694c1324136e4158032b0a32ff6beec",
+        "bytes": 191
+      },
+      {
+        "path": "voice/mistralai_Voxtral-Mini-4B-Realtime-2602@2769294da9567371363522aac9bbcfdd19447add/params.json",
+        "sha256": "2ace010ebf7f0b62c60747d91c6d140e3c7238632d3e9c63d60a2bd2065ea301",
+        "bytes": 1343
+      },
+      {
+        "path": "voice/mistralai_Voxtral-Mini-4B-Realtime-2602@2769294da9567371363522aac9bbcfdd19447add/processor_config.json",
+        "sha256": "5fbc4247e0b3b72c1b501b872c4fd6432b1f0fcc1939dcdf1fa5142c6d2ce070",
+        "bytes": 384
+      },
+      {
+        "path": "voice/mistralai_Voxtral-Mini-4B-Realtime-2602@2769294da9567371363522aac9bbcfdd19447add/README.md",
+        "sha256": "a5f8e9f596b6d933f8ad0ef4f9654b43b1f61a22bf9a40b63571804e869b2bc5",
+        "bytes": 14942
+      }
+    ]
+  }
+}

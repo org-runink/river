@@ -1,0 +1,141 @@
+name: build runink-zfs — OpenZFS from source vs linux-runink (Artix container)
+
+# The v2 companion to kernel-build.yml: compile runink-zfs (OpenZFS from source) AGAINST the
+# linux-runink kernel we already built, rather than scraping the module off a running box.
+# It reuses the kernel-build artifact (no 4h kernel rebuild): install linux-runink-headers into
+# the Artix container, then makepkg the SPLIT runink-zfs PKGBUILD. Output → TWO packages from
+# one signed OpenZFS tarball, uploaded together as the runink-zfs-pkgs artifact (the name
+# the ISO build fetches), ready to repo-add into localrepo alongside the kernel:
+#   runink-zfs        spl.ko/zfs.ko for linux-runink
+#   runink-zfs-utils  the matching userland + udev rules + the mkinitcpio `zfs` hook
+# The userland used to come from archzfs's zfs-utils (2.3.3 against 2.4.4 modules); it is
+# built here now so the pair cannot skew. Manual-dispatch only.
+#
+# Runs on GitHub-hosted ubuntu-latest (workflow_dispatch only, so no pull-request code
+# reaches it). It needs docker, the gh CLI and ~10 GB of disk, all of which a standard
+# runner has; the build takes ~15-30 min. It built on hosted runners in August and
+# September 2026.
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_run_id:
+        description: 'kernel-build.yml run id to pull linux-runink-pkgs from (blank = latest success)'
+        type: string
+        default: ''
+      pkgdir:
+        description: 'pkgbuild dir under build/pkgbuilds'
+        type: string
+        default: runink-zfs
+
+permissions:
+  contents: read
+  actions: read   # to download another run's artifact
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60   # a from-source ZFS build is ~15-30 min, far lighter than the kernel
+    env:
+      # Inputs reach scripts through env, never spliced into them (template injection).
+      PKGDIR: ${{ inputs.pkgdir }}
+      KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch the linux-runink kernel packages (headers = the build tree we compile against)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$PKGDIR" in *[!A-Za-z0-9._-]*|""|.*) echo "::error::bad pkgdir: $PKGDIR"; exit 1 ;; esac
+          case "$KERNEL_RUN_ID" in *[!0-9]*) echo "::error::bad kernel_run_id: $KERNEL_RUN_ID"; exit 1 ;; esac
+          RID="$KERNEL_RUN_ID"
+          if [ -z "$RID" ]; then
+            RID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow kernel-build.yml \
+                    --status success -L 1 --json databaseId -q '.[0].databaseId')
+          fi
+          echo "Using kernel-build run $RID"
+          gh run download "$RID" --repo "$GITHUB_REPOSITORY" -n linux-runink-pkgs -D kernelpkgs
+          ls -lh kernelpkgs
+
+      - name: makepkg runink-zfs inside an Artix container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/os" -e PKGDIR -w "/os/build/pkgbuilds/${PKGDIR}" \
+            docker.io/artixlinux/artixlinux:latest bash -euo pipefail -c '
+              echo "== toolchain + OpenZFS build deps =="
+              pacman-key --init >/dev/null 2>&1 || true
+              pacman -Sy --noconfirm --needed \
+                base-devel bc perl libaio libtirpc ncurses openssl util-linux \
+                util-linux-libs libudev pam zlib tar xz zstd kmod
+              echo "== no Python: base-devel pulls it in (debugedit -> gdb); remove it (build/kernel-builder.Containerfile) =="
+              py="$(pacman -Qq | grep -E "^python(-|$)" || true)"
+              if [ -n "$py" ]; then
+                pacman -Rdd --noconfirm $py $(pacman -Qi $py | sed -n "s/^Required By *: //p" \
+                  | tr " " "\n" | grep -vxE "None|python(-.*)?" | sort -u)
+              fi
+              if command -v python3 || command -v python; then echo "Python is still installed" >&2; exit 1; fi
+              echo "== install linux-runink-headers (provides /usr/lib/modules/<rel>/build) =="
+              pacman -U --noconfirm --nodeps /os/kernelpkgs/linux-runink-headers-*.pkg.tar.zst
+              ls -d /usr/lib/modules/*-runink/build
+              echo "MAKEFLAGS=-j$(nproc)" >> /etc/makepkg.conf
+              echo "== non-root build user (makepkg refuses root) =="
+              useradd -m -G wheel builder
+              printf "builder ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers.d/builder
+              chown -R builder:builder /os/build/pkgbuilds/${PKGDIR}
+              echo "== makepkg (fetches the signed OpenZFS release; sha256 + GPG enforced) =="
+              su builder -c "cd /os/build/pkgbuilds/${PKGDIR} && gpg --batch --import keys/pgp/*.asc && makepkg -f --nodeps --noconfirm"
+              echo "== built packages =="
+              ls -lh /os/build/pkgbuilds/${PKGDIR}/*.pkg.tar.zst
+            '
+
+      - name: Assert the split produced both halves, and the userland is s6-clean
+        if: inputs.pkgdir == 'runink-zfs'
+        # package_runink-zfs-utils already fails the build on these; this re-reads the
+        # SHIPPED archives, so a PKGBUILD edit that drops an assertion cannot pass silently.
+        run: |
+          set -euo pipefail
+          cd "build/pkgbuilds/${PKGDIR}"
+          mods=$(ls runink-zfs-[0-9]*.pkg.tar.zst)
+          utils=$(ls runink-zfs-utils-[0-9]*.pkg.tar.zst)
+          echo "modules:  $mods"; echo "userland: $utils"
+          # List each archive ONCE into a file: `tar | grep -q` under pipefail can fail on
+          # tar's SIGPIPE after grep has already found the match. Written to RUNNER_TEMP: the
+          # pkgdir is owned by the container's builder uid, not the runner's.
+          t="$RUNNER_TEMP"
+          tar --zstd -tf "$mods"  > "$t/mods.lst"
+          tar --zstd -tf "$utils" > "$t/utils.lst"
+          tar --zstd -xOf "$mods"  .PKGINFO > "$t/mods.pkginfo"
+          tar --zstd -xOf "$utils" .PKGINFO > "$t/utils.pkginfo"
+          grep -E 'usr/lib/modules/.*/extra/zfs\.ko' "$t/mods.lst" >/dev/null \
+            || { echo "::error::$mods has no zfs.ko"; exit 1; }
+          grep -x 'depend = runink-zfs-utils=[0-9].*' "$t/mods.pkginfo" \
+            || { echo "::error::$mods is not pinned to runink-zfs-utils=<ver>"; exit 1; }
+          for f in usr/lib/initcpio/install/zfs usr/lib/initcpio/hooks/zfs usr/bin/zpool \
+                   usr/bin/zfs usr/lib/udev/rules.d/90-zfs.rules; do
+            grep -qx "$f" "$t/utils.lst" || { echo "::error::$utils is missing /$f"; exit 1; }
+          done
+          if grep -Ei 'systemd|\.(service|target|timer|socket|mount|preset)$' "$t/utils.lst"; then
+            echo "::error::$utils carries systemd artefacts — this is an s6 image"; exit 1
+          fi
+          if grep -E '\.ko(\.zst)?$' "$t/utils.lst"; then
+            echo "::error::$utils carries kernel modules"; exit 1
+          fi
+          grep -x 'provides = zfs-utils=[0-9].*' "$t/utils.pkginfo" \
+            || { echo "::error::$utils does not provide a versioned zfs-utils"; exit 1; }
+          grep -x 'conflict = zfs-utils' "$t/utils.pkginfo" \
+            || { echo "::error::$utils does not conflict with zfs-utils"; exit 1; }
+
+      - name: Collect the built packages
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp build/pkgbuilds/"${PKGDIR}"/*.pkg.tar.zst out/
+          sha256sum out/*.pkg.tar.zst | tee out/SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runink-zfs-pkgs
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14

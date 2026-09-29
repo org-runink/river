@@ -1,0 +1,23 @@
+[
+  {"q": "What CPU does Runink River need?", "expect": "answer", "cites": ["river#hardware-requirements", "river#probe-the-hardware"], "must": ["x86-64-v3"]},
+  {"q": "How much RAM is required?", "expect": "answer", "cites": ["river#hardware-requirements"], "must": ["16"]},
+  {"q": "Does Runink River support legacy BIOS boot?", "expect": "answer", "cites": ["river#hardware-requirements", "river#check-the-firmware-mode"]},
+  {"q": "What command installs Runink River onto the disk?", "expect": "answer", "cites": ["river#run-the-installer"], "must": ["runink-install"]},
+  {"q": "Will river-guide run the installer for me?", "expect": "answer", "cites": ["river#run-the-installer", "river#how-river-guide-works"]},
+  {"q": "How many times is the recovery key shown, and is it saved anywhere?", "expect": "answer", "cites": ["river#prepare-to-record-the-recovery-key", "river#what-you-need-to-have-ready"], "must": ["once"]},
+  {"q": "Can I install onto my existing unencrypted ZFS pool?", "expect": "answer", "cites": ["river#the-installer-refuses-the-pool", "river#run-the-installer"]},
+  {"q": "How do I check every dataset is encrypted after install?", "expect": "answer", "cites": ["river#verify-the-node"], "must": ["zfs get"]},
+  {"q": "GitHub is unreachable on my IPv6-only network, what do I do?", "expect": "answer", "cites": ["river#github-is-unreachable-on-an-ipv6-only-network", "river#network-requirements"]},
+  {"q": "Can a remote collaborator run the disk wipe from an issue comment?", "expect": "answer", "cites": ["river#remote-observation-and-questions", "river#how-river-guide-works"]},
+  {"q": "Does the install need internet access?", "expect": "answer", "cites": ["river#network-requirements"]},
+  {"q": "What is a platform guide bundle?", "expect": "answer", "cites": ["river#platform-guide-bundles"]},
+  {"q": "What is the first step of the install?", "expect": "answer", "cites": ["river#set-up-the-network-first"], "must": ["network"]},
+  {"q": "How do I connect to Wi-Fi from the live system?", "expect": "answer", "cites": ["river#set-up-the-network-first"], "must": ["river-netsetup"]},
+  {"q": "How do I give the machine a static IP address when it has no console?", "expect": "answer", "cites": ["river#set-up-the-network-first"], "must": ["river.net="]},
+  {"q": "The network check says offline. Can I still install?", "expect": "answer", "cites": ["river#the-network-check-says-lan-only-or-offline", "river#set-up-the-network-first", "river#network-requirements"]},
+  {"q": "How can another machine on the LAN install this one?", "expect": "answer", "cites": ["river#let-another-machine-install-this-one-lan-install-target"], "must": ["code"]},
+  {"q": "How do I install several machines from this one over the network?", "expect": "answer", "cites": ["river#install-other-machines-on-this-network-lan-install-operator"], "must": ["serial"]},
+  {"q": "How do I configure a RAID controller's write cache?", "expect": "not-found"},
+  {"q": "What is the recommended Kubernetes ingress controller for my web shop?", "expect": "not-found"},
+  {"q": "How do I install Windows alongside Runink River?", "expect": "not-found"}
+]

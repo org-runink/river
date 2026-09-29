@@ -1,0 +1,259 @@
+---
+# artools 0.39+ profile for Runink River, the developer workstation: the live/installer ISO (s6).
+#
+# THIS is the file artools reads. Packages-Root is NOT read by artools — it feeds
+# `make lint` (closure policy) and `make lock`. And because 20-clone-rootfs.sh installs by
+# rsyncing the LIVE rootfs onto the ZFS target, `rootfs.packages` below is effectively the
+# INSTALLED package set too. Adding a package to Packages-Root without adding it here
+# changes nothing that ships.
+#
+# Artix + s6 + encrypted ZFS root + linux-runink + grub + KDE Plasma on Wayland. Deliberately
+# ABSENT: a Kubernetes node, NAT64 and any platform runtime; a downstream distribution that
+# needs them builds its own profile (docs/BUILD.md, "Downstream distributions").
+#
+# TWO LAYERS (the `livefs:` key at the bottom turns the second one on):
+#   rootfs  LiveOS/rootfs.img: the golden system. Installed machines are a clone of it.
+#   livefs  LiveOS/livefs.img: live-medium only, an overlay on rootfs. It holds live-overlay/
+#           (the live SDDM autologin, the tty2 autologin, the live user's sudo, the live
+#           hostname), the livefs packages (Packages-Live), and artools' live-session
+#           configuration (the live user, the enabled services).
+# Without a `livefs:` key artools builds rootfs alone and NEVER copies live-overlay/, and runs
+# its live-session configuration on the rootfs itself. With a key it also installs common.yaml's
+# packages-xorg and packages-misc (X server + drivers, XWayland, fonts, xdg-user-dirs), which a
+# desktop wants.
+#
+# NO artix-live. artools' own live setup (artix-live-s6) edits /etc/sddm.conf, which this image
+# does not have, turns on any swap partition it finds on the machine's disks, and rewrites the
+# locale, keymap and timezone from lang=/keytable=/tz= boot parameters. The live session here is
+# plain configuration in live-overlay/ instead, and scripts/patch-artools.go stops artools from
+# making sddm-srv depend on the artix-live service it does not install (the first workstation
+# ISO, 2026-09-25, failed on exactly that dangling dependency).
+live-session:
+  user: runink
+  password: runink
+  # artools' `autologin` only reaches artix-live's live.conf, which this image does not read.
+  # The live session logs in through live-overlay/etc/sddm.conf.d/50-live-autologin.conf
+  # (Plasma) and live-overlay/etc/s6/config/tty2.conf (a console on Ctrl+Alt+F2);
+  # 20-clone-rootfs removes both from installed machines.
+  autologin: true
+  # false selects common.yaml's packages-xorg set (X11 + XWayland), which is what a Plasma
+  # Wayland session needs underneath it. Matches the upstream plasma profile.
+  use-xlibre: false
+  # Enabled with `s6 set enable` in the live set, which 20-clone-rootfs carries to the target;
+  # 80-enable-s6 re-asserts them there. s6 refuses a set where an enabled service depends on a
+  # disabled one, so every dependency below is in the list too.
+  services:
+    # runink-fw: the host firewall (default-deny input, forward default-drop), loaded before
+    # NetworkManager and sshd (their dependencies.d/runink-fw), on the live medium too.
+    - runink-fw
+    # zfs-mount: `zfs mount -a` at boot. The initramfs mounts only the boot environment; the
+    # pool's other datasets (<pool>/home at /home) are its siblings and nothing else mounts
+    # them. mount-filesystems and sddm-srv depend on it: without it /home was an empty
+    # directory on the installed machine, SDDM's helper could not chdir to the user's home
+    # and Plasma never started (qemu-gui-test plasma-login, 2026-09-26). On the live medium
+    # no pool is imported and it mounts nothing.
+    - zfs-mount
+    # river-perms: the shadow-grade modes oneshot (invariant 4).
+    - river-perms
+    - NetworkManager
+    - sshd
+    # The display manager is declared HERE, as a service name — artools 0.39 has no
+    # `displaymanager:` key. Its s6 unit comes from packages-init.s6 below. sddm-srv also
+    # depends on the plymouth-quit oneshot (root-overlay/etc/s6/adminsv/plymouth-quit).
+    - sddm
+    # s6-rc bundle names from bluez-s6 (bluetoothd) and cups-s6 (cupsd), declared in
+    # packages-init.s6 below. Enabled in the live default bundle, which 20-clone-rootfs.sh
+    # carries to the installed target, exactly as sddm is; 80-enable-s6 re-asserts all three
+    # there.
+    - bluetoothd
+    - cupsd
+    # river-installer: the graphical installer's backend on [::1]:47660 (live medium only;
+    # docs/INSTALL.md). The live session opens it in Firefox (etc/xdg/autostart).
+    - river-installer
+  user-services:
+    - dbus
+    - pipewire
+    - pipewire-pulse
+    - wireplumber
+rootfs:
+  packages:
+    # live-boot essentials (squashfs tooling). artix-grub-live, the live GRUB configuration,
+    # is in the livefs layer below: artools reads the live menu from that layer when one
+    # exists.
+    - grub
+    - squashfs-tools
+    - mkinitcpio-nfs-utils
+    # base ops + installer tooling. git and curl are here on purpose: this machine.s job is
+    # cloning repositories and building them.
+    - openssh
+    - rsync
+    - vim
+    # The terminal greeting (etc/fish/conf.d/runink-greeting.fish): fish is the login shell of
+    # the people who use this machine, fastfetch prints its summary. Both read only this machine.
+    - fish
+    - fastfetch
+    - sudo
+    - git
+    - curl
+    - dialog
+    - parted
+    - gptfdisk
+    - dosfstools
+    # river-sandbox runs untrusted code under bubblewrap (invariant 8).
+    - bubblewrap
+    # river-hwprobe + river-plan (the install plan and serial confirmation) and river-netsetup
+    # + river-netcheck (the network-first step the live session opens with).
+    - runink-installer
+    - artools-base
+    - nftables
+    # ── desktop: KDE Plasma on Wayland ────────────────────────────────────────────────
+    # Matches the reference workstation: Plasma 6, Wayland session, SDDM.
+    # EXPLICIT Plasma list instead of plasma-meta (no discover/flatpak-kcm/plasma-welcome/
+    # krdp/plasma-vault/plasma-firewall/oxygen). Rationale in Packages-Root.
+    - aurorae
+    - bluedevil
+    - breeze
+    - breeze-gtk
+    - kactivitymanagerd
+    - kde-cli-tools
+    - kde-gtk-config
+    - kdecoration
+    - kdeplasma-addons
+    - kglobalacceld
+    - kinfocenter
+    - kmenuedit
+    - knighttime
+    - kpipewire
+    - kscreen
+    - kscreenlocker
+    - ksshaskpass
+    - ksystemstats
+    - kwallet-pam
+    - kwayland
+    - kwin
+    - kwrited
+    - layer-shell-qt
+    - libkscreen
+    - libksysguard
+    - libplasma
+    - milou
+    - ocean-sound-theme
+    - plasma-activities
+    - plasma-activities-stats
+    - plasma-browser-integration
+    - plasma-desktop
+    - plasma-disks
+    - plasma-integration
+    - plasma-keyboard
+    - plasma-nm
+    - plasma-pa
+    - plasma-systemmonitor
+    - plasma-thunderbolt
+    - plasma-workspace
+    - polkit-kde-agent
+    - powerdevil
+    - print-manager
+    - systemsettings
+    - xdg-desktop-portal-kde
+    - sddm-kcm
+    - sddm
+    - konsole
+    - dolphin
+    - kate
+    # KDE applications for the daily desktop. See Packages-Root for why video is dragon
+    # (haruna is not in the Artix repos).
+    - dragon
+    - elisa
+    - gwenview
+    - okular
+    - ark
+    - spectacle
+    - kcalc
+    - partitionmanager
+    # Telemetry off via root-overlay/etc/firefox/policies/policies.json.
+    - firefox
+    # KDE's official wallpapers. RIVER stays the default; Emerald comes from the overlay.
+    - plasma-workspace-wallpapers
+    # Boot splash — the Runink River Plymouth theme. See Packages-Root for why it is s6-clean.
+    - plymouth
+    # ── graphics: mesa ────────────────────────────────────────────────────────────────
+    # vulkan-radeon for the AMD reference machine; vulkan-intel so one image also serves
+    # Intel hardware.
+    - mesa
+    - vulkan-icd-loader
+    - vulkan-radeon
+    - vulkan-intel
+    - libva-mesa-driver
+    # ── multimedia: codecs + hardware video ─────────────────────────────────────────
+    # intel-media-driver = Meteor Lake VA-API (iHD); libva-utils = vainfo.
+    - gst-plugins-base
+    - gst-plugins-good
+    - gst-plugins-bad
+    - gst-plugins-ugly
+    - gst-libav
+    - ffmpeg
+    - intel-media-driver
+    - libva-utils
+    # ── audio ─────────────────────────────────────────────────────────────────────────
+    - pipewire
+    - pipewire-pulse
+    - pipewire-alsa
+    - wireplumber
+    - pipewire-jack
+    # ── bluetooth + printing ─────────────────────────────────────────────────────────
+    # bluedevil and print-manager (the Plasma front ends) are in the Plasma list.
+    - bluez
+    - bluez-utils
+    - cups
+    # ── fonts ─────────────────────────────────────────────────────────────────────────
+    - ttf-dejavu
+    - ttf-liberation
+    - noto-fonts
+    - noto-fonts-emoji
+    - noto-fonts-cjk
+    - noto-fonts-extra
+    # ── developer toolchain ───────────────────────────────────────────────────────────
+    # A developer toolchain: base-devel (C/C++) and go.
+    - base-devel
+    - go
+    - zstd
+    # ── firmware ──────────────────────────────────────────────────────────────────────
+    # A workstation fleet is not one SKU: the reference machine is AMD (Radeon/HawkPoint) and amdgpu
+    # will not initialise without its firmware split.
+    - linux-firmware-amdgpu
+    - linux-firmware-intel
+    # ── ZFS root ──────────────────────────────────────────────────────────────────────
+    # The kernel swap (2026-09-06, os#70/#71/#72). The kernel is
+    # linux-runink (zen-kernel 7.2.x stable fork, 7.2.7-zen1), installed via scripts/patch-artools.go's
+    # common.yaml rewrite, because NO available OpenZFS package built against Artix's
+    # linux-lts 6.18.49 — zfs-dkms 2.3.3 fails to compile and archzfs's prebuilt module
+    # targets 6.12. runink-zfs is OpenZFS 2.4.4 stable, built against linux-runink-headers.
+    #
+    # runink-zfs is prebuilt for that kernel, so no headers and no DKMS toolchain are needed
+    # on the installed image. runink-zfs-utils supplies the userland and the `zfs`
+    # initcpio hook that OpenZFS upstream does not ship; it is split from the same PKGBUILD
+    # and signed 2.4.4 tarball as runink-zfs, which pins it (runink-zfs-utils=2.4.4). It
+    # replaced archzfs's zfs-utils, which served 2.3.3 against the 2.4.4 modules.
+    - runink-zfs
+    - runink-zfs-utils
+  packages-init:
+    s6:
+      - openssh-s6
+      - networkmanager-s6
+      # sddm needs an s6 service, not a systemd unit. Same convention as elogind-s6 and
+      # dbus-s6 already in Packages-Root. This is the constraint that rules out simply
+      # lifting a mainstream KDE spin: the image is s6-init, and a desktop is mostly
+      # services.
+      - sddm-s6
+      # bluetoothd and cupsd s6-rc services (see live-session.services above).
+      - bluez-s6
+      - cups-s6
+livefs:
+  packages:
+    # Exactly Packages-Live (river lint profile-manifest). LIVE ONLY: never in rootfs.img,
+    # and 20-clone-rootfs removes it from installed machines (the install clones the running
+    # live system, which includes this layer).
+    #
+    # The live GRUB configuration artools copies to the ISO (make_grub reads it from THIS
+    # layer when a livefs exists). scripts/patch-artools.go rebrands its menu.
+    - artix-grub-live

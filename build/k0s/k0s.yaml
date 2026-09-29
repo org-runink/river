@@ -1,0 +1,133 @@
+# build/k0s/k0s.yaml — the REFERENCE k0s ClusterConfig for the packaging in this repository.
+#
+# Runink River itself runs no Kubernetes node. This repository still builds runink-k0s and
+# runink-k0s-airgap for downstream distributions (docs/BUILD.md, "Downstream distributions"),
+# and the airgap bundle is the image list `k0s airgap list-images` prints for a config:
+# build/k0s-airgap.sh lists it from THIS file (or from K0S_CONFIG: build/local-iso.sh passes a
+# staged profile's own /etc/k0s/k0s.yaml when it has one), and build/k0s-images.lock pins it.
+# river lint k0s-pin checks the kube-router override below. A downstream installs its own
+# copy of this file as /etc/k0s/k0s.yaml.
+apiVersion: k0s.k0sproject.io/v1beta1
+kind: ClusterConfig
+metadata:
+  name: river
+spec:
+  api:
+    # api.address is intentionally omitted: k0s auto-detects the node's primary IP for the
+    # advertised address. Pinning 127.0.0.1 breaks multi-node boot. The API binds :6443 on
+    # all interfaces; 127.0.0.1 stays in the SANs so a host-run kubectl validates locally.
+    # Site names are appended at enrollment from RUNINK_K0S_API_SANS (runink-firstboot.sh).
+    sans:
+      - localhost
+      - 127.0.0.1
+  images:
+    # AIR-GAPPED START. runink-k0s-airgap ships every image k0s runs (build/k0s-images.lock)
+    # in /var/lib/k0s/images/, which k0s imports and pins BEFORE kubelet starts. With
+    # IfNotPresent, kubelet then never contacts a registry for them, so the cluster comes up
+    # with no network. Not Never: a node that later upgrades k0s online must still be able to
+    # pull the new version's images. Any image override below must be added to the lock too
+    # (build/k0s-airgap.sh fails the build until it is).
+    default_pull_policy: IfNotPresent
+    # PIN THE CNI IMAGE — this is what keeps NetworkPolicy in the SAME netfilter backend as
+    # kube-proxy, and it is load-bearing enough that the cluster is unusable without it.
+    #
+    # k0s 1.31 ships kube-router v2.2.1, a HARD-LEGACY build: it programs NetworkPolicy into
+    # ip6tables-LEGACY while kube-proxy uses NFT. The kernel evaluates both, so an egress rule
+    # with a TCP port match NEVER matches — UDP does, which is why DNS always looked fine and
+    # only connections failed. Measured on the live box 2026-09-06: 865 legacy rules vs 25 nft,
+    # apps up but unable to reach anything; after this override, legacy 3 / nft 887 and the
+    # CI runner that had CrashLoopBackOff'd 139 times came up with zero restarts.
+    #
+    # v2.5.0-iptables1.8.11-0 is the first build carrying the kubernetes-sigs iptables-wrapper,
+    # which picks the backend from the kubelet's KUBE-IPTABLES-HINT chain and therefore agrees
+    # with kube-proxy.
+    #
+    # THE SHAPE IS kuberouter.cni.{image,version} — NOT kuberouter.{image,version}. The flat
+    # form also passes `k0s config validate` (exit 0) and is then SILENTLY IGNORED: k0s
+    # re-renders the DaemonSet without it and kube-router stays on v2.2.1. Verify by reading
+    # the live DaemonSet image, never by trusting validation.
+    kuberouter:
+      cni:
+        image: quay.io/k0sproject/kube-router
+        version: v2.5.0-iptables1.8.11-0
+  network:
+    # kube-router is k0s's default CNI — lightweight, no external deps. The raft mesh (over
+    # gRPC) rides normal pod networking.
+    #
+    # IPv6-only single-stack CLUSTER on a DUAL-STACK HOST (owner decision 2026-09-25): pods and
+    # Services carry no IPv4. podCIDR/serviceCIDR are ULA (fc00::/7) ranges; kube-router +
+    # kube-proxy(iptables→ip6tables) enforce it. The host may have IPv4 on its LAN
+    # (NetworkManager/conf.d/10-dual-stack.conf); k0s-keepalive and runink-firstboot then pin
+    # kubelet --node-ip and api.address (added above `sans` at runtime) to the host's IPv6
+    # (runink-node-ip6), so the host's IPv4 never becomes the node address. Loopback
+    # 127.0.0.1/::1 stays for host-local IPC. Workloads must be IPv6-clean (no hardcoded
+    # IPv4 Service IPs / bind addresses).
+    #
+    # NOTE: k0s does NOT reliably infer address family from IPv6-only CIDRs — both overrides
+    # below were required to get a working cluster on real hardware (2026-08-13). This
+    # comment previously claimed the inference happened automatically; it does not.
+    provider: kuberouter
+    podCIDR: fd00:10:244::/56
+    serviceCIDR: fd00:10:96::/108
+    # k0s renders the kube-router DaemonSet with `--enable-ipv4=true --enable-ipv6=false`
+    # regardless of the CIDRs above. kube-router then dies on every start with "IPv4 was
+    # enabled, but no IPv4 address was found on the node" (the Node object carries only an
+    # IPv6 InternalIP), so the cluster comes up with NO pod network at all — node Ready,
+    # every pod stuck ContainerCreating. Must be set explicitly.
+    #
+    # THE TWO ARGS BELOW WERE ADDED BY HAND ON THE RUNNING NODE AND EXISTED
+    # NOWHERE ELSE. Observed 2026-08-29 in the live /etc/k0s/k0s.yaml; a
+    # repo-wide grep found no other mention of either. THIS
+    # file is baked into the golden image and becomes that file, so the next
+    # image rebuild would have silently reverted a hotfix the running node's pod
+    # network depends on. Carrying them here is the whole job of this file.
+    #
+    # router-id: BGP needs a 32-bit router ID and conventionally derives it from
+    # an IPv4 address. The node address is IPv6 (pinned even on a dual-stack
+    # host), so kube-router cannot derive one; `generate` synthesises it.
+    # That is the REASONING, not a reproduction: what was measured is that the
+    # arg is present on a working node and absent here. If you ever remove it,
+    # watch the kube-router pod rather than the node's Ready status — the
+    # failure mode of the sibling enable-ipv4 arg above is a Ready node with NO
+    # pod network, which reads as healthy from `kubectl get nodes`.
+    #
+    # service-cluster-ip-range: kube-router is told the service CIDR explicitly
+    # for the same reason enable-ipv6 is — k0s's own rendering of it cannot be
+    # relied on for an IPv6-only cluster.
+    kuberouter:
+      extraArgs:
+        enable-ipv4: "false"
+        enable-ipv6: "true"
+        router-id: "generate"
+        service-cluster-ip-range: "fd00:10:96::/108"
+    kubeProxy:
+      mode: iptables
+  # kube-controller-manager's node-ipam controller compares the clusterCIDR mask against
+  # --node-cidr-mask-size. k0s passes the IPv4 DEFAULT (24) even for an IPv6-only cluster
+  # and leaves --node-cidr-mask-size-ipv6 at 0, so with podCIDR /56 the check 56 <= 24
+  # fails: node-ipam refuses to start, which takes the WHOLE controller-manager down in a
+  # crash-loop. That in turn blocks the worker, so kubelet/containerd never start and the
+  # node never registers — the symptom is a control plane that looks half-alive with no
+  # node at all. 64 is the conventional IPv6 per-node mask.
+  controllerManager:
+    extraArgs:
+      node-cidr-mask-size: "64"
+  storage:
+    # kine-backed sqlite keeps etcd out of the single-node loop. Durable state lives on the
+    # host ZFS pool and the workloads' own object storage, not the cluster store. /var/lib/k0s is on the BE.
+    type: kine
+  # No helm extensions.
+  telemetry:
+    enabled: false
+  # Container-log rotation. Without
+  # a profile, kubelet keeps a single unbounded file per container — unbounded
+  # node-disk growth, and the only copy lost when the pod is deleted. The
+  # single-node controller+worker uses the "default" profile; 5×50Mi rotated per
+  # container on the persistent ZFS /var/log bounds growth while retaining recent
+  # logs across pod restarts. (Off-node aggregation + compression are a separate
+  # follow-up — this s6 appliance ships no log shipper.)
+  workerProfiles:
+    - name: default
+      values:
+        containerLogMaxSize: "50Mi"
+        containerLogMaxFiles: 5

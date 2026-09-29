@@ -1,0 +1,30 @@
+# s6 — skarnet.org's process supervision suite: the supervision half of RIVER's init
+# (s6-rc and s6-linux-init, the other two halves, are the next recipes to add).
+#
+# Built with execline support (upstream default), so it links libexecline and skalibs
+# statically and needs the execline BINARIES at run time (execlineb interprets run scripts).
+pkgname=s6
+pkgver=2.15.1.0
+pkgrel=1
+pkgdesc="skarnet.org process supervision suite"
+url="https://skarnet.org/software/s6/"
+license="ISC"
+depends="glibc execline"
+makedepends="skalibs execline"
+sources="s6"
+
+build() {
+	cd "s6-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/s6 \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps
+	make
+}
+
+package() {
+	cd "s6-${pkgver}"
+	make DESTDIR="${pkgdir}" install
+	install -Dm644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+}

@@ -1,0 +1,57 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 The RIVER Authors
+SPDX-License-Identifier: MIT
+
+The documentation home (content/_index.md, layout: landing). The product page for Runink
+River lives on runink.org; this site is where every detail lives, so its home is a hub:
+the Runink logo and tagline, one line on what Runink River is, and a door into each part of
+the documentation. Styles: rv-* in assets/css/custom.css.
+*/ -}}
+{{ define "main" }}
+{{- $start := "docs/getting-started/" | relURL -}}
+<style>
+@font-face{font-family:"Figtree";src:url("{{ "fonts/Figtree-var.woff2" | relURL }}") format("woff2");font-weight:300 900;font-display:swap}
+@font-face{font-family:"Fira Code";src:url("{{ "fonts/FiraCode-Regular.woff2" | relURL }}") format("woff2");font-weight:400 600;font-display:swap}
+@font-face{font-family:"Playfair Display";font-style:italic;src:url("{{ "fonts/PlayfairDisplay-Italic-var.woff2" | relURL }}") format("woff2");font-weight:400 700;font-display:swap}
+</style>
+<div class="rv">
+
+<section class="rv-hero" aria-labelledby="rv-hero-title">
+  <svg class="rv-flow" viewBox="0 0 1600 600" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <g fill="none" stroke-linecap="round">
+      <path class="rv-strand" d="M-40 360 C 260 300, 520 330, 800 380 S 1320 440, 1640 330" />
+      <path class="rv-strand" d="M-40 400 C 300 350, 560 380, 820 420 S 1300 470, 1640 380" />
+      <path class="rv-strand" d="M-40 440 C 280 400, 600 430, 860 460 S 1340 500, 1640 420" />
+      <path class="rv-strand" d="M-40 480 C 320 450, 620 470, 880 500 S 1320 530, 1640 470" />
+      <path class="rv-strand" d="M-40 320 C 240 270, 540 300, 780 340 S 1300 400, 1640 290" />
+      <path class="rv-strand rv-strand-lit" d="M-40 420 C 300 370, 580 400, 840 440 S 1320 480, 1640 400" />
+    </g>
+  </svg>
+  <div class="rv-hero-inner">
+    <img class="rv-logo" src="{{ "brand/river-mark.svg" | relURL }}" width="104" height="104" alt="Runink River">
+    <p class="rv-tagline">Data You Can Trust. Decisions You Can Defend.</p>
+    <h1 id="rv-hero-title" class="rv-title">Runink River documentation</h1>
+    <p class="rv-acro"><b>RIVER</b> · Raft-Integrated Validated Event Runtime</p>
+    <p class="rv-sub">Everything about the developer workstation on s6: how to install it, what every part does, and how to run it day to day. KDE Plasma, the <code>linux-runink</code> kernel, an encrypted ZFS root, a default-deny firewall and a graphical installer.</p>
+    <div class="rv-cta">
+      <a class="rv-btn rv-btn-primary" href="{{ $start }}">Get started</a>
+      <a class="rv-btn rv-btn-ghost" href="https://runink.org/river/">Product page on runink.org</a>
+    </div>
+  </div>
+</section>
+
+<section class="rv-hub" aria-labelledby="rv-hub-title">
+  <h2 id="rv-hub-title" class="rv-center">Find what you need</h2>
+  <div class="rv-grid">
+    <a class="rv-card" href="{{ $start }}"><span class="rv-card-k">start here</span><h3>Getting started</h3><p>System requirements, download and verify, write a USB stick, install with the graphical installer, first boot.</p></a>
+    <a class="rv-card" href="{{ "docs/features/" | relURL }}"><span class="rv-card-k">features</span><h3>What is inside</h3><p>s6, the linux-runink kernel, encrypted ZFS, the firewall, river-sandbox and the installer's hardware planner.</p></a>
+    <a class="rv-card" href="{{ "docs/configuration/" | relURL }}"><span class="rv-card-k">day to day</span><h3>Configuration</h3><p>Boot environments and rollback, updates and the signed [runink] package repository, keyboard and language, networking and opening ports.</p></a>
+    <a class="rv-card" href="{{ "docs/kernel-on-arch/" | relURL }}"><span class="rv-card-k">arch linux</span><h3>The kernel on Arch</h3><p>Build and run <code>linux-runink</code> and <code>zfs-linux-runink</code> from the AUR on an existing Arch system.</p></a>
+    <a class="rv-card" href="{{ "docs/security/" | relURL }}"><span class="rv-card-k">security</span><h3>Security</h3><p>Report a vulnerability, verify a release signature, and the Secure Boot plan.</p></a>
+    <a class="rv-card" href="{{ "docs/contributing/" | relURL }}"><span class="rv-card-k">community</span><h3>Contributing</h3><p>How to send a change, the DCO, governance, and the roadmap.</p></a>
+  </div>
+  <p class="rv-hub-more"><a class="rv-link" href="{{ "docs/faq/" | relURL }}">Frequently asked questions →</a></p>
+</section>
+
+</div>
+{{ end }}

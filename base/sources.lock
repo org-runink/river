@@ -1,0 +1,31 @@
+# base/sources.lock — every upstream byte the own base builds from, pinned.
+#
+# One source per line, six whitespace-separated columns:
+#
+#   name  version  sha256  url  sig_url  sig_key
+#
+#   name     the key a recipe names in its `sources=` list (recipes carry no URLs)
+#   version  must equal the recipe's pkgver when the recipe is named after the source
+#   sha256   of the exact file at `url`. THIS is the pin — a mirror (RIVER_BASE_MIRROR) can
+#            only ever serve these bytes
+#   url      upstream location; the build host fetches it once into the cache
+#   sig_url  detached OpenPGP signature over the same file, or `-` if upstream publishes none
+#   sig_key  full primary-key fingerprint that must have made that signature; the public key
+#            is base/keys/pgp/<fingerprint>.asc (armored, reviewable in a diff —
+#            the same convention as build/pkgbuilds/runink-zfs/keys/pgp). `-` iff sig_url is `-`
+#
+# A source with no upstream signature needs a `# nosig: <name> <reason>` line, so the gap is
+# written down next to the pin instead of silently accepted. `river-build lint` enforces it.
+#
+# HOW THESE HASHES WERE OBTAINED (2026-09-23): each tarball was downloaded over HTTPS from
+# skarnet.org, hashed locally with sha256sum, and compared with the `.sha256` file upstream
+# publishes beside it. They matched. That second file comes from the same origin, so it is a
+# transcription check, not independent provenance.
+#
+# nosig: skalibs  skarnet.org publishes a .sha256 per release but no OpenPGP signature
+# nosig: execline skarnet.org publishes a .sha256 per release but no OpenPGP signature
+# nosig: s6       skarnet.org publishes a .sha256 per release but no OpenPGP signature
+
+skalibs  2.15.1.0 f9c905e74935c6fe911c7e344e3e89d5fbd2014c1a04650b524b15ce9b5635d1 https://skarnet.org/software/skalibs/skalibs-2.15.1.0.tar.gz - -
+execline 2.9.9.2  908ed4db3a6b3a23a205d8fd4cf2a71089156f2aeae0f54656045aafad2dee32 https://skarnet.org/software/execline/execline-2.9.9.2.tar.gz - -
+s6       2.15.1.0 eab9c46e22b66b16135f9a05ec68a0ea287d9060b84d10defaaa2caad158ab52 https://skarnet.org/software/s6/s6-2.15.1.0.tar.gz - -

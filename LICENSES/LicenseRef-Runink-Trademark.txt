@@ -1,0 +1,15 @@
+Runink brand assets: all rights reserved
+
+The files covered by this identifier are brand assets of Runink: the Runink logo (the
+dog-head mark), its rendered icons, and the Runink River Workstation boot artwork derived
+from Runink's own photography. "Runink" and the Runink logo are trademarks of Runink
+(unregistered at the time of writing).
+
+Copyright (c) 2026 Runink. All rights reserved. No license, express or implied, is granted
+to copy, modify or redistribute these files, or to use the marks, except as part of
+unmodified distributions of RIVER built and published by Runink or with Runink's written
+permission. The MIT, GPL-2.0-only, CDDL-1.0, CC-BY-4.0 or other licenses that cover the rest of this
+repository do NOT apply to these files.
+
+A community or third-party build of RIVER that is not published by Runink must replace
+these files with its own artwork (see docs/LICENSING.md, "Trademarks and artwork").

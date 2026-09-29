@@ -1,0 +1,41 @@
+Runink River — an optimized developer workstation on s6
+Copyright (c) 2026 The RIVER Authors
+
+Licensing is per path (REUSE.toml; texts in LICENSES/). By default Runink River is MIT (LICENSE).
+The kernel packaging tree is GPL-2.0-only and the OpenZFS packaging tree CDDL-1.0; see
+docs/LICENSING.md and docs/governance/ZFS-LICENSING.md.
+
+Third-party material in this repository
+---------------------------------------
+- ISO profile structure adapted from Artix Linux iso-profiles (BSD-2-Clause,
+  Copyright 2017 Cromnix GNU/Linux).
+- Kernel configuration and PKGBUILD structure derived from Arch Linux linux-zen packaging
+  (0BSD).
+- initcpio hook for ZFS vendored from archzfs (MIT).
+- CachyOS Emerald KDE wallpapers, JPEG derivatives (GPL-3.0-only,
+  Copyright 2021 Dharam Dhurandhar); provenance in branding/wallpapers/emerald/PROVENANCE.
+- Upstream release signing keys under build/pkgbuilds/*/keys/ (verification only).
+- Documentation site theme Hextra v0.12.3 (github.com/imfing/hextra), vendored unmodified under
+  website/_vendor/github.com/imfing/hextra/ (MIT; its LICENSE is kept there and published with
+  the built site at /third-party/hextra-LICENSE.txt).
+
+Trademarks
+----------
+"Runink" and the Runink logo (the dog-head mark), and the Runink brand artwork covered by
+LicenseRef-Runink-Trademark (LICENSES/LicenseRef-Runink-Trademark.txt), are trademarks of
+Runink, all rights reserved. No licence in this repository grants any right to use them.
+
+Trademark policy, in short:
+- You may state truthfully that your software is based on, compatible with, or derived
+  from Runink River, and you may refer to the project by name.
+- You may redistribute unmodified official Runink River releases, including their artwork.
+- A modified or community build must NOT use the Runink name or logo as its own brand, and
+  must replace the files marked LicenseRef-Runink-Trademark with its own artwork
+  (docs/LICENSING.md explains which files and how).
+- Do not use the marks in a way that suggests endorsement by, or affiliation with, Runink.
+- The project name is "Runink River", always in full. A bare "River" is not used as a
+  standalone mark: it is the name of an unrelated Wayland compositor.
+Questions: the maintainers listed in MAINTAINERS.md. If the project joins a foundation, the project marks may be
+transferred to it; this policy will then be replaced by the foundation's.
+
+Linux® is the registered trademark of Linus Torvalds in the U.S. and other countries.

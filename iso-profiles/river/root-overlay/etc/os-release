@@ -1,0 +1,9 @@
+NAME="Runink River"
+PRETTY_NAME="Runink River"
+ID=runink
+ID_LIKE=arch
+ANSI_COLOR="38;2;192;204;124"
+HOME_URL="https://runink.org"
+DOCUMENTATION_URL="https://runink.org"
+SUPPORT_URL="https://runink.org"
+LOGO=runink-river

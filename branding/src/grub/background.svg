@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runink River GRUB background, 1920x1080. SOURCE of branding/grub/river/background.jpg
+     (branding/render.sh). The menu, countdown bar and label are drawn by GRUB on top of
+     this from theme.txt, so the middle band (y 36%..80%) is deliberately empty.
+     Crop-safe: theme.txt crops (never stretches) onto a 4:3 mode, which keeps only
+     x 240..1680 of this canvas at 1024x768, so the lockup stays inside that window.
+     RIVER-ART: branding/render.sh swaps in branding/logo/river-lockup-dark.svg (the community
+     mark, the "Runink River" wordmark and the meaning of the name, one source). Original artwork; colours from
+     branding/palette.md: ground, lines in card and muted, ONE sage strand. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#212121"/>
+      <stop offset="1" stop-color="#2C2E30"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#ground)"/>
+  <!-- RIVER-ART src=logo/river-lockup-dark.svg x=960 y=112 height=128 anchor=middle -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M-40 880 C576 838 998 1010 1421 968 S1824 954 1960 958" stroke="#717168" stroke-width="1.4" stroke-opacity="0.30"/>
+    <path d="M-40 899 C576 829 998 1045 1421 975 S1824 952 1960 958" stroke="#36383A" stroke-width="3.8"/>
+    <path d="M-40 918 C576 820 998 1080 1421 982 S1824 949 1960 958" stroke="#717168" stroke-width="3.0" stroke-opacity="0.45"/>
+    <path d="M-40 937 C576 881 998 1045 1421 989 S1824 970 1960 975" stroke="#36383A" stroke-width="2.2"/>
+    <path d="M-40 956 C576 872 998 1080 1421 996 S1824 968 1960 975" stroke="#C0CC7C" stroke-width="3.9" stroke-opacity="0.95"/>
+    <path d="M-40 975 C576 933 998 1045 1421 1003 S1824 989 1960 992" stroke="#36383A" stroke-width="3.8"/>
+    <path d="M-40 994 C576 924 998 1080 1421 1010 S1824 987 1960 992" stroke="#717168" stroke-width="3.0" stroke-opacity="0.30"/>
+    <path d="M-40 1013 C576 915 998 1115 1421 1017 S1824 984 1960 992" stroke="#36383A" stroke-width="2.2"/>
+    <path d="M-40 1032 C576 976 998 1080 1421 1024 S1824 1005 1960 1010" stroke="#717168" stroke-width="1.4" stroke-opacity="0.45"/>
+    <path d="M-40 1051 C576 967 998 1115 1421 1031 S1824 1003 1960 1010" stroke="#36383A" stroke-width="3.8"/>
+    <path d="M-40 1070 C576 1028 998 1080 1421 1038 S1824 1024 1960 1028" stroke="#717168" stroke-width="3.0" stroke-opacity="0.30"/>
+  </g>
+</svg>

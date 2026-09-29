@@ -1,0 +1,14 @@
+[SddmGreeterTheme]
+Name=Runink River
+Description=Runink River: the dark palette and the animated community mark
+Author=The RIVER Authors
+Copyright=(c) 2026, The RIVER Authors; the community mark (c) 2026 Runink
+License=MIT
+Type=sddm-theme
+Version=1.0
+Website=https://runink.org
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=runink-river
+Theme-API=2.0
+QtVersion=6

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runink River desktop wallpaper, dark variant, 3840x2160 master. SOURCE of
+     usr/share/wallpapers/River/contents/images_dark/3840x2160.jpg (branding/render.sh).
+     Twenty-one river lines braid toward the right, in card and muted, with ONE
+     strand in the sage accent. Original artwork; colours from branding/palette.md.
+     RIVER-ART: branding/render.sh swaps in branding/logo/river-lockup-dark.svg (the community
+     mark, the wordmark and the meaning of the name) and branding/logo/runink-tagline.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#212121"/>
+      <stop offset="1" stop-color="#2C2E30"/>
+    </linearGradient>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#ground)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M-40 1180 C1152 1012 1997 1588 2842 1420 S3648 1364 3880 1378" stroke="#717168" stroke-width="2.8" stroke-opacity="0.32"/>
+    <path d="M-40 1225 C1152 945 1997 1715 2842 1435 S3648 1342 3880 1365" stroke="#36383A" stroke-width="7.3"/>
+    <path d="M-40 1270 C1152 878 1997 1842 2842 1450 S3648 1319 3880 1352" stroke="#717168" stroke-width="5.8" stroke-opacity="0.51"/>
+    <path d="M-40 1315 C1152 1091 1997 1689 2842 1465 S3648 1390 3880 1409" stroke="#36383A" stroke-width="4.2"/>
+    <path d="M-40 1360 C1152 1024 1997 1816 2842 1480 S3648 1368 3880 1396" stroke="#717168" stroke-width="2.8" stroke-opacity="0.70"/>
+    <path d="M-40 1405 C1152 1237 1997 1663 2842 1495 S3648 1439 3880 1453" stroke="#36383A" stroke-width="7.3"/>
+    <path d="M-40 1450 C1152 1170 1997 1790 2842 1510 S3648 1417 3880 1440" stroke="#717168" stroke-width="5.8" stroke-opacity="0.32"/>
+    <path d="M-40 1495 C1152 1103 1997 1917 2842 1525 S3648 1394 3880 1427" stroke="#36383A" stroke-width="4.2"/>
+    <path d="M-40 1540 C1152 1316 1997 1764 2842 1540 S3648 1465 3880 1484" stroke="#C0CC7C" stroke-width="7.5" stroke-opacity="0.95"/>
+    <path d="M-40 1585 C1152 1249 1997 1891 2842 1555 S3648 1443 3880 1471" stroke="#36383A" stroke-width="7.3"/>
+    <path d="M-40 1630 C1152 1462 1997 1738 2842 1570 S3648 1514 3880 1528" stroke="#717168" stroke-width="5.8" stroke-opacity="0.70"/>
+    <path d="M-40 1675 C1152 1395 1997 1865 2842 1585 S3648 1492 3880 1515" stroke="#36383A" stroke-width="4.2"/>
+    <path d="M-40 1720 C1152 1328 1997 1992 2842 1600 S3648 1469 3880 1502" stroke="#717168" stroke-width="2.8" stroke-opacity="0.32"/>
+    <path d="M-40 1765 C1152 1541 1997 1839 2842 1615 S3648 1540 3880 1559" stroke="#36383A" stroke-width="7.3"/>
+    <path d="M-40 1810 C1152 1474 1997 1966 2842 1630 S3648 1518 3880 1546" stroke="#717168" stroke-width="5.8" stroke-opacity="0.51"/>
+    <path d="M-40 1855 C1152 1687 1997 1813 2842 1645 S3648 1589 3880 1603" stroke="#36383A" stroke-width="4.2"/>
+    <path d="M-40 1900 C1152 1620 1997 1940 2842 1660 S3648 1567 3880 1590" stroke="#717168" stroke-width="2.8" stroke-opacity="0.70"/>
+    <path d="M-40 1945 C1152 1553 1997 2067 2842 1675 S3648 1544 3880 1577" stroke="#36383A" stroke-width="7.3"/>
+    <path d="M-40 1990 C1152 1766 1997 1914 2842 1690 S3648 1615 3880 1634" stroke="#717168" stroke-width="5.8" stroke-opacity="0.32"/>
+    <path d="M-40 2035 C1152 1699 1997 2041 2842 1705 S3648 1593 3880 1621" stroke="#36383A" stroke-width="4.2"/>
+    <path d="M-40 2080 C1152 1912 1997 1888 2842 1720 S3648 1664 3880 1678" stroke="#717168" stroke-width="2.8" stroke-opacity="0.51"/>
+  </g>
+  <!-- RIVER-ART src=logo/river-lockup-dark.svg x=3600 y=220 height=200 anchor=end -->
+  <!-- RIVER-ART src=logo/runink-tagline.svg x=3600 y=486 height=44 anchor=end -->
+</svg>

@@ -1,0 +1,53 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river-installer-desktop — open the graphical installer in the live Plasma session (Runink
+# River Workstation), full screen: Firefox in kiosk mode on http://[::1]:47660/, with a
+# throwaway profile. Runs as the live user, from the session's autostart and from the
+# "Install Runink River" desktop icon (which it creates). The backend is the river-installer s6
+# longrun; it answers only root and this user.
+set -u
+PATH=/usr/local/bin:/usr/bin:/bin; export PATH
+URL="http://[::1]:47660/"
+RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
+PROFILE="$RUNTIME/river-installer-firefox"
+
+# The desktop icon, so a closed installer can be opened again (Plasma runs only executable
+# .desktop files from the desktop).
+DESK="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+mkdir -p "$DESK"
+if [ ! -f "$DESK/install-runink-river.desktop" ]; then
+	cat > "$DESK/install-runink-river.desktop" <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Install Runink River
+Name[es]=Instalar Runink River
+Name[fr]=Installer Runink River
+Name[pt]=Instalar Runink River
+Comment=Install Runink River on this computer
+Exec=/usr/local/bin/river-installer-desktop
+Icon=system-software-install
+Terminal=false
+DESKTOP
+	chmod 0755 "$DESK/install-runink-river.desktop"
+fi
+
+# One window: if it is already open, leave it.
+pgrep -u "$(id -u)" -f -- "--profile $PROFILE" >/dev/null 2>&1 && exit 0
+river-installer wait --timeout 90s || true
+mkdir -p "$PROFILE"
+cat > "$PROFILE/user.js" <<'PREFS'
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("browser.tabs.warnOnClose", false);
+user_pref("browser.warnOnQuitShortcut", false);
+user_pref("signon.rememberSignons", false);
+user_pref("browser.formfill.enable", false);
+user_pref("layout.css.devPixelsPerPx", "-1.0");
+PREFS
+exec firefox --kiosk --no-remote --new-instance --profile "$PROFILE" "$URL"

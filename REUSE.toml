@@ -1,0 +1,369 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# REUSE 3.x mapping (https://reuse.software/spec-3.3/). See docs/LICENSING.md.
+#
+# RIVER's licensing (decided):
+#   * MIT            — everything RIVER authors by default: installer, scripts, build
+#                      tooling, configuration, overlays, CI, documentation. Root LICENSE.
+#   * GPL-2.0-only   — the kernel packaging tree (build/pkgbuilds/runink-kernel/): River's
+#                      kernel config/patch work is a modification of Linux.
+#   * CDDL-1.0       — the OpenZFS package tree (build/pkgbuilds/runink-zfs/), matching the
+#                      OpenZFS code it builds into a SEPARATE out-of-tree module package
+#                      (docs/governance/ZFS-LICENSING.md).
+#   * CC-BY-4.0      — RIVER artwork (not code). The RIVER name and marks are not licensed.
+#   * LicenseRef-Runink-Trademark — the Runink brand assets, all rights reserved.
+#   * Third-party files keep their upstream licences (BSD-2-Clause, 0BSD, MIT, GPL-3.0-only,
+#     GPL-2.0-or-later, public keys).
+#
+# Rule: when several annotations match a path, the LAST one wins. So: broad defaults first,
+# specific overrides after. An in-file SPDX header takes precedence over this file
+# (precedence "closest", the default).
+version = 1
+
+# ── River's own files (default) ─────────────────────────────────────────────────────────
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# Runink River artwork and its baked overlay copies. The trademarks "RIVER"/"Runink" and the
+# logos are NOT licensed by this entry (see docs/LICENSING.md).
+[[annotations]]
+path = [
+  "branding/**",
+  "iso-profiles/*/root-overlay/usr/share/runink/branding/**",
+  "iso-profiles/*/root-overlay/usr/share/plymouth/themes/river/**",
+  "iso-profiles/*/root-overlay/usr/share/wallpapers/River/**",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# ...except the code and text that live beside the artwork.
+[[annotations]]
+path = ["branding/render.sh", "branding/**/*.md"]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# Runink BRAND assets: the Runink River community mark (the M2 mascot, a puppy on a raft) and
+# everything rendered from it: the hicolor icons and favicons, the GRUB background, the
+# Plymouth and Plasma splash logo, the Runink River wallpaper, /etc/issue. All rights
+# reserved, trademark of Runink. A community build must replace them (docs/LICENSING.md).
+[[annotations]]
+path = [
+  "branding/logo/river-mark.svg",
+  "branding/logo/river-mark-small.svg",
+  "branding/logo/river-lockup.svg",
+  "branding/logo/river-lockup-dark.svg",
+  "branding/logo/runink-tagline.svg",
+  "branding/src/logo/**",
+  "branding/ascii/**",
+  "branding/icons/**",
+  "branding/fastfetch/**",
+  "branding/mascot/**",
+  "branding/plymouth/river/logo.png",
+  "branding/splash/**",
+  "branding/grub/river/background.jpg",
+  "branding/wallpapers/River/contents/images*/**",
+  "branding/wallpapers/River/contents/screenshot.png",
+  "iso-profiles/river/root-overlay/usr/share/icons/hicolor/**",
+  "iso-profiles/river/root-overlay/usr/share/runink/branding/grub/river/background.jpg",
+  "iso-profiles/river/root-overlay/usr/share/plymouth/themes/river/logo.png",
+  "iso-profiles/river/root-overlay/etc/issue",
+  "iso-profiles/river/root-overlay/usr/share/runink/fastfetch/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/River/contents/images*/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/River/contents/screenshot.png",
+]
+SPDX-FileCopyrightText = "2026 Runink"
+SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
+
+# CachyOS Emerald KDE wallpapers (third party, GPL-3.0). JPEG derivatives of upstream
+# github.com/CachyOS/CachyOS-Emerald-KDE @ d61d1dd0 (wallpapers/); each upstream
+# metadata.desktop names the author and "X-KDE-PluginInfo-License=GPLv3" (no "or later"),
+# and upstream has no LICENSE or README naming anyone else. Transform and per-file
+# sha256s (upstream and derived): branding/wallpapers/emerald/PROVENANCE.
+[[annotations]]
+path = [
+  "branding/wallpapers/emerald/*/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Abstract/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/BlueFeathers/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/DarkStreaks/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Dimensions/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/GreenFeathers/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Lines/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Liquid/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Metal/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/OrangeFeathers/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/paper/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/PurpleFeathers/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Skyscraper/**",
+  "iso-profiles/river/root-overlay/usr/share/wallpapers/Spectrum/**",
+]
+SPDX-FileCopyrightText = ["2021 Dharam Dhurandhar <rkstrdee@gmail.com>", "2026 The RIVER Authors (JPEG derivatives)"]
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# ...but the derivation script and its provenance records are River's own.
+[[annotations]]
+path = [
+  "branding/wallpapers/emerald/derive.sh",
+  "branding/wallpapers/emerald/PROVENANCE",
+  "branding/wallpapers/emerald/SHA256SUMS",
+  "branding/wallpapers/emerald/UPSTREAM.sha256",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# Plasma look-and-feel package: its own metadata.json declares "GPLv2+". Mapped as declared.
+[[annotations]]
+path = "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/**"
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+# ...except its splash images, the layers of the community mark and the wordmark (brand assets, as above).
+[[annotations]]
+path = "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/images/**"
+SPDX-FileCopyrightText = "2026 Runink"
+SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
+
+# The animated community mark: the SDDM greeter theme `runink-river` and the Plasma splash
+# (branding/render.sh). Their QML, the theme's metadata and configuration are code, MIT; the
+# splash's Splash.qml keeps the look-and-feel package's declared GPL-2.0-or-later.
+[[annotations]]
+path = [
+  "branding/src/qml/**",
+  "branding/src/sddm/**",
+  "branding/sddm/runink-river/*.qml",
+  "branding/sddm/runink-river/metadata.desktop",
+  "branding/sddm/runink-river/theme.conf",
+  "branding/splash/RiverLockup.qml",
+  "branding/splash/LockupGeometry.qml",
+  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/*.qml",
+  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/metadata.desktop",
+  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/theme.conf",
+  "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/RiverLockup.qml",
+  "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/LockupGeometry.qml",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["branding/src/splash/Splash.qml", "branding/splash/Splash.qml"]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+# ...the greeter's background (the dark wallpaper's river lines, no mark) is River artwork...
+[[annotations]]
+path = [
+  "branding/sddm/runink-river/background.jpg",
+  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/background.jpg",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# ...and the mark's layers and the wordmark it animates are Runink brand assets.
+[[annotations]]
+path = [
+  "branding/sddm/runink-river/images/**",
+  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/images/**",
+]
+SPDX-FileCopyrightText = "2026 Runink"
+SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
+
+# ── Third-party derived files ───────────────────────────────────────────────────────────
+# Adapted from Artix iso-profiles (BSD-2-Clause). Upstream notice kept to be safe; drops when
+# these are rewritten for River's own base (docs/LICENSING.md).
+[[annotations]]
+path = [
+  "iso-profiles/*/profile.yaml",
+  "iso-profiles/*/profile.conf",
+  "iso-profiles/*/Packages-Root",
+  "iso-profiles/*/Packages-Live",
+]
+SPDX-FileCopyrightText = ["2026 The RIVER Authors", "2017 Cromnix GNU/Linux"]
+SPDX-License-Identifier = "MIT AND BSD-2-Clause"
+
+# ── Kernel packaging tree: GPL-2.0-only ─────────────────────────────────────────────────
+[[annotations]]
+path = "build/pkgbuilds/runink-kernel/**"
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "GPL-2.0-only"
+
+# Kernel PKGBUILD: River's work (GPL-2.0-only) on top of Arch's linux-zen PKGBUILD
+# (Arch packaging, 0BSD per Arch RFC 0040).
+[[annotations]]
+path = "build/pkgbuilds/runink-kernel/PKGBUILD"
+SPDX-FileCopyrightText = ["2026 The RIVER Authors", "Arch Linux contributors (linux-zen)"]
+SPDX-License-Identifier = "GPL-2.0-only AND 0BSD"
+
+# Kernel config: olddefconfig output of Arch's linux-zen config.x86_64 (Arch packaging, 0BSD).
+[[annotations]]
+path = "build/pkgbuilds/runink-kernel/config.base"
+SPDX-FileCopyrightText = "Arch Linux contributors (linux-zen)"
+SPDX-License-Identifier = "0BSD"
+
+# bpfdoc: a Go port of the Linux kernel's scripts/bpf_doc.py (GPL-2.0-only), which the kernel
+# PKGBUILD builds in place of that script so the kernel builds without Python. A port of kernel
+# code, so GPL-2.0-only like the script. (build/pkgbuilds/runink-kernel/bpfdoc.go is a symbolic
+# link to its main.go.)
+[[annotations]]
+path = "build/tools/bpfdoc/**"
+SPDX-FileCopyrightText = ["2018-2019 Netronome Systems, Inc.", "2021 Isovalent, Inc.", "2026 The RIVER Authors"]
+SPDX-License-Identifier = "GPL-2.0-only"
+
+# bpfdoc's test fixtures, from Linux 7.2.7 (build/tools/bpfdoc/testdata/README): the uapi header
+# tools/include/uapi/linux/bpf.h, and the bpf_helper_defs.h that upstream bpf_doc.py generated
+# from it (the header's documentation, reformatted). Both carry the header's licence.
+[[annotations]]
+path = "build/tools/bpfdoc/testdata/*.gz"
+SPDX-FileCopyrightText = ["2011-2014 PLUMgrid, http://plumgrid.com", "Linux kernel BPF contributors"]
+SPDX-License-Identifier = "GPL-2.0-only WITH Linux-syscall-note"
+
+# ── OpenZFS packaging tree: CDDL-1.0 ────────────────────────────────────────────────────
+[[annotations]]
+path = "build/pkgbuilds/runink-zfs/**"
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "CDDL-1.0"
+
+# archzfs initcpio hook, vendored byte-for-byte @ d85933f5 and sha256-pinned in the PKGBUILD.
+# Must NOT get an in-file header (it would break the pin). archzfs README: "The license of
+# the Arch Linux package sources is MIT" (no LICENSE file upstream; FLAG).
+[[annotations]]
+path = [
+  "build/pkgbuilds/runink-zfs/zfs-utils.initcpio.hook",
+  "build/pkgbuilds/runink-zfs/zfs-utils.initcpio.install",
+]
+SPDX-FileCopyrightText = "archzfs contributors"
+SPDX-License-Identifier = "MIT"
+
+# runink-zfs PKGBUILD: its package function mirrors archzfs's package_zfs-utils.
+[[annotations]]
+path = ["build/pkgbuilds/runink-zfs/PKGBUILD", "build/pkgbuilds/runink-zfs/runink-zfs.install"]
+SPDX-FileCopyrightText = ["2026 The RIVER Authors", "archzfs contributors"]
+SPDX-License-Identifier = "CDDL-1.0 AND MIT"
+
+# AUR packaging (packaging/aur/): packaging scripts are MIT (the "**" default). The
+# linux-runink PKGBUILD follows Arch's linux-zen PKGBUILD (Arch packaging, 0BSD per Arch
+# RFC 0040). The packages they BUILD carry their own licences in the license= field
+# (GPL-2.0-only for the kernel, CDDL-1.0 for OpenZFS).
+[[annotations]]
+path = "packaging/aur/linux-runink/PKGBUILD"
+SPDX-FileCopyrightText = ["2026 The RIVER Authors", "Arch Linux contributors (linux-zen)"]
+SPDX-License-Identifier = "MIT AND 0BSD"
+
+# Upstream release signers' public keys (verification only).
+[[annotations]]
+path = ["build/pkgbuilds/*/keys/pgp/*.asc", "packaging/aur/*/keys/pgp/*.asc"]
+SPDX-FileCopyrightText = "NOASSERTION"
+SPDX-License-Identifier = "LicenseRef-Public-Key"
+
+# The Runink River release public key (KEYS), and the copy the image ships as the pacman
+# keyring for [runink] (docs/REPOSITORY.md).
+[[annotations]]
+path = ["base/keys/owner/*.asc", "iso-profiles/river/root-overlay/usr/share/pacman/keyrings/runink.gpg"]
+SPDX-FileCopyrightText = "NOASSERTION"
+SPDX-License-Identifier = "LicenseRef-Public-Key"
+
+# The hardware-adaptive installer (river-hwprobe, river-plan, their fixtures), the
+# one-line entry point and its KEYS file: MIT by owner decision (2026-09-24). Last, so it
+# wins over the defaults above.
+[[annotations]]
+path = [
+  "installer/go.mod",
+  "installer/hwprobe/**",
+  "installer/plan/**",
+  "installer/internal/**",
+  "installer/lib/hwplan.sh",
+  "installer/lib/05-hwplan-verify.sh",
+  "installer/lib/75-install-plan.sh",
+  "iso-profiles/river/root-overlay/usr/local/lib/runink-install/hwplan.sh",
+  "iso-profiles/river/root-overlay/usr/local/lib/runink-install/05-hwplan-verify.sh",
+  "iso-profiles/river/root-overlay/usr/local/lib/runink-install/75-install-plan.sh",
+  "install.sh",
+  "KEYS",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# river-guide (the install guide agent) and the public Runink River install guide it embeds:
+# MIT, owner decision 2026-09-24. Same as the default; listed last so no broader
+# annotation above (e.g. the branding CC-BY-4.0 globs) can ever claim these files.
+[[annotations]]
+path = [
+  "guide/**",
+  "build/pkgbuilds/river-guide/**",
+  "build/25-river-guide.sh",
+]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# The documentation website (website/) is River's own (the MIT default above), except its two
+# vendored third-party inputs, pinned by `river lint docs-vendor`:
+#   * the Hextra Hugo theme v0.12.3 (github.com/imfing/hextra, tag commit 8e53e7a7), vendored
+#     byte-for-byte by `hugo mod vendor`, with its upstream LICENSE (MIT, "Copyright (c) 2023
+#     Xin") alongside;
+#   * FlexSearch 0.8.143 (npm flexsearch, dist/flexsearch.bundle.min.js), Apache-2.0; its
+#     header names the author. Provenance: website/assets/lib/flexsearch/SOURCE.
+# The pages reference the Runink River mark from branding/logo/ (mounted by website/hugo.toml),
+# never a copy, so the trademark annotation above stays the only one for it.
+[[annotations]]
+path = ["website/_vendor/github.com/imfing/hextra/**", "website/static/third-party/hextra-LICENSE.txt"]
+SPDX-FileCopyrightText = "2023 Xin"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "website/assets/lib/flexsearch/flexsearch.bundle.min.js"
+SPDX-FileCopyrightText = "Thomas Wilkerling, Nextapps GmbH"
+SPDX-License-Identifier = "Apache-2.0"
+
+# The home page's typefaces, served from the site itself (no third-party font host):
+# Figtree (the Runink wordmark face) and Fira Code, both SIL OFL 1.1, the same files the
+# Runink site ships.
+[[annotations]]
+path = "website/static/fonts/Figtree-var.woff2"
+SPDX-FileCopyrightText = "2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)"
+SPDX-License-Identifier = "OFL-1.1"
+
+[[annotations]]
+path = "website/static/fonts/FiraCode-Regular.woff2"
+SPDX-FileCopyrightText = "2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)"
+SPDX-License-Identifier = "OFL-1.1"
+
+# The display face for the tagline (SIL OFL 1.1, latin subset from Google Fonts, served here).
+[[annotations]]
+path = "website/static/fonts/PlayfairDisplay-Italic-var.woff2"
+SPDX-FileCopyrightText = "2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display)"
+SPDX-License-Identifier = "OFL-1.1"
+
+# The share card for LinkedIn and other sites (website/static/og/), showing the Runink River logo.
+[[annotations]]
+path = "website/static/og/**"
+SPDX-FileCopyrightText = "2026 Runink"
+SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
+
+# The `river` CLI's vendored third-party modules (cli/vendor/, `go mod vendor`, pinned by
+# cli/go.sum). Each module keeps its upstream LICENSE file beside its code. cli/vendor also
+# holds a copy of River's own pkg/ (a `replace`d local module), which is MIT like the rest.
+[[annotations]]
+path = ["cli/vendor/github.com/spf13/cobra/**", "cli/vendor/github.com/spf13/afero/**", "cli/vendor/github.com/inconshreveable/mousetrap/**"]
+SPDX-FileCopyrightText = "The respective upstream authors (see each module's LICENSE)"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["cli/vendor/github.com/spf13/viper/**", "cli/vendor/github.com/spf13/cast/**", "cli/vendor/github.com/go-viper/mapstructure/**", "cli/vendor/github.com/pelletier/go-toml/**", "cli/vendor/github.com/sagikazarmark/locafero/**", "cli/vendor/github.com/sourcegraph/conc/**", "cli/vendor/github.com/subosito/gotenv/**"]
+SPDX-FileCopyrightText = "The respective upstream authors (see each module's LICENSE)"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["cli/vendor/github.com/fsnotify/fsnotify/**", "cli/vendor/github.com/spf13/pflag/**", "cli/vendor/golang.org/x/sys/**", "cli/vendor/golang.org/x/text/**"]
+SPDX-FileCopyrightText = "The respective upstream authors (see each module's LICENSE)"
+SPDX-License-Identifier = "BSD-3-Clause"
+
+[[annotations]]
+path = "cli/vendor/go.yaml.in/yaml/v3/**"
+SPDX-FileCopyrightText = "The go-yaml authors (see its LICENSE)"
+SPDX-License-Identifier = "MIT AND Apache-2.0"
+
+[[annotations]]
+path = ["cli/vendor/modules.txt", "cli/vendor/github.com/org-runink/river/pkg/**", "scripts/shell-ratchet.txt"]
+SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"

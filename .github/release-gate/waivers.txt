@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Waivers for the release gate's vulnerability checks (.github/workflows/release-gate.yml): an
+# Arch security tracker group (AVG-…) or an issue id (CVE-…).
+# One per line:  <vulnerability-id> <expires YYYY-MM-DD> <owner> <reason...>
+# A waiver past its expiry date FAILS the gate on its own, so it is renewed on purpose or the
+# package is fixed. Keep this list short; every entry is a known risk shipped to users.
+#
+# (no waivers)

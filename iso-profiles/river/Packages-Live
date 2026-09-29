@@ -1,0 +1,11 @@
+# Packages-Live — the LIVE-ONLY layer of the Runink River ISO (profile.yaml
+# `livefs:`, LiveOS/livefs.img). Never in rootfs.img; 20-clone-rootfs removes them from an
+# installed machine (the install clones the running live system, which includes this layer).
+# river lint profile-manifest checks that profile.yaml's livefs list is exactly this file.
+#
+# No artix-live-s6 / artix-live-base: the live session is configuration in live-overlay/
+# (see the header of profile.yaml).
+
+## The live GRUB menu configuration artools copies onto the ISO (the menu itself is replaced
+## by iso-profiles/river/grub/, see scripts/patch-artools.go)
+artix-grub-live

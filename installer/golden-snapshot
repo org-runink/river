@@ -1,0 +1,63 @@
+#!/bin/sh
+# golden-snapshot — turn an ALREADY-RUNNING RIVER box into the reproducible golden base.
+#
+# A hand-built reference box may already BE the golden state (codified in this repo). Rather
+# than reinstalling it, capture its boot environment as a node-state-stripped `zfs send`
+# stream that new nodes can `zfs recv`. This is the "current box is the source of truth"
+# path referenced in the plan.
+#
+# Run ON the box (root). Produces a portable stream + a manifest of what was stripped.
+#
+# Usage: golden-snapshot <pool>/ROOT/<be> <output.zfs.zst>
+set -eu
+
+SRC_BE="${1:?usage: golden-snapshot <pool>/ROOT/<be> <output.zfs.zst>}"
+OUT="${2:?usage: golden-snapshot <pool>/ROOT/<be> <output.zfs.zst>}"
+SNAP="${SRC_BE}@golden-$(date +%Y%m%d 2>/dev/null || echo snapshot)"
+CLONE_MNT="/mnt/golden-strip"
+
+echo "golden-snapshot: snapshotting $SRC_BE"
+zfs snapshot "$SNAP"
+
+# Clone to a scratch mount so we can strip node-specific state before sending.
+CLONE="${SRC_BE%/*}/golden-strip-tmp"
+zfs clone "$SNAP" "$CLONE"
+mkdir -p "$CLONE_MNT"
+zfs set mountpoint="$CLONE_MNT" "$CLONE"
+zfs mount "$CLONE" 2>/dev/null || true
+
+echo "golden-snapshot: stripping node-specific state"
+# These must NOT travel with the golden image — each node regenerates/enrolls its own.
+rm -f  "$CLONE_MNT/etc/hostid"
+rm -f  "$CLONE_MNT/etc/machine-id"
+rm -f  "$CLONE_MNT"/etc/ssh/ssh_host_*
+rm -f  "$CLONE_MNT/etc/runink/enrollment.env"
+rm -f  "$CLONE_MNT/var/lib/runink/.enrolled"
+rm -rf "$CLONE_MNT"/home/runink/.runink/secrets/*
+rm -f  "$CLONE_MNT"/home/runink/edge/oidc.env
+rm -rf "$CLONE_MNT"/home/runink/actions-runner/.runner \
+       "$CLONE_MNT"/home/runink/actions-runner/.credentials* 2>/dev/null || true
+# Models are data, not OS — strip so the stream stays lean (nodes re-sync at enrollment).
+rm -f  "$CLONE_MNT"/home/runink/models/*.gguf 2>/dev/null || true
+
+{
+	echo "# golden-snapshot strip manifest"
+	echo "source: $SRC_BE"
+	echo "snapshot: $SNAP"
+	echo "stripped: hostid machine-id ssh-host-keys enrollment.env enrolled-sentinel envelope-secrets oidc.env runner-creds models"
+} > "${OUT%.zfs.zst}.manifest"
+
+# Re-snapshot the stripped clone and send it.
+STRIP_SNAP="${CLONE}@golden"
+zfs snapshot "$STRIP_SNAP"
+echo "golden-snapshot: sending stream -> $OUT"
+if command -v zstd >/dev/null 2>&1; then
+	zfs send "$STRIP_SNAP" | zstd -T0 -19 -o "$OUT"
+else
+	zfs send "$STRIP_SNAP" > "${OUT%.zst}"
+fi
+
+# Cleanup the scratch clone (keep the original @golden snapshot on the source).
+zfs destroy -r "$CLONE"
+echo "golden-snapshot: done. Receive on a node with:"
+echo "  zstd -dc $OUT | zfs recv <pool>/ROOT/<be>   # then run 40-boot-grub-zfs + enrollment"

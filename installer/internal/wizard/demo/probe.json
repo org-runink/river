@@ -1,0 +1,131 @@
+{
+  "schema": "river.hwprobe/v1",
+  "probed_at": "2026-09-24T00:00:00Z",
+  "host": {
+    "vendor": "ExampleVendor",
+    "product": "server-16c-64g",
+    "virtual": false
+  },
+  "firmware": {
+    "uefi": true,
+    "secure_boot": false
+  },
+  "cpu": {
+    "vendor": "GenuineIntel",
+    "model": "Example Xeon 16C",
+    "psabi_level": 3,
+    "psabi": "x86-64-v3",
+    "sockets": 1,
+    "physical_cores": 16,
+    "threads": 32,
+    "avx2": true,
+    "avx512f": false,
+    "avx512_bf16": false,
+    "avx512_vnni": false,
+    "avx_vnni": false,
+    "amx_tile": false,
+    "amx_bf16": false,
+    "amx_int8": false
+  },
+  "memory": {
+    "total_bytes": 67276800000,
+    "available_bytes": 60549120000,
+    "swap_total_bytes": 0
+  },
+  "gpus": [],
+  "disks": [
+    {
+      "name": "nvme0n1",
+      "path": "/dev/nvme0n1",
+      "by_id": "/dev/disk/by-id/nvme-Example_DC_NVMe_960G_NVA0001",
+      "size_bytes": 960197124096,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "nvme",
+      "kind": "nvme",
+      "model": "Example DC NVMe 960G",
+      "serial": "NVA0001",
+      "confirm_id": "NVA0001",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "nvme1n1",
+      "path": "/dev/nvme1n1",
+      "by_id": "/dev/disk/by-id/nvme-Example_DC_NVMe_960G_NVA0002",
+      "size_bytes": 960197124096,
+      "rotational": false,
+      "removable": false,
+      "read_only": false,
+      "transport": "nvme",
+      "kind": "nvme",
+      "model": "Example DC NVMe 960G",
+      "serial": "NVA0002",
+      "confirm_id": "NVA0002",
+      "boot_media": false,
+      "in_use": false,
+      "zfs_member": false,
+      "eligible": true
+    },
+    {
+      "name": "sdz",
+      "path": "/dev/sdz",
+      "by_id": "/dev/disk/by-id/usb-Example_USB_Stick_USBBOOT1",
+      "size_bytes": 31004295168,
+      "rotational": true,
+      "removable": true,
+      "read_only": false,
+      "transport": "usb",
+      "kind": "hdd",
+      "model": "Example USB Stick",
+      "serial": "USBBOOT1",
+      "confirm_id": "USBBOOT1",
+      "boot_media": true,
+      "in_use": true,
+      "zfs_member": false,
+      "eligible": false,
+      "ineligible_reasons": [
+        "boot medium of this installer",
+        "sdz mounted as the live medium at /run/archiso/bootmnt",
+        "USB-attached",
+        "removable media"
+      ]
+    }
+  ],
+  "nics": [
+    {
+      "name": "eno1",
+      "mac": "02:00:00:00:10:01",
+      "driver": "example",
+      "physical": true,
+      "wireless": false,
+      "operstate": "up",
+      "carrier": true,
+      "speed_mbps": 10000,
+      "ipv6_enabled": true,
+      "ipv6_link_local": true,
+      "ipv6_global": true
+    },
+    {
+      "name": "eno2",
+      "mac": "02:00:00:00:10:01",
+      "driver": "example",
+      "physical": true,
+      "wireless": false,
+      "operstate": "up",
+      "carrier": true,
+      "speed_mbps": 10000,
+      "ipv6_enabled": true,
+      "ipv6_link_local": true,
+      "ipv6_global": false
+    }
+  ],
+  "tpm": {
+    "present": true,
+    "version": "2.0",
+    "device": "tpm0"
+  }
+}
