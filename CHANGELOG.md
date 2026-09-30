@@ -33,6 +33,20 @@ None.
 
 ## [runink-os-2026.09] - 2026-09-29
 
+**Release note — deviation from [RELEASE.md](RELEASE.md) criterion 3 (the ISO must pass an
+unattended graphical install and boot under QEMU).** The release ISO
+(`runink-river-20260930-x86_64.iso`, built from `bff5d12`, sha256
+`f85cb667954e59f9a8f5fed37cc1fb3462c294358411fae8050f4ca96c39511e`) was not run through
+`build/qemu-gui-test.sh`: the harness fails at phase 1 on the build host ("the live system
+never ran the kit" — switching from the live desktop to VT2 gives a black screen the
+river#134 workaround no longer recovers from). This is a harness/host problem, not the
+image — the same unchanged harness now fails identically on the prior (2026-09-28) ISO,
+which passed it two days earlier; QEMU and OVMF are unchanged since 2026-09-19; a retry
+with more memory and CPUs fails the same way; and the ISO boots correctly to the installer
+welcome screen when booted by hand (screenshots on file). The owner decided a manual
+install of this exact ISO, from a physically flashed stick, stands in for the automated
+QEMU pass for this release. **No QEMU pass is claimed for `runink-os-2026.09`.**
+
 ### Security
 
 - The old fetch script under `install/` is removed. It downloaded the latest release ISO with no
