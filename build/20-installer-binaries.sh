@@ -43,7 +43,7 @@ LDFLAGS="-s -w"
 
 for b in hwprobe:river-hwprobe plan:river-plan modelpack:river-modelpack payloadpack:river-payloadpack \
 	cloudinit:river-cloud-init netcheck:river-netcheck pair:river-pair pairannounce:river-pair-announce \
-	gui:river-installer; do
+	gui:river-installer livefallback:river-live-fallback; do
 	echo "  building ${b#*:} from installer/${b%%:*} (GOAMD64=v1)"
 	( cd "$HERE/../installer" && CGO_ENABLED=0 GOAMD64=v1 \
 		go build -trimpath -ldflags="$LDFLAGS" -o "$DEST/${b#*:}" "./${b%%:*}" )

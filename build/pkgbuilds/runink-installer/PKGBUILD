@@ -14,7 +14,7 @@
 pkgname=runink-installer
 pkgver=2026.09
 pkgrel=1
-pkgdesc="Runink River installer: hardware probe, planner, payload tools, cloud first-boot agent, network-first setup and LAN-install pairing and the graphical installer (river-hwprobe, river-plan, river-modelpack, river-payloadpack, river-cloud-init, river-netcheck, river-netsetup, river-pair, river-pair-announce, river-installer)"
+pkgdesc="Runink River installer: hardware probe, planner, payload tools, cloud first-boot agent, network-first setup and LAN-install pairing and the graphical installer (river-hwprobe, river-plan, river-modelpack, river-payloadpack, river-cloud-init, river-netcheck, river-netsetup, river-pair, river-pair-announce, river-installer, river-live-fallback)"
 arch=('x86_64')
 url="https://github.com/org-runink/river"
 license=('MIT')
@@ -30,7 +30,7 @@ package() {
   # river-pair-announce refuses to run anywhere but the live medium, and its s6 session
   # template is in the live overlay only (iso-profiles/river/live-overlay/usr/local/lib/river-pair),
   # so on an installed node it is inert; river-pair lets a node drive LAN installs.
-  for b in river-hwprobe river-plan river-modelpack river-payloadpack river-cloud-init river-netcheck river-netsetup river-pair river-pair-announce river-installer; do
+  for b in river-hwprobe river-plan river-modelpack river-payloadpack river-cloud-init river-netcheck river-netsetup river-pair river-pair-announce river-installer river-live-fallback; do
     if [ -s "$out/installer-bin/$b" ]; then
       install -Dm755 "$out/installer-bin/$b" "$pkgdir/usr/local/bin/$b"
     else
