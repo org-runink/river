@@ -19,7 +19,7 @@ Type a question, or one of these commands at the `river>` prompt:
 - `done <step>` records that you finished a step yourself; `skip <step>` skips one.
 - `hw` shows the hardware summary and `plan` the install plan.
 - `remote` controls the optional issue-comment channel (see
-  [river#remote-observation-and-questions](#remote-observation-and-questions)).
+  [river#remote-observation-and-questions](40-troubleshooting.md#remote-observation-and-questions)).
 - `shell` opens a login shell on this console; `quit` leaves the guide.
 
 Destructive steps (partitioning the disk, creating the pool) are never run by `river-guide`.
