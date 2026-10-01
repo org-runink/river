@@ -43,7 +43,8 @@ systemd and what we would have to rebuild or write.
 | `networkmanager`, `wpa_supplicant`, `dbus` | available (library coupling only) | the server plan already replaces them with `dhcpcd` 10.5.2 (in Arch; `systemd-libs` only) |
 | `openssh` 10.5p1, `nftables`, `iptables` 1.8.13, `rsync`, `sudo`, `vim`, `cpupower` 7.2.7, `bubblewrap` | same names | fine |
 | `runink-tayga` | ours (`tayga` is not in Arch) | unchanged |
-| `artools-base`, `artix-grub-live` (live) | `arch-install-scripts`, `mkinitcpio-archiso` 73-1, `archiso` 90 (build host) | fine; mkarchiso replaces buildiso |
+| `artools-base` (live) | `arch-install-scripts`, `mkinitcpio-archiso` 73-1, `archiso` 90 (build host) | fine; mkarchiso replaces buildiso |
+| `runink-grub-live` (live; ours since 2026-10-01, replacing `artix-grub-live`) | n/a — it exists only to feed `buildiso`'s `prepare_grub()` | **drops out entirely** under mkarchiso, which takes the live menu straight from the profile |
 | `runink-zfs-utils` | ours | declares `depends=libudev` (an Artix name); Arch provides `libudev.so` from `systemd-libs`, so the PKGBUILD dependency must change or a shim is needed |
 
 ## 4. Measurements

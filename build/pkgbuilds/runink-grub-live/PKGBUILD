@@ -1,0 +1,82 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-grub-live — the live-medium GRUB scaffolding buildiso copies onto a Runink River ISO.
+#
+# WHAT IT REPLACES. Until this package, iso-profiles/river/Packages-Live named Artix's
+# `artix-grub-live`. Runink River never used that package's MENU: scripts/patch-artools.go
+# overwrites it with the profile's own (iso-profiles/river/grub/grub.cfg + kernels.cfg) and
+# deletes the two files the Artix menu keeps its state in. What was actually being consumed
+# from it was the SCAFFOLDING around the menu — the paths artools' grub.sh reads out of the
+# livefs layer. This package provides exactly those, under our own name and licence, with no
+# artix-* dependency. It is the first of the Artix-surface reductions; the long-term
+# from-scratch plan is docs/OWN-BASE.md and this is NOT it.
+#
+# WHAT ARTOOLS ACTUALLY READS. prepare_grub() in /usr/share/artools/lib/iso/grub.sh takes
+# `livecfg="$2"/usr/share/grub`, where $2 is the LIVEFS layer when the profile has one
+# (buildiso's make_grub), and touches three paths in it:
+#
+#   cp "${livecfg}"/cfg/*.cfg  "${grub}"        -> /boot/grub/*.cfg on the ISO
+#   cp -r "${livecfg}"/{locales,tz} "${grub}"   -> /boot/grub/locales, /boot/grub/tz
+#
+# Both copies run under artools' `run_safe` (set -e), so a missing path is a FAILED BUILD,
+# not a warning — which is why all three are provided here even though only one carries
+# content for this image:
+#
+#   usr/share/grub/cfg/loopback.cfg   SHIPPED, and ours. GRUB reads loopback.cfg instead of
+#                                     grub.cfg when the image is booted as a file from a
+#                                     multiboot stick, and the profile's grub.cfg is written
+#                                     to expect it (it reads ${iso_path}).
+#   usr/share/grub/cfg/grub.cfg       NOT shipped: patch-artools.go copies the profile's own
+#   usr/share/grub/cfg/kernels.cfg    grub.cfg and kernels.cfg over the top of whatever the
+#                                     cp above produced, so a copy here would only ever be
+#                                     overwritten. The glob still needs one match, which
+#                                     loopback.cfg provides.
+#   usr/share/grub/cfg/defaults.cfg   NOT shipped: patch-artools.go `rm -f`s both. They hold
+#   usr/share/grub/cfg/variable.cfg   the Artix menu's lang/keytable/tz defaults and its
+#                                     `timeout=-1`, i.e. wait at the menu forever.
+#   usr/share/grub/locales/           EMPTY DIRECTORIES. Artix fills them with 94 locale
+#   usr/share/grub/tz/                snippets and 8 timezone menus, sourced ONLY by the
+#                                     lang/keytable/tz submenus of the Artix menu — which
+#                                     this image does not ship (the profile's menu has boot
+#                                     entries and nothing else, and the installer asks for
+#                                     locale and timezone itself). Reproducing 102 dead
+#                                     files would put weight on every ISO that nothing can
+#                                     ever read. The directories exist so that artools'
+#                                     unconditional `cp -r` succeeds.
+#
+# THIS PACKAGE IS FOR PROFILES THAT BRING THEIR OWN MENU. Because the Artix grub.cfg and
+# kernels.cfg are deliberately absent, a profile WITHOUT iso-profiles/<profile>/grub/grub.cfg
+# takes patch-artools.go's other branch, which seds the Artix menu — and would fail here, at
+# build time, loudly. That is the intended behaviour: such a profile wants `artix-grub-live`
+# and should name it in its own Packages-Live. Both shipped Runink River profiles have their
+# own grub/.
+#
+# NOT PACKAGED HERE, on purpose:
+#   - the live MENU itself (iso-profiles/river/grub/), which is profile data, not a package;
+#   - the GRUB THEME (branding/grub/river), which patch-artools.go copies from the checkout;
+#   - the i386-pc/x86_64-efi modules and unicode.pf2, which grub.sh takes from `grub` in the
+#     ROOTFS layer, not from here.
+pkgname=runink-grub-live
+pkgver=2026.10
+pkgrel=1
+pkgdesc="Runink River live-medium GRUB scaffolding: the /usr/share/grub paths buildiso copies onto the ISO (the boot menu itself is the profile's own grub/)"
+arch=('any')
+url="https://github.com/org-runink/river"
+license=('MIT')
+# NO DEPENDENCIES. These are data files read by GRUB on the live medium; `grub` itself is in
+# the rootfs layer (Packages-Root), not here, and nothing in this package is executed.
+depends=()
+# artix-grub-live owns the same usr/share/grub/cfg and usr/share/grub/{locales,tz} paths.
+# Declaring the conflict makes listing both fail at basestrap, where the message names the
+# problem, instead of mid-install with "exists in filesystem". Deliberately NOT `provides`:
+# this package does not implement the Artix live menu, so nothing should be able to satisfy
+# a dependency on it with this.
+conflicts=('artix-grub-live')
+source=(loopback.cfg)
+sha256sums=('aa4990f1d7b9047fee431e03b1cf8f8e3d065ae8a0ee4a58b5b14fe0e27ddf32')
+
+package() {
+  install -Dm644 "$srcdir/loopback.cfg" "$pkgdir/usr/share/grub/cfg/loopback.cfg"
+  # See the header: artools copies these two directories unconditionally. Empty is correct
+  # and intended — do not "fix" this by filling them.
+  install -d "$pkgdir/usr/share/grub/locales" "$pkgdir/usr/share/grub/tz"
+}

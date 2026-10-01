@@ -80,10 +80,11 @@ rm -f "$TARGET"/etc/s6/sv/*-srv/dependencies.d/artix-live
 for _c in "$TARGET"/etc/s6/config/tty*.conf; do
   if [ -f "$_c" ]; then sed -i 's|^GETTY=.*river-.*|GETTY="agetty"|' "$_c"; fi
 done
-# The livefs layer's packages (Packages-Live) are live-only too; artix-grub-live is the live
-# ISO's menu configuration and means nothing on a node. artix-live-s6/artix-live-base are in no
-# Packages-Live; they are listed so that one arriving by accident never reaches a node.
-for _p in river-guide artix-grub-live artix-live-s6 artix-live-base; do
+# The livefs layer's packages (Packages-Live) are live-only too; runink-grub-live is the live
+# ISO's GRUB scaffolding and means nothing on a node. artix-grub-live (what runink-grub-live
+# replaced), artix-live-s6 and artix-live-base are in no Packages-Live; they are listed so that
+# one arriving by accident never reaches a node.
+for _p in river-guide runink-grub-live artix-grub-live artix-live-s6 artix-live-base; do
   chroot "$TARGET" pacman -Rdd --noconfirm --noscriptlet "$_p" >/dev/null 2>&1 || true
 done
 # The graphical installer's kiosk (a web view on the local display: the server live medium's

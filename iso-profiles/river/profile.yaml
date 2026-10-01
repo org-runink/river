@@ -77,12 +77,18 @@ live-session:
     - wireplumber
 rootfs:
   packages:
-    # live-boot essentials (squashfs tooling). artix-grub-live, the live GRUB configuration,
+    # live-boot essentials (squashfs tooling). runink-grub-live, the live GRUB scaffolding,
     # is in the livefs layer below: artools reads the live menu from that layer when one
     # exists.
+    #
+    # NO mkinitcpio-nfs-utils (removed 2026-10-01). It ships `ipconfig` and `nfsmount` for
+    # mkinitcpio's `net` hook, i.e. an NFS root — and no initramfs built for this image names
+    # that hook: the live one comes from iso-initcpio's /etc/mkinitcpio-default.conf
+    # (base udev artix_shutdown artix artix_loop_mnt artix_kms modconf block filesystems
+    # keyboard keymap) and the installed one from root-overlay/etc/mkinitcpio.conf.d/zfs.conf.
+    # Nothing in the tree referenced it; docs/OWN-BASE.md already listed it as a drop.
     - grub
     - squashfs-tools
-    - mkinitcpio-nfs-utils
     # base ops + installer tooling. git and curl are here on purpose: this machine.s job is
     # cloning repositories and building them.
     - openssh
@@ -118,7 +124,8 @@ rootfs:
     - kde-cli-tools
     - kde-gtk-config
     - kdecoration
-    - kdeplasma-addons
+    # NO kdeplasma-addons (removed 2026-10-01): extra plasmoids and wallpaper plugins this
+    # image's default layout never loads. Rationale in Packages-Root.
     - kglobalacceld
     - kinfocenter
     - kmenuedit
@@ -172,8 +179,8 @@ rootfs:
     - partitionmanager
     # Telemetry off via root-overlay/etc/firefox/policies/policies.json.
     - firefox
-    # KDE's official wallpapers. RIVER stays the default; Emerald comes from the overlay.
-    - plasma-workspace-wallpapers
+    # NO plasma-workspace-wallpapers (removed 2026-10-01): 255 MiB of KDE's own wallpapers
+    # on an image that ships its own. Rationale in Packages-Root.
     # Boot splash — the Runink River Plymouth theme. See Packages-Root for why it is s6-clean.
     - plymouth
     # ── graphics: mesa ────────────────────────────────────────────────────────────────
@@ -211,7 +218,8 @@ rootfs:
     - noto-fonts
     - noto-fonts-emoji
     - noto-fonts-cjk
-    - noto-fonts-extra
+    # NO noto-fonts-extra (removed 2026-10-01): 331 MiB of extra WIDTHS and WEIGHTS of
+    # families noto-fonts already ships. Rationale in Packages-Root.
     # ── developer toolchain ───────────────────────────────────────────────────────────
     # A developer toolchain: base-devel (C/C++) and go.
     - base-devel
@@ -254,6 +262,9 @@ livefs:
     # and 20-clone-rootfs removes it from installed machines (the install clones the running
     # live system, which includes this layer).
     #
-    # The live GRUB configuration artools copies to the ISO (make_grub reads it from THIS
-    # layer when a livefs exists). scripts/patch-artools.go rebrands its menu.
-    - artix-grub-live
+    # The live GRUB scaffolding artools copies to the ISO (make_grub reads it from THIS
+    # layer when a livefs exists), ours since 2026-10-01: build/pkgbuilds/runink-grub-live
+    # provides exactly the /usr/share/grub paths prepare_grub() touches, and no artix-*
+    # package. The menu itself is iso-profiles/river/grub/, which
+    # scripts/patch-artools.go copies over whatever this layer supplied.
+    - runink-grub-live

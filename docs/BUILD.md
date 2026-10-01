@@ -369,8 +369,8 @@ signature keys and config policy.
   declares the `[runink]` file repo.
 - `make lock` resolves `Packages-Root` against the pinned repos and records the full
   package set in `Pkglist.lock`; it is expected to be byte-identical across two runs.
-- `runink-k0s` and `runink-tayga` are built with integrity checking. `runink-installer`,
-  `runink-runtime` and `runink-core` package local trees and skip it.
+- `runink-k0s`, `runink-tayga` and `runink-grub-live` are built with integrity checking.
+  `runink-installer`, `runink-runtime` and `runink-core` package local trees and skip it.
 
 ### Reproducibility status
 
@@ -397,7 +397,13 @@ their own build before signing ([RELEASE.md](../RELEASE.md)), and the provenance
 - The `[runink]` repo must be present in artools' ISO pacman configuration
   (`/usr/share/artools/pacman.conf.d/iso-x86_64.conf`) or the `runink-*` packages do not
   resolve.
-- On Artix, `basestrap` comes from `artools-base`, and live boot needs `artix-grub-live`.
+- On Artix, `basestrap` comes from `artools-base`. The live medium's GRUB scaffolding is
+  `runink-grub-live` (`build/pkgbuilds/runink-grub-live`), not Artix's `artix-grub-live`:
+  `prepare_grub()` reads `usr/share/grub/cfg/*.cfg` and `usr/share/grub/{locales,tz}` out of
+  the **livefs** layer under `set -e`, so all three paths must exist or the build fails. It
+  ships no menu of its own — `scripts/patch-artools.go` installs the profile's
+  `grub/grub.cfg` + `grub/kernels.cfg` — so a profile WITHOUT its own `grub/` must list
+  `artix-grub-live` in its `Packages-Live` instead.
 - The default init for buildiso is openrc; pass `-i s6` when invoking it by hand.
 
 ## CI
