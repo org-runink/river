@@ -7,9 +7,14 @@ Runink River itself does not have.
 
 ## Requirements
 
+Runink River is planned with the **workstation** profile, whose minimums are lower than the
+ones a downstream server image uses ([INSTALLER-HARDWARE.md](INSTALLER-HARDWARE.md#profiles)):
+
 - UEFI firmware (legacy BIOS boot is not supported).
 - An x86-64-v3 CPU (AVX2, FMA, F16C) with at least 2 physical cores.
-- At least 16 GB of RAM: the hardware plan refuses a machine below 15360 MiB (MemTotal); see [INSTALLER-HARDWARE.md](INSTALLER-HARDWARE.md).
+- At least 8 GB of RAM: the hardware plan refuses a workstation below 7168 MiB (MemTotal).
+  (A server image refuses below 15360 MiB, because it also has to fit the model tiers; a
+  workstation plans no tiers.)
 - A whole disk of at least 64 GiB for the installation. It is repartitioned unless an
   existing pool is imported.
 
@@ -35,43 +40,110 @@ detail is behind a **Details** link.
 
 1. Write the ISO to a USB drive, plug it in, and start the computer from it. On most
    computers a key pressed at power-on opens the boot menu (F12, F11, F8 or Esc).
-2. The installer opens by itself, full screen, when the live desktop appears. An **Install
+2. GRUB offers **Runink River — Install / Live** and **Runink River — Install / Live (safe
+   graphics)**, and boots the first after a short timeout. Pick the safe-graphics entry if
+   the screen stays blank on the first one.
+3. The installer opens by itself, full screen, when the live desktop appears. An **Install
    Runink River** icon on the desktop opens it again if you close it. (A downstream server
    medium shows it straight after start-up, on the computer's own screen.)
-3. Click **Next** on each screen:
+4. Work through the screens. The bar at the top of the window shows eight steps; the one
+   safety question is a confirmation dialog on the **Your computer** step, so there is no
+   separate step for it.
+
+![The GRUB menu of the live medium](images/installer/boot-menu.jpg)
 
 | Screen | What happens |
 |---|---|
-| **Welcome** | Choose the language (English, Español, Français, Português) and the keyboard layout. A test field shows what the keys type. |
-| **What to install** | The image this USB drive started is selected. If the drive also carries the other image, choosing it tells you to restart and pick it in the start-up menu (**Restart now**). An edition that installs different kinds of node lists them here. |
-| **Network** | The network is set up automatically: *Connected: wired, IPv4 + IPv6*. Without a cable, **Connect to Wi-Fi** lists the networks and asks for the password. **Continue without internet** is always fine: the installation needs nothing from the internet. |
-| **Your computer** | The processor, the memory and **the disk that will be erased** (model, size and serial number), chosen by the hardware plan ([INSTALLER-HARDWARE.md](INSTALLER-HARDWARE.md)). A computer below the minimum requirements says why, in plain words; **Details** has **Try anyway (lab)** for test machines. |
-| **Erase and install** | The one safety question: a red button, then *This deletes everything on …; type ERASE to confirm*. The word is shown in the screen's language (BORRAR, EFFACER, APAGAR; ERASE always works). It confirms exactly the disks shown, by serial. |
-| **Name and administrator** | The computer's name and the administrator's user name are filled in; choose a password and type it twice. **Add an SSH key** (optional) takes a pasted public key. The root account stays locked. |
-| **Recovery key** | The disk is encrypted. The key is shown large, with a QR code for a phone, and **Save to "…"** writes it as a text file to a second USB drive when one is plugged in (never to the installation drive). **Start installing** unlocks only once *I have written it down or saved it* is ticked. |
-| **Installing** | A progress bar, one line per step in plain words, and the time left. If a step fails: a short explanation, **Show details** (the log) and **Retry**. |
+| **Welcome** | Choose the language (English, Español, Français, Português) and the keyboard layout. A test field shows what the keys type. **Next**. |
+| **What do you want to install?** | The image this USB drive started is selected, with a line saying so. If the drive also carries the other image, choosing it tells you to restart and pick it in the start-up menu (**Restart now**). An edition that installs different kinds of node lists them here. |
+| **Network** | The network is set up automatically: *Connected: wired, IPv4 + IPv6*. **Try again** repeats the attempt. Without a cable, **Connect to Wi-Fi** lists the networks and asks for the password. **Continue without internet** is always fine: the installation needs nothing from the internet. |
+| **Your computer** | The processor, the memory and **the disk that will be erased** (name, size and serial number), chosen by the hardware plan ([INSTALLER-HARDWARE.md](INSTALLER-HARDWARE.md)), with *Everything on this disk will be deleted. Other disks are not touched.* **Details** shows the pool layout, the usable space, the CPU level, the plan's notes, and the disks it will not touch (the boot medium is always one of them). The button here is the red **Erase and install**. A computer below the minimum requirements says why, in plain words; **Details** has **Try anyway (lab)** for test machines. |
+| **Erase and install?** (dialog) | The one safety question, over the **Your computer** screen: *This deletes everything on …, N GB (serial …). This cannot be undone.*, then *Type ERASE to confirm* and **Erase and continue**. The word is shown in the screen's language (BORRAR, EFFACER, APAGAR; ERASE always works). It names exactly the disk shown, by serial. **Cancel** goes back. |
+| **Name and administrator** | The computer's name and the administrator's user name are filled in (`runink` for both); choose a password and type it twice. **Add an SSH key** (optional) takes a pasted public key. *The root account stays locked.* |
+| **Your recovery key** | The disk is encrypted. The key is shown large, as eight groups of eight characters, with a QR code for a phone, and **Save to "…"** writes it as a text file to a second USB drive when one is plugged in (never to the installation drive; without a second drive the button is not offered). **Start installing** stays greyed out until *I have written it down or saved it* is ticked. |
+| **Installing** | A progress bar with the percentage and the time left, and one line per step in plain words, each ticked as it finishes: *Checking this computer*, *Checking the disks again*, *Preparing the encrypted disk*, *Copying the system*, *Configuring the system*, *Setting language and keyboard*, *Setting up package keys*, *Making it start up*, *Creating your account*, *Saving the hardware plan*, *Enabling services*, *Finishing up*. **Show details** opens the log. If a step fails: a short explanation, the log and **Retry**. |
 | **Finished** | *Remove the USB drive, then restart.* **Restart** restarts the computer. It starts the Plymouth splash, asks for the disk passphrase, and opens the login screen; log in with the administrator's password. |
 
 ![The graphical installer: welcome](images/installer/01-welcome.jpg)
-![What to install](images/installer/02-edition.jpg)
+![What do you want to install?](images/installer/02-edition.jpg)
 ![Network](images/installer/03-network.jpg)
 ![Your computer](images/installer/04-machine.jpg)
-![Erase and install](images/installer/05-erase.jpg)
+![Erase and install?](images/installer/05-erase.jpg)
 ![Name and administrator](images/installer/06-account.jpg)
-![Recovery key](images/installer/07-recovery.jpg)
+![Your recovery key](images/installer/07-recovery.jpg)
 ![Installing](images/installer/08-install.jpg)
 ![Finished](images/installer/09-done.jpg)
 
 The consoles stay available for recovery: on the Runink River medium **Ctrl+Alt+F2** is a text
-console, logged in automatically. (On a server medium, **Alt+F2** is that console, the
-installer pauses while it is shown and **Alt+F1** brings it back, and a server distribution
-may run [river-guide](INSTALL-GUIDE-AGENT.md) on **Alt+F3**.) The text installer
-(`sudo runink-install`, [Install](#install)) and the unattended one
-([`runink-autoinstall`](#unattended-install)) work exactly as before.
+console, logged in automatically as the live user. (On a server medium, **Alt+F2** is that
+console, the installer pauses while it is shown and **Alt+F1** brings it back, and a server
+distribution may run [river-guide](INSTALL-GUIDE-AGENT.md) on **Alt+F3**.)
+
+![The live medium's text console on Ctrl+Alt+F2](images/installer/live-console.jpg)
+
+Two things to know about leaving the desktop for that console:
+
+- **Going back may leave a blank screen.** On a graphics driver without a working console
+  switch (QEMU's emulated VGA is one), the desktop does not repaint when you switch back, and
+  the text consoles are then the only thing that draws. The installation itself is unaffected —
+  it runs in a background service, not in the window — and it keeps going while you are away.
+  If the desktop does not come back, finish from the text console with `sudo runink-install`,
+  or restart the computer and start again.
+- **The live session locks itself when idle.** It then asks for the live user's password, which
+  is `runink` on this medium. It is a throwaway password for the live session only; the
+  installer removes it from the installed system.
+
+### When you need the text installer instead
+
+The graphical installer above is the normal way to install, and it covers every choice this
+image offers. The text installer (`sudo runink-install`, [Install](#install)) is a **fallback**,
+on the same console. Reach for it when:
+
+- the live desktop or the installer window does not come up at all, including after the
+  **safe graphics** GRUB entry — on that console the installer's own errors are visible;
+- the machine has no usable screen or you are installing over a serial console or a BMC in
+  relative-pointer mode;
+- you need a choice the graphical screens do not offer: an explicit ZFS **pool name**, a
+  **boot-environment name**, importing an **existing pool**, your **own passphrase** instead of
+  a generated recovery key (`RUNINK_ZFS_KEY=own`), or an `enrollment.env` path;
+- you are installing many machines, where
+  [`runink-autoinstall`](#unattended-install) (no prompts) or [LAN installs](#lan-installs)
+  fit better.
+
+Both installers run the same steps against the same plan, so neither is "the safe one": each
+confirms every disk it erases by serial.
+
+### The first start
+
+Take the USB drive out before the computer restarts, or it starts the installer again.
+
+1. GRUB shows **Runink River Linux** (and **Advanced options**) and boots it after a short
+   timeout.
+2. The splash appears and the computer **asks for the disk passphrase**: the pool is encrypted
+   and the recovery key shown during the installation is that passphrase, the 64 characters
+   with the spaces left out. Type it and press Enter.
+3. The login screen opens: *Sign in to runink*, with the administrator's user name, the
+   session (Plasma on Wayland) and the keyboard layout. Log in with the password chosen
+   during the installation.
+4. The desktop comes up, with the network the installer used already set up. Nothing else is
+   left to do.
+
+![The login screen of the installed system](images/installer/firstboot-login.jpg)
+![The desktop after the first login](images/installer/firstboot-desktop.jpg)
+
+> **Known problem: the passphrase prompt may not be drawn.** The initramfs asks for it on
+> `/dev/console` — `Enter passphrase for 'zriver':` — but on the image tested here, in a
+> virtual machine, nothing was drawn over the splash and the key typed on the emulated
+> keyboard did not reach the prompt; the same boot unlocked immediately when the prompt and
+> the key were put on a serial console (`console=ttyS0,115200` on the kernel line). So a
+> splash that sits there is not necessarily a failed boot. If the machine seems stuck on the
+> logo, edit the entry in GRUB (press `e`, append `console=ttyS0,115200` for a serial console
+> or `plymouth.enable=0` for the plain text console, then **Ctrl+X**) and answer the prompt
+> there. This has not yet been reproduced on physical hardware.
 
 ### The first start (server edition)
 
-Runink River's first start is the login screen. What follows is a server edition's.
+What follows is a downstream server edition's first start, not Runink River's.
 
 A **server** installed this way starts with a graphical first boot on its screen:
 
@@ -89,8 +161,7 @@ A **server** installed this way starts with a graphical first boot on its screen
 ![First start: settling](images/installer/11-firstboot-settle.jpg)
 ![First start: ready](images/installer/10-firstboot-ready.jpg)
 
-A **workstation** starts to its login screen; after the first login it is in the desktop, with
-the network the installer used already set up. Nothing else is left to do.
+A **workstation** has none of this: it starts to its login screen, as above.
 
 ### How it works
 

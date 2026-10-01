@@ -23,7 +23,7 @@ Example usage or pseudocode here (optional)
 Other ways to solve this problem or achieve this goal. Why is your solution better?
 
 ## Architectural Impact
-- Does this change any of River's [invariants](https://runink.org/docs/concepts/#non-negotiable-invariants)?
+- Does this change any of Runink River's [invariants](https://docs.runink.org/river/docs/concepts/#the-invariants)?
 - Does it add new dependencies?
 - Does it affect security or auditability?
 - Does it impact performance?
@@ -36,4 +36,4 @@ Other ways to solve this problem or achieve this goal. Why is your solution bett
 
 **Note**: Features are usually discussed in [Discussions](https://github.com/org-runink/river/discussions) before becoming issues. If your idea is still in the exploration phase, consider starting a discussion first. This gives the community a chance to provide feedback before you spend time on a full implementation.
 
-If this violates River's [non-negotiable invariants](https://runink.org/docs/concepts/#non-negotiable-invariants), the issue will be closed with an explanation.
+If this violates Runink River's [invariants](https://docs.runink.org/river/docs/concepts/#the-invariants), the issue will be closed with an explanation.
