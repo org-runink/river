@@ -85,7 +85,7 @@ source=("${RUNINK_ZFS_MIRROR}/zfs-${pkgver}/zfs-${pkgver}.tar.gz"{,.asc}
 sha256sums=('2a3c70d55a37cc71618a95a60e81ad66530201eb118d37741dc92efcf848c8b1'
             'SKIP'
             'c9d53245ce68ccc3e75ccec5390391a92227096e1771943ab0aaf64f977db7c0'
-            '0192bab80bf4bc028034b9e98b18975a0b1fd2acacae8ff8910f5cac0bf2488e')
+            '2d8ac28a553112037caa17120d0d3b5f3a8a40f2f0e73a78bcdfea4afe189c63')
 validpgpkeys=(4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027)  # Tony Hutter (OpenZFS release signing)
 # (public key vendored in keys/pgp/; zfs-build.yml imports it before makepkg)
 _srcdir="zfs-${pkgver}"
