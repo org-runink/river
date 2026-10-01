@@ -35,6 +35,7 @@ holds equal to what those PKGBUILDs produce:
 | `runink-zfs`, `runink-zfs-utils` | the OpenZFS kernel modules built for exactly that kernel, and the matching userland |
 | `runink-installer` | the hardware probe, the planner, the network set-up and the graphical installer |
 | `river-guide` | the offline install guide of the live medium |
+| `runink-grub-live` | the live medium's GRUB scaffolding; the install removes it, so it is never on a running machine |
 | `runink-k0s`, `runink-k0s-airgap`, `runink-tayga` | packaging that images built downstream from Runink River use; not on the workstation image |
 | `runink-core`, `runink-runtime` | placeholders filled only by a downstream build; the published ones hold a marker file and a models manifest at most |
 

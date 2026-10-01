@@ -38,7 +38,13 @@ runink-installer
 # Live-medium boot and the installer's disk tools (the installed machine is a clone of the live
 # rootfs, so they stay on it too).
 squashfs-tools
-mkinitcpio-nfs-utils
+# NOT mkinitcpio-nfs-utils (removed 2026-10-01). It ships `ipconfig` and `nfsmount` for
+# mkinitcpio's `net` hook — NFS-root boot — and no initramfs this image builds names that
+# hook: the live one comes from iso-initcpio's /etc/mkinitcpio-default.conf
+# (base udev artix_shutdown artix artix_loop_mnt artix_kms modconf block filesystems
+# keyboard keymap), the installed one from root-overlay/etc/mkinitcpio.conf.d/zfs.conf.
+# Nothing in the resolved closure requires it, nothing in this repository referenced it, and
+# docs/OWN-BASE.md already listed it as a drop.
 artools-base
 dialog
 parted
@@ -81,6 +87,22 @@ nftables
 #   plasma-vault           - gocryptfs/FUSE vaults; the ZFS pool is already encrypted
 #   plasma-firewall        - ufw/firewalld KCM; neither backend ships (nftables is used)
 #   oxygen, oxygen-sounds  - legacy theme; Breeze is the theme
+#   kdeplasma-addons       - REMOVED 2026-10-01. Extra plasmoids (timer, comic, fuzzy clock,
+#                            fifteen puzzle, weather, media frame, ...), a few KRunner
+#                            plugins (unit converter, dictionary, characters) and the
+#                            picture-of-the-day wallpaper plugin. The default desktop here
+#                            loads none of them: the River look-and-feel layout
+#                            (root-overlay/usr/share/plasma/look-and-feel/
+#                            org.runink.river.desktop) uses only
+#                            org.kde.plasma.desktop.defaultPanel and
+#                            org.kde.plasma.kickoff, both from plasma-desktop/
+#                            plasma-workspace. Its only reverse dependency is plasma-meta,
+#                            which this image does not install, so it is a leaf — and it is
+#                            the ONLY reason qt6-quick3d, openxr (a VR runtime loader),
+#                            qt6-quicktimeline and jsoncpp were in the closure at all.
+#                            Measured with pactree: 51.7 MiB over 5 packages. What a user
+#                            loses: those widgets, in "Add Widgets". KDE's own KRunner
+#                            calculator (in krunner/plasma-workspace) stays.
 # PLUS sddm-kcm (login-screen settings). konsole and spectacle are listed below.
 # kuserfeedback CANNOT be dropped: plasma-workspace, dolphin and kate hard-depend on it
 # (pacman -Si, Artix 2026-09-24). It is KDE's opt-in feedback library, off by default
@@ -94,7 +116,6 @@ kactivitymanagerd
 kde-cli-tools
 kde-gtk-config
 kdecoration
-kdeplasma-addons
 kglobalacceld
 kinfocenter
 kmenuedit
@@ -157,10 +178,17 @@ partitionmanager
 # root-overlay/etc/firefox/policies/policies.json (Mozilla enterprise policies).
 firefox
 
-# KDE's official wallpaper collection (not in the Plasma list above). The DEFAULT stays
-# RIVER (look-and-feel org.runink.river.desktop); the Emerald set is vendored under
-# branding/wallpapers/emerald and shipped by branding/render.sh.
-plasma-workspace-wallpapers
+# NOT plasma-workspace-wallpapers — KDE's official wallpaper collection, REMOVED 2026-10-01.
+# 255.1 MiB for exactly one package, and this image already ships its own: the default is
+# RIVER (branding/wallpapers/River, set by look-and-feel org.runink.river.desktop's
+# `Image=River`), the login screen is the `runink-river` SDDM theme
+# (root-overlay/etc/sddm.conf.d/10-river.conf), and the fourteen CachyOS Emerald JPEGs are
+# vendored under branding/wallpapers/emerald and shipped by branding/render.sh. Nothing in
+# the resolved closure depends on it (pactree -r: nothing) and nothing in this repository
+# names a wallpaper from it. What a user loses: KDE's stock wallpapers in the picker.
+# TO BOOT-TEST: Plasma's compiled-in fallback wallpaper is "Next", which lived in this
+# package — confirm the desktop, the lock screen and SDDM all show the River artwork and not
+# a flat colour.
 
 # ── boot splash: Plymouth (workstation ONLY) ──────────────────────────────────────────
 # The RIVER `river` script theme (root-overlay/usr/share/plymouth/themes/river). Artix
@@ -222,7 +250,13 @@ ttf-liberation
 noto-fonts
 noto-fonts-emoji
 noto-fonts-cjk
-noto-fonts-extra
+# NOT noto-fonts-extra (removed 2026-10-01). 331.3 MiB for one package, and it adds no
+# SCRIPT this image could not already render: measured against the Artix file database, all
+# 84 font families in noto-fonts-extra are among the 226 in noto-fonts, and what it adds is
+# extra WIDTHS and WEIGHTS of them (Condensed / SemiCondensed / ExtraCondensed, and a couple
+# of Semibold faces). noto-fonts, noto-fonts-cjk and noto-fonts-emoji keep the coverage.
+# Nothing in the resolved closure depends on it. What a user loses: those width and weight
+# variants in a font picker.
 
 # ── developer toolchain ────────────────────────────────────────────────────────────────
 # A developer workstation clones and builds: base-devel, git and curl are its tools (invariant

@@ -6,6 +6,9 @@
 # No artix-live-s6 / artix-live-base: the live session is configuration in live-overlay/
 # (see the header of profile.yaml).
 
-## The live GRUB menu configuration artools copies onto the ISO (the menu itself is replaced
-## by iso-profiles/river/grub/, see scripts/patch-artools.go)
-artix-grub-live
+## The live GRUB scaffolding artools copies onto the ISO: the /usr/share/grub paths
+## prepare_grub() reads out of THIS layer (cfg/*.cfg, locales/, tz/). OURS, built from
+## build/pkgbuilds/runink-grub-live; it replaced Artix's artix-grub-live, whose MENU this
+## image never used (iso-profiles/river/grub/ is the menu — see scripts/patch-artools.go).
+## The PKGBUILD header lists, path by path, what artools reads and why each one is there.
+runink-grub-live

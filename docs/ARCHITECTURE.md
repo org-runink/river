@@ -52,6 +52,7 @@ pinned local `[runink]` repository, which is injected ahead of the distribution 
 | `runink-zfs`, `runink-zfs-utils` | OpenZFS stable, built as a prebuilt module for exactly that kernel, plus the matching userland and the mkinitcpio `zfs` hook. Split from one PKGBUILD so module and userland cannot skew. |
 | `runink-k0s` | The pinned k0s release binary (bundles containerd, runc, kubelet and the CNI), integrity-checked against upstream checksums. |
 | `runink-tayga` | The TAYGA NAT64 translator, built from a sha256-pinned upstream tarball. |
+| `runink-grub-live` | The live medium's GRUB scaffolding: exactly the `/usr/share/grub` paths `buildiso` copies off the livefs layer onto the ISO. It replaced Artix's `artix-grub-live`; the boot menu itself is the profile's own `grub/`. Live medium only — the install removes it. |
 | `runink-installer` | `river-hwprobe` and `river-plan`, the installer's hardware probe and planner, and `river-netsetup` + `river-netcheck`, the network-first step ([INSTALL.md](INSTALL.md#network-first)), built from `installer/` (Go standard library, `GOAMD64=v1`), plus `models.tiers` when one is supplied. On every image. |
 | `runink-runtime` | Host binaries staged by a downstream payload (none on a base image) plus `models.manifest`. |
 | `runink-core` | The downstream platform tree at `/usr/local/share/runink/core`, or a `PAYLOAD-NONE` marker on a base image. |

@@ -23,6 +23,7 @@ var PublicPackages = map[string]string{
 	"runink-k0s":           "build/pkgbuilds/runink-k0s",
 	"runink-k0s-airgap":    "build/pkgbuilds/runink-k0s-airgap",
 	"runink-installer":     "build/pkgbuilds/runink-installer",
+	"runink-grub-live":     "build/pkgbuilds/runink-grub-live",
 	"runink-tayga":         "build/pkgbuilds/runink-tayga",
 	"river-guide":          "build/pkgbuilds/river-guide",
 	"runink-core":          "build/pkgbuilds/runink-core",

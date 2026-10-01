@@ -92,6 +92,15 @@ if command -v makepkg >/dev/null 2>&1; then
 	( cd "$HERE/pkgbuilds/runink-tayga" && \
 	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
 	  || { echo "  makepkg runink-tayga FAILED" >&2; exit 1; }
+
+	# runink-grub-live, the live medium's GRUB scaffolding (the livefs layer's /usr/share/grub
+	# paths artools' prepare_grub reads). Integrity-checked: its one source file is in the
+	# PKGBUILD's own directory and pinned by sha256 there, so --skipinteg would only hide an
+	# edit to it. No --nodeps needed — it declares none.
+	echo "  makepkg runink-grub-live (integrity-checked)"
+	( cd "$HERE/pkgbuilds/runink-grub-live" && \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
+	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
 else
 	echo "build-all: makepkg not found (not on Arch/Artix) — artifacts staged in $OUT_DIR,"
 	echo "           run packaging on an Arch/Artix builder to produce *.pkg.tar.zst"

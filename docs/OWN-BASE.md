@@ -377,7 +377,9 @@ NetworkManager, glib, libcurl, gnupg, pacman, GRUB or Python in the image.
 | Today | Own base |
 |---|---|
 | `dialog`, `parted`, `gptfdisk`, `dosfstools`, `util-linux`, `rsync`, `runink-zfs(-utils)` | **build** (live-only extras on top of the server set) |
-| `arch-install-scripts`, `artools-base`, `artix-grub-live`, `mkinitcpio-nfs-utils` | **drop** (install-from-live needs none of them) |
+| `arch-install-scripts`, `artools-base` | **drop** (install-from-live needs none of them) |
+| `mkinitcpio-nfs-utils` | **already dropped** (2026-10-01, no initramfs here uses the `net` hook) |
+| `artix-grub-live` | **already ours**: `runink-grub-live` (`build/pkgbuilds/runink-grub-live`) since 2026-10-01. Keeps the live medium's GRUB scaffolding with no `artix-*` package; this phase replaces `buildiso` itself, which is what still reads those paths. |
 | `git` | **drop**. The live medium does not need it, and AGENTS.md's no-fetch posture applies. |
 | `squashfs-tools` | **build-only** (`river-compose`) |
 

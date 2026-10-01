@@ -31,6 +31,32 @@ their packages, the installer and (once it has code) the RIVER runtime.
 
 None.
 
+### Added
+
+- `runink-grub-live` (`build/pkgbuilds/runink-grub-live`), Runink River's own live-medium
+  GRUB scaffolding, replacing Artix's `artix-grub-live` in `Packages-Live`. It provides
+  exactly the three paths artools' `prepare_grub()` reads out of the livefs layer —
+  `usr/share/grub/cfg/*.cfg` plus the `locales/` and `tz/` directories — with no `artix-*`
+  dependency. The live boot menu is unchanged: it was already the profile's own
+  `iso-profiles/river/grub/grub.cfg` + `kernels.cfg`, which `scripts/patch-artools.go`
+  copies over the top. `loopback.cfg` (multiboot sticks) is ours now too; Artix's
+  interactive clock/locale/keymap/timezone menu, its `defaults.cfg` and its `variable.cfg`
+  were already being overwritten or deleted on every build, and are gone.
+
+### Removed
+
+- **`plasma-workspace-wallpapers`** (255 MiB): the image ships its own wallpapers — the
+  RIVER default, the `runink-river` SDDM theme and fourteen vendored Emerald JPEGs. Nothing
+  in the closure depended on it. KDE's stock wallpapers no longer appear in the picker.
+- **`noto-fonts-extra`** (331 MiB): all 84 of its font families are already in `noto-fonts`;
+  it adds only extra widths and weights of them, so no script loses coverage.
+- **`kdeplasma-addons`** (52 MiB over 5 packages): extra plasmoids and wallpaper plugins the
+  default desktop layout never loads. It was the only thing putting `qt6-quick3d`, `openxr`,
+  `qt6-quicktimeline` and `jsoncpp` into the closure. Those widgets are no longer offered in
+  "Add Widgets".
+- **`mkinitcpio-nfs-utils`**: NFS-root tooling for mkinitcpio's `net` hook, which no
+  initramfs this image builds names.
+
 ## [runink-os-2026.09] - 2026-09-29
 
 ### Security
