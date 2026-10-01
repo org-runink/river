@@ -144,7 +144,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer tty.Close()
-	io.WriteString(tty, notice)
+	say(tty, notice)
 	activate(*ttyPath)
 
 	// The console kiosk first: it draws the same graphical installer straight through
@@ -154,7 +154,7 @@ func main() {
 		return
 	} else {
 		fmt.Fprintf(os.Stderr, "river-live-fallback: %s did not start (%v); using the text installer\n", kioskBin, err)
-		io.WriteString(tty, "\n  The graphical installer could not start either. Using the text installer.\n\n")
+		say(tty, "\n  The graphical installer could not start either. Using the text installer.\n\n")
 	}
 
 	if err := run(textBin, tty); err != nil {
@@ -168,13 +168,21 @@ const (
 	textBin  = "runink-install"
 )
 
+// say writes a message to the console. A console that cannot be written to is reported and
+// then ignored: the installer still has to start, and stderr goes to the boot log either way.
+func say(tty *os.File, msg string) {
+	if _, err := io.WriteString(tty, msg); err != nil {
+		fmt.Fprintf(os.Stderr, "river-live-fallback: cannot write to the console: %v\n", err)
+	}
+}
+
 // run starts a command with the console as its terminal and waits for it. A missing binary
 // is an error like any other, so the caller moves on to the next fallback.
 func run(name string, tty *os.File, args ...string) error {
 	if _, err := exec.LookPath(name); err != nil {
 		return err
 	}
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(name, args...) // #nosec G204 -- fixed tool names from this file; arguments are passed as argv, never through a shell
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
 	return cmd.Run()
 }
@@ -186,7 +194,7 @@ func activate(ttyPath string) {
 	if _, err := exec.LookPath("chvt"); err != nil {
 		return
 	}
-	_ = exec.Command("chvt", vtOf(ttyPath)).Run()
+	_ = exec.Command("chvt", vtOf(ttyPath)).Run() // #nosec G204 -- a fixed tool name; the argument is the console number, passed as argv, never through a shell
 }
 
 // vtOf turns /dev/tty1 into "1". Anything unexpected falls back to the first console.

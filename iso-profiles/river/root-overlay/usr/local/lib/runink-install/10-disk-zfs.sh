@@ -120,6 +120,36 @@ group_key() { # print the key in 8 groups of 8 for transcription
 	printf '%s\n' "$1" | sed 's/\(........\)/\1 /g; s/ $//'
 }
 
+# pick_groups — three distinct group numbers (1..8), ascending. Random, so the answer has to
+# come from what the operator wrote down rather than from memory of a fixed prompt.
+pick_groups() {
+	od -An -tu1 -N64 /dev/urandom | tr -s ' ' '\n' | grep -v '^$' |
+		awk '{ g = $1 % 8 + 1; if (!seen[g]++) { print g; n++ } } n == 3 { exit }' | sort -n
+}
+
+# confirm_key KEY — ask for a few of its groups back, to prove it really was recorded.
+# "Press Enter" proved nothing: the key is shown ONCE, is stored nowhere, and without it every
+# file on the disk is gone — so a glance instead of a transcription destroys the node later.
+# A wrong answer is not fatal; it just asks again, with the key still on screen above. If the
+# input closes (no terminal behind it) it gives up rather than spinning forever.
+confirm_key() {
+	printf '\n Confirm you recorded it: type these groups back (counting left to right, 1 to 8).\n\n' >&2
+	for _g in $(pick_groups); do
+		_want="$(printf '%s' "$1" | cut -c "$(( (_g - 1) * 8 + 1 ))-$(( _g * 8 ))")"
+		while :; do
+			printf '   group %s of 8: ' "$_g" >&2
+			if ! read -r _got; then
+				printf '\n disk-zfs: no input to confirm with — the key above is the ONLY copy.\n' >&2
+				return 0
+			fi
+			_got="$(printf '%s' "$_got" | tr -d ' \t' | tr 'A-Z' 'a-z')"
+			[ "$_got" = "$_want" ] && break
+			printf '   that is not group %s — read it off what you recorded, and try again\n' "$_g" >&2
+		done
+	done
+	printf '\n Recorded. Keep it where you can reach it if this machine will not boot.\n\n' >&2
+}
+
 read_own_passphrase() {
 	[ -t 0 ] || { echo "disk-zfs: RUNINK_ZFS_KEY=own needs a terminal" >&2; exit 1; }
 	while :; do
@@ -151,8 +181,7 @@ show_recovery_key() {
 	# runink-autoinstall sets RUNINK_UNATTENDED=1: it must never wait for a key press, even
 	# when it runs on a console (as build/qemu-test.sh runs it); it used to wait here forever.
 	if [ -t 0 ] && [ "${RUNINK_UNATTENDED:-0}" != 1 ]; then
-		printf 'Press Enter once the key is recorded off-box... ' >&2
-		read -r _ || true
+		confirm_key "$ZFS_KEY"
 	fi
 }
 
