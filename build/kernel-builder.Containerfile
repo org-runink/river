@@ -21,6 +21,25 @@
 ARG BUILDER_IMAGE=runink-os-builder
 FROM ${BUILDER_IMAGE}
 USER root
+
+# Pin the mirrors, for the same reason scripts/build-iso-box.sh does (read its "skip mirrors
+# measured as degraded" note first — it records what NOT to do here).
+#
+# pacman does NOT fail over to the next mirror on a stalled transfer: it aborts the whole
+# transaction. The base image ships an ORDERED list of 12 whose #1, mirrors.dotsrc.org, has
+# repeatedly degraded to "less than 1 bytes/sec" and taken builds down with it — three kernel
+# builds on 2026-10-01 alone, each on a different package.
+#
+# This is an ALLOWLIST of the two mirrors pacman/mirrorlist.pin pins, NOT a deletion from the
+# ordered list. That distinction is load-bearing: an earlier attempt deleted the bad entry and
+# silently promoted a year-stale mirror at #2, which built a rootfs from 2025 packages and
+# failed much later and much more confusingly. Keeping only known-current mirrors cannot do
+# that. Adding one here means checking it is CURRENT, not merely reachable.
+RUN printf '%s\n' \
+      'Server = https://mirror1.artixlinux.org/repos/$repo/os/$arch' \
+      'Server = https://mirror.pascalpuffke.de/artix-linux/$repo/os/$arch' \
+      > /etc/pacman.d/mirrorlist
+
 RUN pacman -Syu --noconfirm --needed \
       bc cpio go libelf pahole perl tar xz zstd kmod openssl xxhash zlib bison flex \
       diffutils inetutils gnupg \
