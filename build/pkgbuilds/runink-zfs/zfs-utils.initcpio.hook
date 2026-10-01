@@ -8,6 +8,33 @@ ZPOOL_FORCE=""
 ZPOOL_IMPORT_FLAGS=""
 ZFS_BOOT_ONLY=""
 
+# runink_ask_passphrase ENCRYPTIONROOT — load the key, asking the person for the passphrase
+# in a way they can actually see and type into.
+#
+# The boot splash is started BEFORE this hook (mkinitcpio.conf.d/zfs.conf: ... kms plymouth
+# keyboard keymap block zfs ...), so plymouth owns the framebuffer and the keyboard by the
+# time `zfs load-key` prompts. The prompt is written but never drawn, and the keys the person
+# types go to the splash instead: the machine looks hung and the pool never opens. Seen in a
+# QEMU install where the prompt was visible only on the serial console.
+#
+# So when plymouth is running, ask through plymouth and feed the answer to zfs on stdin. If
+# plymouth cannot be asked, hide the splash first so that at least the plain text prompt is on
+# screen, and only then fall back to the direct prompt.
+runink_ask_passphrase() {
+    _er="$1"
+    if command -v plymouth >/dev/null 2>&1 && plymouth --ping >/dev/null 2>&1; then
+        if plymouth ask-for-password \
+            --prompt "Passphrase for ${_er}" --number-of-tries=1 2>/dev/null \
+            | zfs load-key -L prompt "${_er}"; then
+            return 0
+        fi
+        # Asking through plymouth did not work. Get the splash out of the way so the next
+        # attempt is visible rather than invisible.
+        plymouth hide-splash >/dev/null 2>&1 || true
+    fi
+    zfs load-key -L prompt "${_er}"
+}
+
 zfs_try_load_key_provider() {
     local DATASET=$1
     local ENCRYPTIONROOT=$2
@@ -110,6 +137,13 @@ zfs_decrypt_fs() {
 
     # Loop until key is loaded here or by another vector (SSH, for instance)
     while [ "$(zfs get -H -o value keystatus "${encryptionroot}")" != "available" ]; do
+        # A pool whose key is typed at boot: ask through the splash, never behind it.
+        if [ "${keylocation}" = "prompt" ]; then
+            runink_ask_passphrase "${encryptionroot}" && break
+            sleep 2
+            continue
+        fi
+
         # Try the default loading mechanism
         zfs load-key "${encryptionroot}" && break
 
@@ -117,7 +151,7 @@ zfs_decrypt_fs() {
         if [ -n "${prompt_override}" ]; then
             echo "Unable to load key ${keylocation}; please type the passphrase"
             echo "To retry the file, interrupt now or repeatedly input a wrong passphrase"
-            zfs load-key -L prompt "${encryptionroot}" && break
+            runink_ask_passphrase "${encryptionroot}" && break
         fi
 
         # Throttle retry attempts
