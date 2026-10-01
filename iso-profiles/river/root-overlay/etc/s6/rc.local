@@ -17,19 +17,31 @@ set -eu
 
 log() { echo "rc.local: $*"; }
 
-# 0. Live-installer guard ----------------------------------------------------
+# 0. Boot splash fallback ----------------------------------------------------
+# The plymouth-quit oneshot (a dependency of sddm-srv) normally ends the splash. If SDDM
+# is disabled or failed, nothing would, and the splash would sit over the text console.
+# This runs BEFORE the live guard below: a live medium whose desktop fails needs the splash
+# gone just as much as an installed machine does — more, because the console underneath is
+# the only way left to install. (It used to sit after the guard's `exit 0`, so on the live
+# medium a failed SDDM left the splash over the console: a blank screen and no way in.)
+/usr/local/bin/runink-plymouth-quit
+
+# 0b. Live-installer guard ---------------------------------------------------
 # Booted from the ISO the kernel cmdline carries `overlay=livefs`: that is the INSTALLER
 # environment, not an installed machine. Without this guard the live session does tuning work
 # on a rootfs that is about to be discarded.
 if grep -qw 'overlay=livefs' /proc/cmdline 2>/dev/null; then
 	log "live installer session — host tuning skipped (run the installer to provision)"
+	# A live medium must ALWAYS reach an installer. river-live-fallback waits for the
+	# desktop and, if none appears, starts the console kiosk and then the text installer
+	# on tty1 — as root, from here, so nobody has to find a terminal or type a
+	# privileged command. It does nothing when the desktop comes up normally.
+	# Backgrounded: it waits by design and must never hold up the boot.
+	if [ -x /usr/local/bin/river-live-fallback ]; then
+		/usr/local/bin/river-live-fallback &
+	fi
 	exit 0
 fi
-
-# 0b. Boot splash fallback ---------------------------------------------------
-# The plymouth-quit oneshot (a dependency of sddm-srv) normally ends the splash. If SDDM
-# is disabled or failed, nothing would, and the splash would sit over the text console.
-/usr/local/bin/runink-plymouth-quit
 
 # 1. OS tuning ---------------------------------------------------------------
 sysctl --system >/dev/null 2>&1 || log "sysctl --system reported issues (non-fatal)"
