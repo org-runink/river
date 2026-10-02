@@ -547,15 +547,14 @@ banner() {
 banner "$B/ascii/river-mark-small.txt" "$WS/etc/issue" "R U N I N K   R I V E R" "developer workstation" '\r (\l)  \n'
 
 # ── fastfetch: the mark in truecolor half blocks (fastfetch/) ──────────────────────────────
-# The terminal greeting fish prints (/etc/fish/conf.d/runink-greeting.fish; fastfetch's config
-# is /etc/xdg/fastfetch/config.jsonc). The mark rendered at 44x44 px; each terminal cell is
+# The terminal greeting (/etc/profile.d/runink-greeting.sh; fastfetch's config is
+# /etc/xdg/fastfetch/config.jsonc). The mark rendered at 44x44 px; each terminal cell is
 # two pixels, upper = foreground of "▀", lower = background, so the logo is 44 columns x 22
 # rows. A transparent pixel (alpha < 128) is the terminal's own background. A colour escape is
 # written only when the colour changes, which keeps each file small.
 #   river-mark.ansi   the logo fastfetch prints beside the machine summary
-#   anim/1..6.ansi    the greeting's arrival: the raft (the puppy aboard) drops onto the water and
-#                     settles while the wave lines drift. The last
-#                     frame IS river-mark.ansi, so fastfetch draws over it without a jump.
+# The six-frame arrival animation (anim/1..6.ansi) was removed on 2026-10-02: the greeting is
+# static (owner: "Can we make it less dancy"). lint-branding-sync fails if the frames return.
 # halfblock <png> <out.ansi>
 halfblock() {
 	magick "$1" -depth 8 txt:- | LC_ALL=C.UTF-8 awk '
@@ -603,19 +602,10 @@ frame() {
 	} > "$3"
 }
 rm -rf "$B/fastfetch"
-mkdir -p "$B/fastfetch/anim"
+mkdir -p "$B/fastfetch"
 svg2png "$B/logo/river-mark.svg" "$TMP/ff.png" 44 44 >/dev/null
 halfblock "$TMP/ff.png" "$B/fastfetch/river-mark.ansi"
-i=0
-for step in -30:-25 -16:-20 -4:-15 6:-10 3:-5; do
-	i=$((i + 1))
-	frame "${step%:*}" "${step#*:}" "$TMP/f$i.svg"
-	svg2png "$TMP/f$i.svg" "$TMP/f$i.png" 44 44 >/dev/null
-	halfblock "$TMP/f$i.png" "$B/fastfetch/anim/$i.ansi"
-done
-# The last frame is the logo itself (the plain source: no clip group, so no rounding drift).
-cp "$B/fastfetch/river-mark.ansi" "$B/fastfetch/anim/$((i + 1)).ansi"
-for f in "$B/fastfetch/river-mark.ansi" "$B"/fastfetch/anim/*.ansi; do
+for f in "$B/fastfetch/river-mark.ansi"; do
 	[ "$(wc -l < "$f")" -eq 22 ] || { echo "render: $f is not 22 rows" >&2; exit 1; }
 	printf 'render: %-78s %5s B\n' "${f#"$ROOT"/}" "$(wc -c < "$f")"
 done

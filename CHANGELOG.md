@@ -102,6 +102,20 @@ carried beyond what `runink-os-2026.09` already recorded.
   interactive clock/locale/keymap/timezone menu, its `defaults.cfg` and its `variable.cfg`
   were already being overwritten or deleted on every build, and are gone.
 
+### Changed
+
+- **The login shell is bash, and the terminal greeting no longer dances.** The admin the
+  installer creates and the live user both get `/bin/bash`; `fish` is dropped from the image
+  entirely. The greeting moved from a fish function to
+  `/etc/profile.d/runink-greeting.sh`, so it belongs to the login rather than to one shell,
+  and it is now a **static** one-shot `fastfetch` summary — the six-frame arrival animation
+  and its rendered frames are gone. `RUNINK_GREETING=off` still turns it off completely.
+  It prints **only in an interactive shell**: `/etc/profile.d` is also sourced by the login
+  shells `scp`, `sftp` and `ssh host command` start, and a banner on those streams corrupts
+  the transfer, so the greeting checks `$-` before writing anything. The installed-system
+  test now asserts both halves — that an interactive shell prints the summary, and that a
+  non-interactive one prints nothing at all.
+
 ### Removed
 
 - **`plasma-workspace-wallpapers`** (255 MiB): the image ships its own wallpapers — the

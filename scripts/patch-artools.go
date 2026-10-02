@@ -371,12 +371,12 @@ func main() {
                     touch "$dep"/artix-live`,
 			"services.sh: display manager depends on artix-live only when it is installed"},
 		// The live user's login shell. artools creates it with a fixed /bin/bash; a profile
-		// that installs fish (Runink River: its terminal greeting, etc/fish/conf.d/
-		// runink-greeting.fish) gives the live session the same shell an installed machine's
-		// admin gets (installer/lib/50-runink-user.sh). A profile without fish keeps bash.
+		// The live session gets the same shell an installed machine's admin gets
+		// (installer/lib/50-runink-user.sh): BASH. The terminal greeting is no longer tied to
+		// a shell -- etc/profile.d/runink-greeting.sh is sourced by any login shell.
 		{"/usr/share/artools/lib/iso/config.sh", `    chroot "$1" useradd -m -G "$grps" -s /bin/bash "${LIVEUSER}"`,
-			`    chroot "$1" useradd -m -G "$grps" -s "$(if [[ -x "$1"/usr/bin/fish ]]; then echo /usr/bin/fish; else echo /bin/bash; fi)" "${LIVEUSER}" # runink: fish when installed`,
-			"config.sh: the live user's shell is fish when the profile installs it"},
+			`    chroot "$1" useradd -m -G "$grps" -s /bin/bash "${LIVEUSER}" # runink: bash, like the installed admin`,
+			"config.sh: the live user's shell is bash"},
 	}
 	for _, o := range optional {
 		s, mode = read(o.file)

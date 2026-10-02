@@ -276,8 +276,9 @@ git
 curl
 rsync
 vim
-# The terminal greeting: fish (the users' login shell) and fastfetch (the machine summary).
-fish
+# The terminal greeting: fastfetch (the machine summary), printed by
+# etc/profile.d/runink-greeting.sh. The login shell is bash, from `base`; fish was dropped
+# 2026-10-02 (owner: "Do we really need the fish?") and nothing else in the closure needs it.
 fastfetch
 sudo
 go
