@@ -31,7 +31,64 @@ their packages, the installer and (once it has code) the RIVER runtime.
 
 None.
 
+## [runink-os-2026.10] - 2026-10-02
+
+### Security
+
+None. No vulnerability was fixed in this release, and no upstream security bump is
+carried beyond what `runink-os-2026.09` already recorded.
+
+### Fixed
+
+- **An installed machine no longer boots to a black screen.** `runink-plymouth-quit`
+  passed `--retain-splash`, which tells plymouthd to leave its last frame up and
+  therefore NOT hand the VT back. tty1 stayed in graphics mode, SDDM's Xorg blocked
+  forever in `VT_WAITACTIVE` on a switch the kernel could never complete, and the
+  machine sat idle with nothing on the graphical console *or* any text console, the
+  pending switch swallowing Ctrl+Alt+Fn. The flag works under systemd, where
+  `plymouth-quit.service` is sequenced against the display manager and logind performs
+  the hand-over; nothing under s6 does that. Proven A/B/A on one disk with the same
+  cmdline. The cost of dropping it is a brief text console between splash and greeter —
+  the exact thing the flag existed to avoid, and worth paying. It hid for so long
+  because `console=ttyS0` masks it completely: plymouth then takes no VT, and every
+  successful boot of an installed machine had been a serial one.
+- **Time is synchronised.** Nothing on either image synchronised the clock: no
+  `chrony`/`ntp`/`timesyncd` package, no service. The clock was set from the RTC at boot
+  and drifted freely for the life of the node. An unsynchronised clock makes TLS
+  certificates look not-yet-valid or expired, breaks k0s and Kubernetes client
+  certificates and tokens the same way, and gets GitHub App JWTs refused with
+  `"'Expiration time' claim ('exp') is too far in the future"`. Measured on a node built
+  from the server profile: ~39 seconds ahead of GitHub, which failed every private-repo
+  CI job. Now `chrony` + `chrony-s6`, with two NTS-authenticated sources and the public
+  pool as an unauthenticated fallback, `makestep 1.0 3` so a badly wrong RTC is corrected
+  in seconds while a running node never jumps under a database, and `rtcsync` so the next
+  boot starts close before the network is up. Enabled on the live medium by the profile
+  **and** in the installed node's boot bundle by `80-enable-s6`, which now fails the
+  install if `chrony-srv` is not in the compiled `default` bundle — an
+  installed-but-never-started time daemon is indistinguishable from none at all, and that
+  is exactly how this was missed on a running node.
+- **The graphical installer makes you prove you copied the recovery key.** It accepted a
+  tickbox — "I have written it down" — and started the install. The key is shown exactly
+  once, for a disk it is the only way to decrypt, so a mistranscribed character was
+  discovered at the next boot, when nothing could be done about it. It now asks for three
+  randomly chosen groups of the eight to be typed back and checks them against the key it
+  generated, matching what the text installer has done since the live-fallback work.
+  Spaces and letter case are ignored; a wrong answer changes nothing and leaves the key on
+  screen; there is deliberately no attempt limit, because locking someone out of the one
+  screen that shows the key would brick the disk being installed.
+
 ### Added
+
+- **A boot entry an unbootable machine can be diagnosed from.** Every kernel now also gets
+  a *"Runink (<kernel>) — verbose, serial console"* entry: same kernel, same initramfs, no
+  splash, `loglevel=7` and `console=tty1 console=ttyS0,115200n8`. The black screen above
+  could only be *characterised*, not diagnosed, because the installed system had no way to
+  say anything — the splash hid the log and there was no serial console to watch. Generated
+  by `/etc/grub.d/11_runink_debug`, which re-resolves the ESP and re-globs the kernels on
+  every `grub-mkconfig` so it survives a kernel upgrade; numbered after `10_linux`, so the
+  normal entry stays first and `GRUB_DEFAULT=0` is unchanged. No serial getty is started
+  with it: the boot log needs no login, and an `agetty` respawning against a port that does
+  not exist would be noise on every machine without one.
 
 - `runink-grub-live` (`build/pkgbuilds/runink-grub-live`), Runink River's own live-medium
   GRUB scaffolding, replacing Artix's `artix-grub-live` in `Packages-Live`. It provides
