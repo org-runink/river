@@ -150,7 +150,62 @@ GRUB_DISABLE_LINUX_UUID=true
 $brand_grub
 $brand_payload
 EOF
+
+# A SECOND menu entry for the same kernel and initramfs, differing only in how the machine
+# talks to whoever is trying to fix it: no splash, full kernel log, and a serial console as
+# well as the screen.
+#
+# This exists because of river#11. An installed workstation booted to a black screen on every
+# console — graphical and text — and the only way to find out why was to take the disk apart
+# from a live medium, because the installed system had no way to say anything. The splash hid
+# the log, and there was no serial console to watch. One menu entry would have turned a
+# multi-hour forensic exercise into reading a boot log.
+#
+# Written as a grub.d generator rather than a literal menuentry so it stays correct after a
+# kernel upgrade: it re-resolves the ESP and re-globs the kernels every time grub-mkconfig
+# runs. It is numbered 11, AFTER 10_linux, so the normal entry stays first and GRUB_DEFAULT=0
+# still boots the machine the way it is meant to boot. Nothing here changes the default boot.
+#
+# No serial getty is enabled with it: an agetty respawning against a port that does not exist
+# is noise on every machine without one, and the boot log — which is what was missing — needs
+# no login. The cloud profile, which always has a port, enables one in 78-cloud-target.
+cat > "$TARGET/etc/grub.d/11_runink_debug" <<EOF
+#!/bin/sh
+# Emitted by installer step 40-boot-grub-zfs. See that step for why this entry exists.
+# Prints a GRUB menu entry on stdout, the way every /etc/grub.d script does.
+set -e
+esp_uuid="\$(grub-probe --target=fs_uuid /boot 2>/dev/null)" || exit 0
+[ -n "\$esp_uuid" ] || exit 0
+for img in /boot/vmlinuz-*; do
+	[ -f "\$img" ] || continue
+	pkgbase="\${img#/boot/vmlinuz-}"
+	initrd="/boot/initramfs-\$pkgbase.img"
+	[ -f "\$initrd" ] || continue
+	cat <<ENTRY
+menuentry 'Runink (\$pkgbase) — verbose, serial console' --class runink --class gnu-linux --id 'runink-debug-\$pkgbase' {
+	# No load_video: 00_header defines it only for a gfxterm boot, and this entry wants a
+	# text console. An undefined command here would print an error on the one boot that
+	# has to go smoothly.
+	insmod gzio
+	insmod part_gpt
+	insmod fat
+	search --no-floppy --fs-uuid --set=root \$esp_uuid
+	echo 'Booting verbose, with a console on ttyS0 at 115200. No splash.'
+	linux /vmlinuz-\$pkgbase root=ZFS=$POOL/ROOT/$BE rw $HARDEN zfs_force=1 console=tty1 console=ttyS0,115200n8 loglevel=7
+	initrd /initramfs-\$pkgbase.img
+}
+ENTRY
+done
+EOF
+chmod 0755 "$TARGET/etc/grub.d/11_runink_debug"
+
 chroot_run "grub-mkconfig -o /boot/grub/grub.cfg"
+# Prove the debug entry actually reached grub.cfg. A grub.d script that exits non-zero, or is
+# not executable, is skipped by grub-mkconfig with a line on stderr and nothing else — and the
+# entry would then be missing on exactly the boot that needed it, with nobody the wiser.
+if ! grep -q 'runink-debug-' "$TARGET/boot/grub/grub.cfg"; then
+	echo "boot: WARNING: no verbose/serial entry in grub.cfg — a black screen will not be diagnosable" >&2
+fi
 
 # Cleanup bind mounts.
 for fs in sys proc dev; do umount -R "$TARGET/$fs" 2>/dev/null || true; done

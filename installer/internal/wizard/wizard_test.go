@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -104,6 +105,30 @@ func (r *rig) waitView(what string, ok func(View) bool) View {
 	}
 }
 
+// ackRecovery answers the recovery screen's challenge correctly: it reads the key the wizard
+// generated and types back exactly the groups Recovery.Confirm asked for. Every test that just
+// wants to get past this screen uses it; the challenge itself is tested in
+// TestRecoveryKeyMustBeTypedBack.
+func (r *rig) ackRecovery() {
+	r.t.Helper()
+	key, err := r.w.RecoveryKey()
+	if err != nil {
+		r.t.Fatalf("no recovery key to confirm: %v", err)
+	}
+	r.post("/api/recovery/ack", map[string]any{"groups": confirmGroups(r.w.View().Recovery.Confirm, key)})
+}
+
+// confirmGroups renders the asked-for 1-based groups of a 64-hex key as the UI would collect
+// them: {"3": "a1b2c3d4", ...}.
+func confirmGroups(want []int, key string) map[string]string {
+	groups := strings.Fields(groupKey(key))
+	out := map[string]string{}
+	for _, n := range want {
+		out[strconv.Itoa(n)] = groups[n-1]
+	}
+	return out
+}
+
 const pw = "S3cret-Passw0rd!"
 
 // toRecovery walks the flow to the recovery screen.
@@ -133,11 +158,19 @@ func TestHappyPath(t *testing.T) {
 	if len(key) != 64 || len(rec["qr"].([]any)) < 21 {
 		t.Fatalf("recovery: key %q", key)
 	}
-	// "I have written it down" is required.
-	if code, m := r.call(http.MethodPost, "/api/recovery/ack", map[string]bool{"written": false}); code != 422 || m["error"] != "err.recovery.ack" {
-		t.Fatalf("ack without the box: %d %v", code, m)
+	// The key must be typed back before anything is written to the disk.
+	v0 := r.w.View()
+	if len(v0.Recovery.Confirm) != keyConfirmGroups {
+		t.Fatalf("recovery asked for %v groups", v0.Recovery.Confirm)
 	}
-	r.post("/api/recovery/ack", map[string]bool{"written": true})
+	wrong := confirmGroups(v0.Recovery.Confirm, key)
+	for n := range wrong {
+		wrong[n] = "00000000"
+	}
+	if code, m := r.call(http.MethodPost, "/api/recovery/ack", map[string]any{"groups": wrong}); code != 422 || m["error"] != "err.recovery.groups" {
+		t.Fatalf("ack with the wrong groups: %d %v", code, m)
+	}
+	r.ackRecovery()
 	v := r.waitView("done", func(v View) bool { return v.Screen == "done" })
 	if v.Install.Status != "done" || v.Install.Percent != 100 {
 		t.Fatalf("install: %+v", v.Install)
@@ -186,7 +219,7 @@ func TestSecretsNeverLogged(t *testing.T) {
 	r.post("/api/machine/confirm", map[string]any{"word": "ERASE", "disks": serials})
 	r.post("/api/account", AccountInput{Hostname: "node-a", Username: "admin", Password: pw, Password2: pw})
 	key, _ := r.w.RecoveryKey()
-	r.post("/api/recovery/ack", map[string]bool{"written": true})
+	r.ackRecovery()
 	r.waitView("done", func(v View) bool { return v.Screen == "done" })
 
 	state, _ := os.ReadFile(filepath.Join(r.dir, "state.json"))
@@ -317,10 +350,74 @@ func TestAccountValidation(t *testing.T) {
 	}
 }
 
+// The recovery key is shown once, and it is the only way to decrypt the disk the installer is
+// about to write. Before river#12 a tickbox stood here: it was satisfied by a glance, so a
+// mistranscribed character was discovered at the next boot, when nothing could be done. The
+// screen now asks for randomly chosen groups to be typed back.
+func TestRecoveryKeyMustBeTypedBack(t *testing.T) {
+	r := newRig(t, nil)
+	r.toRecovery()
+	key, err := r.w.RecoveryKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := r.w.View().Recovery.Confirm
+	if len(want) != keyConfirmGroups {
+		t.Fatalf("asked for %v, want %d groups", want, keyConfirmGroups)
+	}
+	if !slices.IsSorted(want) {
+		t.Errorf("groups %v are not in reading order", want)
+	}
+	for _, n := range want {
+		if n < 1 || n > keyGroups {
+			t.Fatalf("group %d is not one of the %d shown", n, keyGroups)
+		}
+	}
+
+	// One wrong character in one group is refused, and NOTHING is written: the key is still
+	// on screen, so the operator can correct their copy.
+	bad := confirmGroups(want, key)
+	first := strconv.Itoa(want[0])
+	bad[first] = "f" + bad[first][1:]
+	if bad[first] == confirmGroups(want, key)[first] {
+		bad[first] = "0" + bad[first][1:] // the first character already was 'f'
+	}
+	if code, m := r.call(http.MethodPost, "/api/recovery/ack", map[string]any{"groups": bad}); code != 422 || m["error"] != "err.recovery.groups" {
+		t.Fatalf("one wrong character accepted: %d %v", code, m)
+	}
+	// Nothing has started: the view's install status is still the zero value, not "running".
+	if v := r.w.View(); v.Screen != "recovery" || v.Recovery.Acknowledged || v.Install.Status == "running" || v.Install.Status == "done" {
+		t.Fatalf("a refused confirmation moved on: screen %s recovery %+v install %q", v.Screen, v.Recovery, v.Install.Status)
+	}
+	if k2, err := r.w.RecoveryKey(); err != nil || k2 != key {
+		t.Fatalf("the key changed under a wrong answer: %v", err)
+	}
+
+	// A group left out is refused too — an empty box must not pass as a match.
+	short := confirmGroups(want, key)
+	delete(short, first)
+	if code, _ := r.call(http.MethodPost, "/api/recovery/ack", map[string]any{"groups": short}); code != 422 {
+		t.Fatalf("a missing group was accepted: %d", code)
+	}
+
+	// Read off paper: upper case and stray spaces are the operator's, not a mistake.
+	sloppy := map[string]string{}
+	for n, g := range confirmGroups(want, key) {
+		sloppy[n] = " " + strings.ToUpper(g[:4]) + " " + g[4:] + " "
+	}
+	r.post("/api/recovery/ack", map[string]any{"groups": sloppy})
+	// Waiting for "done", not merely for the screen to change: the install runs in a
+	// goroutine writing under the rig's temp directory, and leaving it mid-flight races the
+	// test's own cleanup.
+	if v := r.waitView("done", func(v View) bool { return v.Screen == "done" }); !v.Recovery.Acknowledged {
+		t.Fatalf("a correct transcription did not start the install: %+v", v)
+	}
+}
+
 func TestInstallFailureAndRetry(t *testing.T) {
 	r := newRig(t, &FakeSystem{FailStep: "40-boot-grub-zfs"})
 	r.toRecovery()
-	r.post("/api/recovery/ack", map[string]bool{"written": true})
+	r.ackRecovery()
 	v := r.waitView("failure", func(v View) bool { return v.Install.Status == "failed" })
 	if v.Install.FailedStep != "40-boot-grub-zfs" || v.Screen != "install" {
 		t.Fatalf("failure: %+v", v.Install)
@@ -348,7 +445,7 @@ func TestResume(t *testing.T) {
 		t.Fatal("a key survived the restart")
 	}
 	// Ack is refused until a new key exists; re-submitting the account (password kept) makes one.
-	if err := w2.AckRecovery(true); !errors.Is(err, ErrState) {
+	if err := w2.AckRecovery(map[string]string{"1": "whatever"}); !errors.Is(err, ErrState) {
 		t.Fatalf("ack without a key: %v", err)
 	}
 	w2.st.Screen = "account"
@@ -479,7 +576,7 @@ func TestModelsRequired(t *testing.T) {
 	}
 	in.Passphrase = strings.Repeat("ab", 32)
 	r.post("/api/account", in)
-	r.post("/api/recovery/ack", map[string]bool{"written": true})
+	r.ackRecovery()
 	r.waitView("done", func(v View) bool { return v.Screen == "done" })
 	env := strings.Join(r.sys.envOf("72-models-payload"), "\n")
 	for _, want := range []string{"RUNINK_MODELS_REQUIRED=1", "RUNINK_MODELS_PASSPHRASE_FILE="} {
