@@ -62,11 +62,13 @@ carried beyond what `runink-os-2026.09` already recorded.
   CI job. Now `chrony` + `chrony-s6`, with two NTS-authenticated sources and the public
   pool as an unauthenticated fallback, `makestep 1.0 3` so a badly wrong RTC is corrected
   in seconds while a running node never jumps under a database, and `rtcsync` so the next
-  boot starts close before the network is up. Enabled on the live medium by the profile
-  **and** in the installed node's boot bundle by `80-enable-s6`, which now fails the
-  install if `chrony-srv` is not in the compiled `default` bundle — an
-  installed-but-never-started time daemon is indistinguishable from none at all, and that
-  is exactly how this was missed on a running node.
+  boot starts close before the network is up. Enabled in the **installed node's** boot
+  bundle by `80-enable-s6`, which now fails the install if `chrony-srv` is not in the
+  compiled `default` bundle — an installed-but-never-started time daemon is
+  indistinguishable from none at all, and that is exactly how this was missed on a running
+  node. The live medium is ephemeral and does not run it: the clock matters where TLS and
+  Kubernetes certificates are checked over a machine's lifetime, not for the minutes an
+  installer is on screen.
 - **The graphical installer makes you prove you copied the recovery key.** It accepted a
   tickbox — "I have written it down" — and started the install. The key is shown exactly
   once, for a disk it is the only way to decrypt, so a mistranscribed character was

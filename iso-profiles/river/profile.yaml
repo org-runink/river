@@ -57,10 +57,16 @@ live-session:
     - river-perms
     - NetworkManager
     - sshd
-    # chrony: time synchronisation (chrony-s6's bundle). After NetworkManager, which it
-    # needs to reach a server; its own dependencies.d has the ordering, this list only has
-    # to not enable it while NetworkManager is inactive — s6 refuses such a set.
-    - chrony
+    # NO chrony here, deliberately. This list is the LIVE session's, and the live layer
+    # (Packages-Live) installs only runink-grub-live — chrony and chrony-s6 are in
+    # Packages-Root, i.e. the installed system. Listing it here made artools warn
+    # "Service chrony not found", and adding a root-overlay directory to satisfy that
+    # turned the warning into a FATAL: s6 then found etc/s6/sv/chrony-srv with no `type`
+    # file (those come from the package, which the live layer does not have) and
+    # s6-rc-repo-sync aborted make_livefs(). The clock belongs to the installed node, and
+    # 80-enable-s6 puts it in that node's boot bundle and FAILS the install if it is absent.
+    # If the live medium ever needs a synced clock, chrony + chrony-s6 have to go into
+    # Packages-Live and the livefs package list, not into an overlay directory.
     # The display manager is declared HERE, as a service name — artools 0.39 has no
     # `displaymanager:` key. Its s6 unit comes from packages-init.s6 below. sddm-srv also
     # depends on the plymouth-quit oneshot (root-overlay/etc/s6/adminsv/plymouth-quit).
