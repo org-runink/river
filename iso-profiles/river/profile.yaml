@@ -57,6 +57,10 @@ live-session:
     - river-perms
     - NetworkManager
     - sshd
+    # chrony: time synchronisation (chrony-s6's bundle). After NetworkManager, which it
+    # needs to reach a server; its own dependencies.d has the ordering, this list only has
+    # to not enable it while NetworkManager is inactive — s6 refuses such a set.
+    - chrony
     # The display manager is declared HERE, as a service name — artools 0.39 has no
     # `displaymanager:` key. Its s6 unit comes from packages-init.s6 below. sddm-srv also
     # depends on the plymouth-quit oneshot (root-overlay/etc/s6/adminsv/plymouth-quit).

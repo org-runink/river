@@ -63,6 +63,16 @@ elogind-s6
 dbus-s6
 networkmanager-s6
 openssh-s6
+# chrony + chrony-s6: the clock. NOTHING on this image synchronised time before 2026-10-02,
+# and an unsynchronised clock is not a cosmetic problem: TLS certificates are rejected as
+# not-yet-valid or expired, k0s/Kubernetes client certificates and tokens fail the same way,
+# and GitHub App JWTs are refused with "'exp' claim is too far in the future" — which is how
+# the self-hosted runner on an image built from this profile had every private-repo CI job
+# 401 after drifting ~39s ahead of GitHub. chrony-s6 ships the `chrony` s6-rc bundle
+# (chrony-srv + chrony-log) the way networkmanager-s6 ships NetworkManager; profile.yaml
+# enables it by the bundle name.
+chrony
+chrony-s6
 # bluez-s6 ships the `bluetoothd` s6-rc bundle (bluetoothd-srv + bluetoothd-log, depends on
 # dbus); cups-s6 ships `cupsd`. Both are enabled in profile.yaml's live-session.services the
 # same way sddm is, and 20-clone-rootfs.sh carries the live default bundle to the target.

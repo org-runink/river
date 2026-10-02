@@ -631,6 +631,36 @@ These files are not written by enrollment. Create them on the node when needed:
 | `/etc/runink/backup.env` | `runink-backup.sh`: snapshot interval, retention, and `BACKUP_TARGET` for raw, still-encrypted `zfs send` to a remote SSH host. See `backup.env.example`. |
 | `/etc/runink/net.env` | `EDGE_ALIAS`: a secondary LAN address the node claims when a router port-forwards to a fixed address. |
 
+## The clock
+
+The image synchronises time with `chrony` (the `chrony` s6 bundle from `chrony-s6`, enabled on
+every node and on the live medium). Configuration is `/etc/chrony.conf`: two NTS-authenticated
+sources with the public pool as an unauthenticated fallback, `makestep 1.0 3` so a node whose
+RTC is badly wrong arrives at the right time in seconds rather than hours, and `rtcsync` so the
+next boot starts close even before the network is up.
+
+This is not cosmetic. An unsynchronised clock makes TLS certificates look not-yet-valid or
+expired, breaks k0s and Kubernetes client certificates and tokens the same way, and gets GitHub
+App JWTs refused with *"'Expiration time' claim ('exp') is too far in the future"*. Before
+2026-10-02 nothing on either image synchronised time at all, and the self-hosted runner on a
+node built from the server profile had every private-repo CI job fail that way after drifting
+about 39 seconds ahead of GitHub. A node that hosts the optional Actions runner
+([GOLDEN-IMAGE.md](GOLDEN-IMAGE.md)) needs this to work at all.
+
+Check it with:
+
+```
+chronyc tracking      # "Leap status : Normal" and a small System time offset
+chronyc sources -v
+timedatectl 2>/dev/null || date -u
+```
+
+**Air-gapped and LAN-only nodes** have nothing to reach. chrony logs that and leaves the clock
+alone, which is the correct failure rather than a wrong guess — but the clock then only drifts,
+so point it at the site's own source: one `server <host> iburst` line in `/etc/chrony.conf`,
+with the three public lines removed. An enrolled private node should take that from enrollment
+rather than keeping the public pool.
+
 ## The ESP and `/etc/fstab`
 
 The ESP is mounted at `/boot`. The pool is encrypted and GRUB cannot read an encrypted pool,
