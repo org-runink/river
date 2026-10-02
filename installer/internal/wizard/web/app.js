@@ -190,7 +190,9 @@ document.addEventListener("input", (ev) => {
   const el = ev.target;
   if (!el.id) return;
   drafts[el.id] = (el.type === "checkbox" || el.type === "radio") ? el.checked : el.value;
-  if (el.id === "written") render(true);
+  // The recovery screen's "start installing" button turns on only once every asked-for key
+  // group is fully typed, so each keystroke in one has to re-render.
+  if (el.id === "written" || el.id.startsWith("rkg-")) render(true);
 });
 document.addEventListener("change", (ev) => {
   const el = ev.target;
@@ -371,14 +373,24 @@ const SCREENS = {
     const keyBox = rec ? `<div class="keyrow"><div class="key" id="reckey" aria-label="${esc(rec.key)}">${esc(rec.key).replace(/ /g, (m, i) => (i === 35 ? "<br>" : " "))}</div>
       <div><div class="qr" role="img" aria-label="${T("recovery.qr")}">${qrSVG(rec.qr)}</div><div class="help">${T("recovery.qr")}</div></div></div>` : `<p>${icon("running")}</p>`;
     const drives = (usb || []).map((d) => `<button data-act="usb" data-dev="${esc(d.dev)}">${T("recovery.usb", { drive: (d.model || d.dev) + " (" + d.size_gb + " GB)" })}</button>`).join(" ");
-    const written = !!drafts.written;
+    // Type back the groups the backend asked for. A tickbox used to stand here and was
+    // satisfied by a glance; this key is shown once, for a disk it is the only way to
+    // decrypt, so the copy that leaves the room has to be proved readable. It is asked for
+    // even when the key was saved to a USB drive: a stick is one more thing that can be
+    // lost, and the operator can read the groups straight off this screen.
+    const want = r.confirm || [];
+    const typed = (n) => (drafts["rkg-" + n] || "").replace(/\s/g, "");
+    const filled = want.length > 0 && want.every((n) => typed(n).length === 8);
+    const boxes = want.map((n) => `<label class="field group"><span>${T("recovery.group", { n })}</span>
+      <input id="rkg-${n}" size="10" maxlength="12" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`).join("");
     return `<h1 tabindex="-1">${T("recovery.title")}</h1>
       ${r.lost ? `<div class="note">${T("recovery.lost")}</div>` : ""}
       <p class="lead">${T("recovery.lead")}</p>${keyBox}
       <div class="note">${T("recovery.warn")}</div>
       <p>${drives}${r.saved_to ? ` <span class="help">${T("recovery.usb.saved", { drive: r.saved_to })}</span>` : ""}</p>
-      <label class="check"><input type="checkbox" id="written">${T("recovery.written")}</label>
-      ${actions(true, `<button class="primary" data-act="ack" ${written ? "" : "disabled"}>${T("recovery.start")}</button>`)}`;
+      <p class="lead">${T("recovery.confirm")}</p>
+      <div class="keygroups">${boxes}</div>
+      ${actions(true, `<button class="primary" data-act="ack" ${filled ? "" : "disabled"}>${T("recovery.start")}</button>`)}`;
   },
 
   install() {
@@ -491,7 +503,16 @@ const ACTIONS = {
     }, { after: () => { delete drafts["acct-pass"]; delete drafts["acct-pass2"]; delete drafts["acct-medium"]; } });
   },
   usb: (b) => act("/api/recovery/usb", { dev: b.dataset.dev }),
-  ack: () => act("/api/recovery/ack", { written: !!($("#written") || {}).checked }, { after: () => { rec = null; } }),
+  ack: () => {
+    const groups = {};
+    ((S.recovery || {}).confirm || []).forEach((n) => { groups[n] = ($("#rkg-" + n) || {}).value || ""; });
+    act("/api/recovery/ack", { groups }, {
+      after: () => {
+        rec = null;
+        Object.keys(drafts).forEach((k) => { if (k.startsWith("rkg-")) delete drafts[k]; });
+      },
+    });
+  },
   retry: () => { showLog = false; act("/api/install/retry"); },
   log: async () => {
     showLog = !showLog;
