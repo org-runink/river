@@ -6,11 +6,34 @@
 # fails: a missing plymouth, or a boot without `splash`, is the normal case on any
 # non-graphical boot and must not hold up the services that depend on this.
 #
-# --retain-splash leaves the last frame on screen until SDDM draws, so the hand-off is
-# splash -> greeter with no text-console flash in between.
+# NO --retain-splash. It was here, to hand off splash -> greeter with no text-console flash in
+# between, and it left an installed machine BLACK with no way in.
+#
+# --retain-splash tells plymouthd to leave the last frame up and therefore NOT restore the VT it
+# owned. tty1 is left in graphics mode, un-handed-back. SDDM then starts Xorg on its own VT and
+# Xorg blocks forever in the VT_WAITACTIVE ioctl, because the kernel never completes the switch:
+# the active VT is still tty1, in graphics mode. The greeter never draws, the agetty on tty1 is
+# not drawn either, and the pending switch swallows Ctrl+Alt+Fn — black on the graphical console
+# AND on every text console, machine idle and apparently hung.
+#
+# The flag works on systemd because plymouth-quit.service is sequenced against the display
+# manager and logind performs the VT hand-over. NOTHING under s6 does that here.
+#
+# Proven A/B/A on one installed disk, same cmdline: with the flag the active VT is tty1 and Xorg
+# sits in vt_waitactive (screen mean=0); without it the VT is tty2 and the greeter draws;
+# restoring it goes black again.
+#
+# It hid this long because `console=ttyS0` masks it completely — plymouth then takes no VT — and
+# until the pool passphrase could be typed through the splash, every successful boot of an
+# installed machine was a serial one.
+#
+# The cost of dropping it is a brief text console between splash and greeter: the exact thing the
+# flag existed to avoid, and worth paying against a machine nobody can log into. If that flash is
+# ever unacceptable, make the splash and SDDM share a VT (SDDM [X11] MinimumVT) — that is the
+# sequenced hand-over s6 lacks, and it is UNVERIFIED.
 set -u
 
 command -v plymouth >/dev/null 2>&1 || exit 0
 plymouth --ping 2>/dev/null || exit 0
-plymouth quit --retain-splash 2>/dev/null || true
+plymouth quit 2>/dev/null || true
 exit 0
