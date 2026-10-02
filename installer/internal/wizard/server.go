@@ -334,12 +334,17 @@ func (wz *Wizard) Handler(g Guard) http.Handler {
 		writeJSON(w, 200, map[string]any{"drives": d})
 	})
 	post(mux, "/api/recovery/ack", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Written bool }
+		// Groups of the key typed back, keyed by the 1-based group number that
+		// Recovery.Confirm asked for. This replaced a {"written": true} tickbox, which
+		// any client could send without the key ever having been read.
+		var in struct {
+			Groups map[string]string `json:"groups"`
+		}
 		if readJSON(r, &in) != nil {
 			reply(w, APIError{"err.request"}, nil)
 			return
 		}
-		reply(w, wz.AckRecovery(in.Written), view)
+		reply(w, wz.AckRecovery(in.Groups), view)
 	})
 	post(mux, "/api/install/retry", func(w http.ResponseWriter, r *http.Request) { reply(w, wz.RetryInstall(), view) })
 	post(mux, "/api/reboot", func(w http.ResponseWriter, r *http.Request) { reply(w, wz.Reboot(), view) })
