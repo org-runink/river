@@ -28,6 +28,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +129,13 @@ type recoveryView struct {
 	Acknowledged bool   `json:"acknowledged"`
 	SavedTo      string `json:"saved_to,omitempty"`
 	Lost         bool   `json:"lost,omitempty"` // a backend restart dropped an unused key
+	// Confirm names the groups of the key that must be typed back before the install
+	// starts, as 1-based indices into the 8 groups the screen shows. A tickbox proved
+	// nothing: it is satisfied by a glance, and this key is shown exactly once, for a
+	// disk it is the only way to decrypt — a mistranscribed character is discovered at
+	// the next boot, when nothing can be done about it. Typing randomly chosen groups
+	// back proves the copy that leaves the room is readable.
+	Confirm []int `json:"confirm,omitempty"`
 }
 
 type installView struct {
@@ -753,7 +762,37 @@ func (w *Wizard) generateKeyLocked() {
 		panic("crypto/rand: " + err.Error())
 	}
 	w.key = hex.EncodeToString(b[:])
-	w.st.Recovery = recoveryView{Generated: true}
+	w.st.Recovery = recoveryView{Generated: true, Confirm: pickConfirmGroups()}
+}
+
+// keyGroups is how many groups groupKey renders a 64-hex key as; keyConfirmGroups is how many
+// of them the operator types back on the recovery screen. Three of eight is enough to catch a
+// transcription slip anywhere in the key without making the screen a typing exercise.
+const (
+	keyGroups        = 8
+	keyConfirmGroups = 3
+)
+
+// pickConfirmGroups chooses, at random, which groups must be typed back, so an operator who
+// installs twice cannot learn which boxes to fill from memory. Returned sorted and 1-based.
+func pickConfirmGroups() []int {
+	var b [keyGroups]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
+	g := make([]int, keyGroups)
+	for i := range g {
+		g[i] = i + 1
+	}
+	// Fisher-Yates. The modulo bias over at most 8 values is irrelevant: this picks which
+	// groups the operator transcribes, not a secret.
+	for i := keyGroups - 1; i > 0; i-- {
+		j := int(b[i]) % (i + 1)
+		g[i], g[j] = g[j], g[i]
+	}
+	g = g[:keyConfirmGroups]
+	sort.Ints(g)
+	return g
 }
 
 // RecoveryKey returns the key while it may still be shown: generated, and the install not
@@ -830,15 +869,33 @@ func groupKey(k string) string {
 	return strings.Join(parts, " ")
 }
 
-// AckRecovery records "I have written it down" and starts the install.
-func (w *Wizard) AckRecovery(written bool) error {
+// AckRecovery checks the groups of the recovery key typed back against the key itself and,
+// when every one matches, starts the install. `typed` is keyed by the 1-based group number, as
+// Recovery.Confirm names them; spaces and letter case are ignored, since the screen prints the
+// key in lower-case groups and an operator reading from paper may do neither.
+//
+// It returns err.recovery.groups on a mismatch and changes nothing: the key is still on screen,
+// so the operator corrects their copy and tries again. There is deliberately no attempt limit —
+// locking someone out of the one screen that shows the key would brick the disk they are
+// installing, which is a worse outcome than any amount of retyping.
+func (w *Wizard) AckRecovery(typed map[string]string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.st.Screen != "recovery" || w.key == "" {
 		return ErrState
 	}
-	if !written {
-		return APIError{"err.recovery.ack"}
+	groups := strings.Fields(groupKey(w.key))
+	if len(w.st.Recovery.Confirm) == 0 {
+		return ErrState
+	}
+	for _, n := range w.st.Recovery.Confirm {
+		if n < 1 || n > len(groups) {
+			return ErrState
+		}
+		got := strings.ToLower(strings.Join(strings.Fields(typed[strconv.Itoa(n)]), ""))
+		if got != groups[n-1] {
+			return APIError{"err.recovery.groups"}
+		}
 	}
 	w.st.Recovery.Acknowledged = true
 	w.st.Screen = "install"

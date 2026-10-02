@@ -260,7 +260,17 @@ func (d *driver) install(lab bool, password string) error {
 	}
 	d.screen("recovery")
 	fmt.Printf("RIVERGUI KEY %s\n", strings.ReplaceAll(k.str("key"), " ", ""))
-	if _, err := d.post("/api/recovery/ack", map[string]bool{"written": true}); err != nil {
+	// The recovery screen asks for three randomly chosen groups of the key to be typed back.
+	// Which three is in the state view, but this driver already holds the whole key, so it
+	// sends every group and lets the backend check the ones it asked for — no accessor for a
+	// JSON array of numbers needed, and nothing coupled to how many groups are chosen. That a
+	// WRONG group is refused is covered by the wizard's own tests; what this proves is that a
+	// correct transcription gets the install started.
+	groups := map[string]string{}
+	for i, g := range strings.Fields(k.str("key")) {
+		groups[strconv.Itoa(i+1)] = g
+	}
+	if _, err := d.post("/api/recovery/ack", map[string]any{"groups": groups}); err != nil {
 		return err
 	}
 	shot := false
