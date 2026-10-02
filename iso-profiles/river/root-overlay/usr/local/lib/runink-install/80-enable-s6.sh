@@ -30,6 +30,14 @@ NODE_SERVICES="NetworkManager sshd rc-local"
 [ -d "$TARGET/etc/s6/sv/river-perms" ] && NODE_SERVICES="river-perms $NODE_SERVICES"
 # runink-fw: the host firewall oneshot, before NetworkManager and sshd (invariant 7).
 [ -d "$TARGET/etc/s6/sv/runink-fw" ] && NODE_SERVICES="runink-fw $NODE_SERVICES"
+# chrony: the clock, on BOTH images (chrony-s6's `chrony` bundle = chrony-srv + chrony-log).
+#
+# WITHOUT THIS LINE the package is installed and the service never starts. That is not a
+# hypothetical: on the runner box chrony's predecessor sat at "down (not started yet)" while the
+# clock ran 30.7 s fast, and every GitHub App JWT was refused as "'exp' too far in the future".
+# Enabling it in profile.yaml covers the live medium only; the installed node's default bundle
+# is built HERE, and the check below is what proves it arrived.
+[ -d "$TARGET/etc/s6/sv/chrony-srv" ] && NODE_SERVICES="chrony $NODE_SERVICES"
 # The workstation's desktop services (profile.yaml live-session.services): the display manager,
 # Bluetooth and printing. Each is present only where its -s6 package is installed.
 for _svc in sddm bluetoothd cupsd; do
