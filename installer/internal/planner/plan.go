@@ -50,6 +50,28 @@ const (
 	HeadroomPercent  = 10
 	CtxStep          = 4096 // context grows in these steps between ctx_min and ctx_max
 	ZramMaxMiB       = 16384
+
+	// BuildMiB and BuildWorkDirMiB are what one image build on the node uses, measured: about
+	// 30 GiB of RAM for the build itself and a 28 GiB work dir. When the work dir is a tmpfs
+	// it is RAM too, so a build kept entirely in memory costs both.
+	BuildMiB        = 30720
+	BuildWorkDirMiB = 28672
+)
+
+// Build modes (plan.build.mode). A node that builds images shares its RAM with inference, and
+// inference wins: a build gets a standing reserve only out of what the placed model tiers leave
+// at their full context, otherwise it waits for a window.
+const (
+	// BuildReserved: the RAM is set aside, so a build may run at any time, beside inference.
+	BuildReserved = "reserved"
+	// BuildWindowed: no standing reserve. A build may run only while inference is idle or
+	// scaled down; whatever schedules builds is responsible for finding that window.
+	BuildWindowed = "windowed"
+	// BuildNone: the profile does not build images on the node (the workstation).
+	BuildNone = "none"
+
+	WorkDirTmpfs = "tmpfs"
+	WorkDirDisk  = "disk"
 )
 
 // Image profiles. The server is the default; a workstation is a desktop that runs no
@@ -103,6 +125,7 @@ type Plan struct {
 	ZFS         ZFSTunables  `json:"zfs"`
 	Swap        SwapPlan     `json:"swap"`
 	Network     NetworkCheck `json:"network"`
+	Build       BuildPlan    `json:"build"`
 }
 
 // Profile names the image profile and the node's size class.
@@ -149,6 +172,19 @@ type MemoryPlan struct {
 	HeadroomMiB  int64        `json:"headroom_mib"`
 	ModelsMiB    int64        `json:"models_mib"`
 	UnplannedMiB int64        `json:"unplanned_mib"` // left after reserves, headroom and models
+}
+
+// BuildPlan is the decision for image builds on the node: whether one may run beside
+// inference (mode "reserved") or only in a window when inference is idle or scaled down
+// ("windowed"), and where its work dir lives. A downstream platform that builds images on the
+// node reads it before starting a build.
+type BuildPlan struct {
+	Mode        string `json:"mode"`                   // reserved | windowed | none
+	ReservedMiB int64  `json:"reserved_mib"`           // standing RAM reserve (work dir included when tmpfs); 0 unless reserved
+	NeedMiB     int64  `json:"need_mib,omitempty"`     // RAM one build uses, without its work dir
+	WorkDir     string `json:"work_dir,omitempty"`     // tmpfs | disk
+	WorkDirMiB  int64  `json:"work_dir_mib,omitempty"` // size of the work dir
+	Note        string `json:"note,omitempty"`
 }
 
 // TierPlan is one model tier's decision.
@@ -368,6 +404,22 @@ func Build(p *hw.Probe, m *Manifest, opt Options) *Plan {
 			}
 		}
 	}
+	// ---- image builds ---------------------------------------------------------------------
+	// Decided AFTER the tiers on purpose: the models are placed and grown to their full
+	// context first, and a build may only reserve what is still spare. Inference wins.
+	spare := memMiB - pl.Memory.ReservedMiB - head - pl.Memory.ModelsMiB
+	pl.Build = buildPlan(ws, m != nil, spare)
+	if pl.Build.Mode != BuildNone {
+		pl.Memory.Budget = append(pl.Memory.Budget, BudgetLine{"build", pl.Build.ReservedMiB, pl.Build.Note})
+		pl.Memory.ReservedMiB += pl.Build.ReservedMiB
+		switch {
+		case pl.Build.Mode == BuildWindowed:
+			note("image builds are windowed: %s", pl.Build.Note)
+		case pl.Build.WorkDir == WorkDirDisk:
+			note("image builds have a standing %d MiB reserve beside inference, but their %d MiB work dir is planned on disk, not tmpfs: the RAM the models leave cannot hold both",
+				pl.Build.ReservedMiB, BuildWorkDirMiB)
+		}
+	}
 	pl.Memory.Budget = append(pl.Memory.Budget, BudgetLine{"headroom", head, fmt.Sprintf("max(1 GiB, %d%% of RAM), never allocated", HeadroomPercent)})
 	pl.Memory.UnplannedMiB = memMiB - pl.Memory.ReservedMiB - head - pl.Memory.ModelsMiB
 
@@ -431,6 +483,41 @@ func Build(p *hw.Probe, m *Manifest, opt Options) *Plan {
 		pl.Verdict = "ok"
 	}
 	return pl
+}
+
+// buildPlan decides the image-build reserve from the RAM left once every placed tier has its
+// full context (spare). The order of preference is: a reserve with a tmpfs work dir (the whole
+// build in RAM), a reserve with the work dir on disk (RAM is the scarcer resource, the pool is
+// not), and otherwise a window with the work dir on disk -- never a standing reserve carved out
+// of what the models would use.
+//
+// Without a models manifest the planner does not know the models' working set, so it cannot
+// tell what is spare; it does not guess, and the build is windowed.
+func buildPlan(ws, modelsPlanned bool, spare int64) BuildPlan {
+	if ws {
+		return BuildPlan{Mode: BuildNone, Note: "workstation profile: the node does not build images"}
+	}
+	b := BuildPlan{NeedMiB: BuildMiB, WorkDirMiB: BuildWorkDirMiB, WorkDir: WorkDirDisk}
+	switch {
+	case !modelsPlanned:
+		b.Mode = BuildWindowed
+		b.Note = fmt.Sprintf("no standing reserve: no model tiers were planned, so the inference working set is unknown and nothing can be called spare; "+
+			"a build (%d MiB + a %d MiB work dir on disk) runs only while inference is idle or scaled down -- inference wins", BuildMiB, BuildWorkDirMiB)
+	case spare >= BuildMiB+BuildWorkDirMiB:
+		b.Mode, b.WorkDir, b.ReservedMiB = BuildReserved, WorkDirTmpfs, BuildMiB+BuildWorkDirMiB
+		b.Note = fmt.Sprintf("image builds run beside inference: %d MiB + a %d MiB tmpfs work dir, out of %d MiB the model tiers leave at full context",
+			BuildMiB, BuildWorkDirMiB, spare)
+	case spare >= BuildMiB:
+		b.Mode, b.ReservedMiB = BuildReserved, BuildMiB
+		b.Note = fmt.Sprintf("image builds run beside inference: %d MiB, out of %d MiB the model tiers leave at full context; "+
+			"too little for a %d MiB tmpfs as well, so the work dir is on disk", BuildMiB, spare, BuildWorkDirMiB)
+	default:
+		b.Mode = BuildWindowed
+		b.Note = fmt.Sprintf("no standing reserve: the model tiers leave %d MiB, a build needs %d MiB; "+
+			"a build runs only while inference is idle or scaled down -- inference wins -- with its %d MiB work dir on disk",
+			max(spare, 0), BuildMiB, BuildWorkDirMiB)
+	}
+	return b
 }
 
 func sizeClass(mib int64) string {
