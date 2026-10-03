@@ -91,7 +91,30 @@ xkb() { # the XKB_* lines of kiosk.env, nothing else
 }
 
 pid=""
+# A VIEW THAT WILL NOT STAY UP MUST GIVE UP, NOT SPIN.
+#
+# This loop used to restart the web view forever. On the owner's hardware, 2026-10-03, the
+# MiniBrowser aborted the instant it started -- the DRM backend could not take the display --
+# and the kiosk restarted it about once a second, for as long as the machine was on. Two
+# consequences, and the second is the one that mattered:
+#
+#   1. river-live-fallback only moves on when river-kiosk EXITS. A kiosk that loops forever
+#      never fails, so the fallback never reached the text installer on its own.
+#   2. every restart logged to the console the TEXT INSTALLER was drawing on, so its ERASE
+#      prompt and its pool-name dialog were overwritten faster than they could be read. The
+#      installer was running and unusable.
+#
+# So: a view that dies before it has been up for MINRUN seconds counts as a failed start, and
+# MAXFAIL of those in a row is a kiosk that is not going to work on this machine. Say so once
+# and exit non-zero, which is exactly the signal the fallback is waiting for. A view that ran
+# longer than MINRUN resets the count, so an ordinary crash after real use still restarts.
+MINRUN=${RIVER_KIOSK_MINRUN:-10}
+MAXFAIL=${RIVER_KIOSK_MAXFAIL:-5}
+fails=0
+started_at=0
+
 start() {
+	started_at=$(date +%s)
 	# shellcheck disable=SC2046 # the XKB assignments are single words by the grep above
 	setpriv --reuid="$U" --regid="$U" --init-groups --inh-caps=-all \
 		env -i HOME="$H" XDG_RUNTIME_DIR="$H" LANG=C.UTF-8 PATH=/usr/bin \
@@ -123,8 +146,21 @@ while :; do
 	if [ -e "$RUN/kiosk.restart" ]; then rm -f "$RUN/kiosk.restart"; stop; fi
 	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
 		wait "$pid" 2>/dev/null
-		log "view exited; restarting"
+		ran=$(( $(date +%s) - started_at ))
 		pid=""
+		if [ "$ran" -lt "$MINRUN" ]; then
+			fails=$((fails + 1))
+			if [ "$fails" -ge "$MAXFAIL" ]; then
+				log "the web view died $fails times in under ${MINRUN}s each: it cannot run on"
+				log "  this machine. Giving up so the text installer can have the console."
+				log "  Its own output is in $H/view.log."
+				exit 1
+			fi
+			log "view exited after ${ran}s (failure $fails of $MAXFAIL); restarting"
+		else
+			fails=0
+			log "view exited after ${ran}s; restarting"
+		fi
 		sleep 1
 	fi
 	[ -n "$pid" ] || start
