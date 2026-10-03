@@ -55,13 +55,13 @@ type InstallTestOptions struct {
 	HostKind  string // server-node | dev-box | ci
 	Runner    string
 	Evidence  string // where to write the evidence document; empty writes none
-	RunID     string // CORE's run id, written through unchanged; empty generates one
+	RunID     string // the orchestrator's run id, written through unchanged; empty generates one
 	RiverRepo string // the river checkout, for pacman/mirrorlist.pin
 }
 
 // artixMirrors reads ARTIX_MIRRORS from the repository's pacman/mirrorlist.pin. Empty when the
-// checkout is not there: the run then uses the image's own mirrors and says so, rather than
-// failing on a file that is only an optimisation.
+// checkout is not there: the run then uses the image's own mirrors and is no worse off than
+// before, rather than failing on a file that is only a hardening.
 func artixMirrors(repo string) string {
 	b, err := os.ReadFile(filepath.Join(repo, "pacman", "mirrorlist.pin"))
 	if err != nil {
@@ -136,13 +136,13 @@ func readRepo(dir string) (pkgs []pkgFile, signed bool, err error) {
 const installScript = `set -eu
 # The base image ships an ORDERED mirrorlist whose first entry has repeatedly degraded, and
 # pacman does NOT fail over on a stalled or 404 transfer -- it aborts the whole transaction.
-# The first run of this harness failed exactly there: inetutils could not be retrieved, from a
-# mirror that was unreachable and a second that 404'"'"'d, and the harness correctly reported a
-# FAILURE THAT WAS ITS OWN ENVIRONMENT rather than a defect in [runink]. A test whose result
-# depends on someone else'"'"'s mirror weather tells you nothing about the repository, so the
-# mirrors are pinned to the repository'"'"'s own allowlist (pacman/mirrorlist.pin), the same two
-# that build-iso-box.sh and the kernel builder pin. RIVER_MIRRORS arrives as an environment
-# variable, so no value is spliced into shell text.
+# The first run of this harness failed exactly there: inetutils could not be retrieved, from one
+# mirror that was unreachable and a second that 404d, and it reported a FAILURE THAT WAS ITS OWN
+# ENVIRONMENT rather than a defect in [runink]. A test whose result depends on someone elses
+# mirror weather says nothing about the repository, so the mirrors are pinned to the
+# repositorys own allowlist (pacman/mirrorlist.pin) -- the same two that build-iso-box.sh and
+# the kernel builder pin. RIVER_MIRRORS arrives as an environment variable, so no value is
+# spliced into shell text.
 [ -n "${RIVER_MIRRORS:-}" ] && printf '%s\n' "$RIVER_MIRRORS" >/etc/pacman.d/mirrorlist
 cat >/etc/pacman.d/runink-test <<'EOF'
 [runink]
@@ -374,7 +374,7 @@ func installTestCmd(v *viper.Viper) *cobra.Command {
 				Runner:    v.GetString("runner"),
 				Evidence:  v.GetString("evidence"),
 				RunID:     v.GetString("run-id"),
-				RiverRepo: v.GetString("repo"),
+				RiverRepo: v.GetString("river-repo"),
 			}, v.GetString("commit"), cmd.OutOrStdout())
 		},
 	}
@@ -386,6 +386,6 @@ func installTestCmd(v *viper.Viper) *cobra.Command {
 	c.Flags().String("runner", "", "the runner's name, if any")
 	c.Flags().String("evidence", "", "write the release-evidence document here")
 	c.Flags().String("run-id", "", "the orchestrator's run id (a ULID), written through unchanged")
-	c.Flags().String("repo", ".", "the river checkout, for pacman/mirrorlist.pin")
+	c.Flags().String("river-repo", ".", "the river checkout, for pacman/mirrorlist.pin")
 	return c
 }
