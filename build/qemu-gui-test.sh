@@ -42,7 +42,8 @@
 #     home-owner     ~/.local and ~/.local/share belong to the user, not root
 #     firewall       the inet runink_fw table is loaded
 #     machine-id     /etc/machine-id is set (and is not the live medium's)
-#     greeting       the admin's login shell is fish and its greeting (fastfetch) names Runink River
+#     greeting       the admin's login shell is bash and its greeting (fastfetch) names Runink River
+#     greeting-quiet-noninteractive  the greeting prints NOTHING in a non-interactive shell
 #     no-base-name   /etc/lsb-release and os-release never name the base distribution
 #     hostname       the installed /etc/hostname is the plan's name, not the live medium's (runink-live)
 #     plasma-login   the installed machine boots to SDDM, the admin logs in (the password typed
@@ -347,12 +348,20 @@ else
 	i=0; until nft list table inet runink_fw >/dev/null 2>&1 || [ $i -ge 30 ]; do sleep 1; i=$((i+1)); done
 	nft list table inet runink_fw >/dev/null 2>&1 && ok firewall || ko firewall "no inet runink_fw table"
 	grep -qE '^[0-9a-f]{32}$' /etc/machine-id && ok machine-id || ko machine-id "/etc/machine-id: '$(cat /etc/machine-id 2>/dev/null)'"
-	# The terminal greeting: the admin logs into fish, and its greeting prints this machine as Runink
-	# River (fastfetch reads /etc/os-release); no file the user can read still names the base distribution.
+	# The terminal greeting: the admin logs into BASH, and the greeting
+	# (/etc/profile.d/runink-greeting.sh) prints this machine as Runink River -- fastfetch reads
+	# /etc/os-release, so no file the user can read still names the base distribution.
+	# `bash -i` because the greeting deliberately does nothing in a non-interactive shell: that
+	# guard is what stops it corrupting scp and `ssh host command` streams, so the test must
+	# exercise the interactive path or it would pass on a greeting that never prints at all.
 	sh_="$(getent passwd runink | cut -d: -f7)"
-	gr="$(runuser -u runink -- fish -c 'source /etc/fish/conf.d/runink-greeting.fish; fish_greeting' 2>&1 | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g')"
-	[ "$sh_" = /usr/bin/fish ] && printf '%s\n' "$gr" | grep -q 'OS: Runink River' && ok greeting \
+	gr="$(runuser -u runink -- bash -ic 'source /etc/profile.d/runink-greeting.sh' 2>&1 | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g')"
+	[ "$sh_" = /bin/bash ] && printf '%s\n' "$gr" | grep -q 'OS: Runink River' && ok greeting \
 		|| ko greeting "shell $sh_; greeting: $(printf '%s' "$gr" | grep -m1 'OS:')"
+	# ...and it must print NOTHING without a tty, or scp breaks.
+	ngr="$(runuser -u runink -- bash -c 'source /etc/profile.d/runink-greeting.sh' 2>&1 | tr -d '[:space:]')"
+	[ -z "$ngr" ] && ok greeting-quiet-noninteractive \
+		|| ko greeting-quiet-noninteractive "a non-interactive shell printed: $ngr"
 	# The installed machine is named for the plan, never for the live medium (river#136).
 	h_="$(cat /etc/hostname 2>/dev/null)"
 	[ -n "$h_" ] && [ "$h_" != runink-live ] && [ "$(hostname)" = "$h_" ] && ok hostname || ko hostname "/etc/hostname=$h_ hostname=$(hostname)"

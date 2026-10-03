@@ -93,14 +93,15 @@ else
 	[ -n "${RUNINK_ADMIN_AUTHORIZED_KEYS:-}" ] || echo "user: WARNING: no password and no SSH key: this node has no interactive login until one is provisioned" >&2
 fi
 
-# The admin's login shell is fish when the image carries it: its greeting is the machine
-# summary (etc/fish/conf.d/runink-greeting.fish). Only the account a person logs into; when
-# the admin is not `runink`, the service user keeps bash. Nothing runs commands through a
-# login shell (runuser and s6-setuidgid exec directly), so the change is only interactive.
-if [ -x "$TARGET/usr/bin/fish" ]; then
-	grep -qx /usr/bin/fish "$TARGET/etc/shells" 2>/dev/null || echo /usr/bin/fish >> "$TARGET/etc/shells"
-	chroot_run "usermod -s /usr/bin/fish $ADMIN"
-	echo "user: $ADMIN login shell is fish"
+# The admin's login shell is BASH (owner, 2026-10-02: "Can we make it less dancy with old
+# school bash/zsh?"). The greeting that used to come with fish is now
+# etc/profile.d/runink-greeting.sh, which every login shell sources -- so the summary does not
+# depend on which shell the account uses. Only the account a person logs into; root keeps the
+# system default so a recovery shell is never the unusual one.
+if [ -x "$TARGET/bin/bash" ]; then
+	grep -qx /bin/bash "$TARGET/etc/shells" 2>/dev/null || echo /bin/bash >> "$TARGET/etc/shells"
+	chroot_run "usermod -s /bin/bash $ADMIN"
+	echo "user: $ADMIN login shell is bash"
 fi
 
 for fs in sys proc dev; do umount -R "$TARGET/$fs" 2>/dev/null || true; done

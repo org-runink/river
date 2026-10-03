@@ -32,7 +32,11 @@ import (
 //
 //   - PKGBUILDs and pacman .install files (makepkg and pacman read bash);
 //   - s6 `run`/`finish`/`up`/`down` files that are at most two lines of code, one of them
-//     calling `river` (a new s6 service is `exec river service run <name>`).
+//     calling `river` (a new s6 service is `exec river service run <name>`);
+//   - a profile drop-in, `*/etc/profile.d/*.sh` in a profile overlay. It is SOURCED INTO the
+//     user's login shell, so it cannot be a Go binary, and bash only reads files matching
+//     `*.sh` there, so it cannot be renamed out of the way either. The shell is the interface,
+//     not an implementation choice -- the same reason PKGBUILDs are exempt.
 //
 // CI `run:` lines and the one sudo line are not files and are not scanned here.
 
@@ -112,7 +116,7 @@ type kind int
 
 const (
 	notShell  kind = iota
-	toolShell      // PKGBUILD or pacman .install: bash because makepkg/pacman demand it
+	toolShell      // PKGBUILD, pacman .install or a profile.d drop-in: the tool demands shell
 	thinS6         // an s6 control file that only calls river
 	fatS6          // an s6 control file with logic in it: still to port
 	script         // any other shell script
@@ -123,6 +127,10 @@ var s6Names = []string{"run", "finish", "up", "down"}
 func shellKind(p, rel string) (kind, error) {
 	base := path.Base(rel)
 	if base == "PKGBUILD" || strings.HasSuffix(base, ".install") {
+		return toolShell, nil
+	}
+	// A profile drop-in: sourced into the login shell, and bash reads only *.sh from there.
+	if strings.Contains(rel, "/etc/profile.d/") && strings.HasSuffix(base, ".sh") {
 		return toolShell, nil
 	}
 	b, err := os.ReadFile(p)

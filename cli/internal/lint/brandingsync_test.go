@@ -39,9 +39,6 @@ func brandFixture(t *testing.T) string {
 	w("branding/wallpapers/River/contents/images/1920x1080.jpg", "jpeg")
 	w("branding/wallpapers/River/contents/images_dark/1920x1080.jpg", "jpeg")
 	rows := strings.Repeat("row\n", 22)
-	for i := 1; i <= 6; i++ {
-		w(fmt.Sprintf("branding/fastfetch/anim/%d.ansi", i), rows)
-	}
 	w("branding/fastfetch/river-mark.ansi", rows)
 
 	qml := "import QtQuick\nimport QtQuick.Controls.Basic as C\n"
@@ -76,7 +73,7 @@ func brandFixture(t *testing.T) string {
 	} {
 		brandMirror(t, dir, src, dst)
 	}
-	w(O+"etc/fish/conf.d/runink-greeting.fish", "for f in /usr/share/runink/fastfetch/anim/*.ansi\nend\n")
+	w(O+"etc/profile.d/runink-greeting.sh", "case $- in *i*) ;; *) return 0 ;; esac\n[ \"${RUNINK_GREETING:-}\" = off ] && return 0\nfastfetch\n")
 	w(O+"etc/xdg/fastfetch/config.jsonc", "{\"logo\": {\"source\": \"/usr/share/runink/fastfetch/river-mark.ansi\"},\n\"modules\": [\"os\", \"kernel\"]}\n")
 	w(O+"etc/os-release", "NAME=\"Runink River\"\nLOGO=runink-river\n")
 	w(O+"usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/layouts/org.kde.plasma.desktop-layout.js", "icon = \"runink-river\";\n")
@@ -141,20 +138,22 @@ func TestBrandingSyncFailures(t *testing.T) {
 		{"drift: only in", "  Only in " + O + "usr/share/runink/branding/grub/river: extra.png", func(t *testing.T, d string) {
 			lbWrite(t, d, O+"usr/share/runink/branding/grub/river/extra.png", "x")
 		}},
-		{"frame rows", "branding/fastfetch/anim/2.ansi is not 22 rows", func(t *testing.T, d string) {
-			lbWrite(t, d, "branding/fastfetch/anim/2.ansi", "row\n")
-			brandMirror(t, d, "branding/fastfetch", O+"usr/share/runink/fastfetch")
+		{"greeting missing", "etc/profile.d/runink-greeting.sh is missing", func(t *testing.T, d string) {
+			if err := os.Remove(filepath.Join(d, O+"etc/profile.d/runink-greeting.sh")); err != nil {
+				t.Fatal(err)
+			}
 		}},
-		{"frame count", "the greeting has 7 frames, want 6", func(t *testing.T, d string) {
-			lbWrite(t, d, "branding/fastfetch/anim/7.ansi", strings.Repeat("r\n", 22))
-			brandMirror(t, d, "branding/fastfetch", O+"usr/share/runink/fastfetch")
+		{"greeting not interactive-guarded", "does not guard on an interactive shell", func(t *testing.T, d string) {
+			lbWrite(t, d, O+"etc/profile.d/runink-greeting.sh", "[ \"${RUNINK_GREETING:-}\" = off ] && return 0\nfastfetch\n")
 		}},
-		{"last frame", "the greeting's last frame is not the fastfetch logo", func(t *testing.T, d string) {
-			lbWrite(t, d, "branding/fastfetch/anim/6.ansi", strings.Repeat("x\n", 22))
-			brandMirror(t, d, "branding/fastfetch", O+"usr/share/runink/fastfetch")
+		{"greeting ignores RUNINK_GREETING", "does not honour RUNINK_GREETING=off", func(t *testing.T, d string) {
+			lbWrite(t, d, O+"etc/profile.d/runink-greeting.sh", "case $- in *i*) ;; *) return 0 ;; esac\nfastfetch\n")
 		}},
-		{"greeting", "runink-greeting.fish does not play", func(t *testing.T, d string) {
-			lbWrite(t, d, O+"etc/fish/conf.d/runink-greeting.fish", "echo hi\n")
+		{"greeting still animates", "still plays an animation", func(t *testing.T, d string) {
+			lbWrite(t, d, O+"etc/profile.d/runink-greeting.sh", "case $- in *i*) ;; *) return 0 ;; esac\n[ \"${RUNINK_GREETING:-}\" = off ] && return 0\nfor f in /usr/share/runink/fastfetch/anim/*.ansi; do :; done\n")
+		}},
+		{"animation frames returned", "branding/fastfetch/anim/ still exists", func(t *testing.T, d string) {
+			lbWrite(t, d, "branding/fastfetch/anim/1.ansi", strings.Repeat("r\n", 22))
 		}},
 		{"fastfetch logo", "fastfetch's logo '/nowhere.ansi' is not in the overlay", func(t *testing.T, d string) {
 			lbWrite(t, d, O+"etc/xdg/fastfetch/config.jsonc", "{\"source\": \"/nowhere.ansi\"}\n")

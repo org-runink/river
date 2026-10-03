@@ -104,9 +104,9 @@ rootfs:
     - openssh
     - rsync
     - vim
-    # The terminal greeting (etc/fish/conf.d/runink-greeting.fish): fish is the login shell of
-    # the people who use this machine, fastfetch prints its summary. Both read only this machine.
-    - fish
+    # The terminal greeting (etc/profile.d/runink-greeting.sh): a static fastfetch summary
+    # that any login shell sources. The login shell is bash, which `base` already provides,
+    # so no package is needed for it.
     - fastfetch
     - sudo
     - git

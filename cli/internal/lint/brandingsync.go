@@ -245,30 +245,28 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	same("branding/wallpapers/River", O+"/usr/share/wallpapers/River")
 	same("branding/fastfetch", O+"/usr/share/runink/fastfetch")
 
-	// The terminal greeting (etc/fish/conf.d/runink-greeting.fish): six frames of 22 rows, the
-	// last one the logo fastfetch prints (so it draws over the animation with no jump), and the
-	// greeting and fastfetch's config name files the overlay ships.
-	frames, _ := filepath.Glob(at("branding/fastfetch/anim/*.ansi"))
-	n := 0
-	for _, f := range frames {
-		rel := "branding/fastfetch/anim/" + filepath.Base(f)
-		if !isFile(rel) {
-			continue
+	// The terminal greeting (etc/profile.d/runink-greeting.sh). It is STATIC since 2026-10-02
+	// (owner: "Can we make it less dancy"), so the six-frame arrival animation and its 22-row
+	// checks are gone with it. What is checked now is that the greeting still exists, is sourced
+	// by any login shell rather than tied to one, and -- the part that matters -- that it cannot
+	// print into a non-interactive shell, because /etc/profile.d is sourced by the login shells
+	// scp and `ssh host command` start, and a banner there corrupts the transfer.
+	gr := at(O + "/etc/profile.d/runink-greeting.sh")
+	if !isFile(O + "/etc/profile.d/runink-greeting.sh") {
+		r.fail("etc/profile.d/runink-greeting.sh is missing: the image has no terminal greeting")
+	} else {
+		if !brandLineMatch(gr, regexp.MustCompile(`case \$- in \*i\*`)) {
+			r.fail("runink-greeting.sh does not guard on an interactive shell ($-): it would corrupt scp and ssh-command streams")
 		}
-		n++
-		b, _ := os.ReadFile(f)
-		if bytes.Count(b, []byte("\n")) != 22 {
-			r.fail("%s is not 22 rows", rel)
+		if !brandLineMatch(gr, regexp.MustCompile(`RUNINK_GREETING`)) {
+			r.fail("runink-greeting.sh does not honour RUNINK_GREETING=off")
+		}
+		if brandLineMatch(gr, regexp.MustCompile(`fastfetch/anim`)) {
+			r.fail("runink-greeting.sh still plays an animation; the greeting is static")
 		}
 	}
-	if n != 6 {
-		r.fail("the greeting has %d frames, want 6", n)
-	}
-	if !brandSameFile(at("branding/fastfetch/anim/6.ansi"), at("branding/fastfetch/river-mark.ansi")) {
-		r.fail("the greeting's last frame is not the fastfetch logo")
-	}
-	if !brandLineMatch(at(O+"/etc/fish/conf.d/runink-greeting.fish"), regexp.MustCompile(`/usr/share/runink/fastfetch/anim/\*\.ansi`)) {
-		r.fail("runink-greeting.fish does not play /usr/share/runink/fastfetch/anim/")
+	if leftover, _ := filepath.Glob(at("branding/fastfetch/anim/*.ansi")); len(leftover) > 0 {
+		r.fail("branding/fastfetch/anim/ still exists; the greeting animation was removed")
 	}
 	ffcfg, _ := os.ReadFile(at(O + "/etc/xdg/fastfetch/config.jsonc"))
 	if src := brandSedAll(ffcfg, brandSourceRe); src == "" || !isFile(O+src) {
