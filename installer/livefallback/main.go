@@ -124,8 +124,19 @@ func main() {
 			fmt.Printf("river-live-fallback: a graphical session is present (%s); nothing to do\n", p)
 			return
 		}
-		fmt.Printf("river-live-fallback: no graphical session; would fall back on %s (%s, then %s)\n",
-			*ttyPath, kioskBin, textBin)
+		k, t := resolve(kioskBin), resolve(textBin)
+		fmt.Printf("river-live-fallback: no graphical session; would fall back on %s\n", *ttyPath)
+		for _, b := range []struct{ name, path string }{{kioskBin, k}, {textBin, t}} {
+			if b.path == "" {
+				fmt.Printf("  %-16s NOT FOUND in %v or $PATH — this fallback CANNOT run\n", b.name, binDirs)
+			} else {
+				fmt.Printf("  %-16s %s\n", b.name, b.path)
+			}
+		}
+		if k == "" && t == "" {
+			fmt.Printf("river-live-fallback: neither tool is reachable; a machine with no desktop would reach NO installer\n")
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -168,6 +179,29 @@ const (
 	textBin  = "runink-install"
 )
 
+// binDirs are searched BEFORE $PATH. This program is started by /etc/s6/rc.local, by absolute
+// path, in the init context -- which has a minimal environment and, on this image, no
+// /usr/local/bin in $PATH. Both tools it hands over to live there. Resolving them through
+// exec.LookPath alone meant every fallback failed with "executable file not found", on a
+// machine that had both binaries sitting in /usr/local/bin, and the operator was left at a
+// bare login prompt with no installer at all.
+var binDirs = []string{"/usr/local/bin", "/usr/bin", "/bin"}
+
+// resolve returns a runnable absolute path for a tool, or "" when there is none. The explicit
+// directories come first precisely because $PATH cannot be trusted here.
+func resolve(name string) string {
+	for _, d := range binDirs {
+		p := filepath.Join(d, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return ""
+}
+
 // say writes a message to the console. A console that cannot be written to is reported and
 // then ignored: the installer still has to start, and stderr goes to the boot log either way.
 func say(tty *os.File, msg string) {
@@ -179,10 +213,11 @@ func say(tty *os.File, msg string) {
 // run starts a command with the console as its terminal and waits for it. A missing binary
 // is an error like any other, so the caller moves on to the next fallback.
 func run(name string, tty *os.File, args ...string) error {
-	if _, err := exec.LookPath(name); err != nil {
-		return err
+	bin := resolve(name)
+	if bin == "" {
+		return fmt.Errorf("%s not found in %v or $PATH", name, binDirs)
 	}
-	cmd := exec.Command(name, args...) // #nosec G204 -- fixed tool names from this file; arguments are passed as argv, never through a shell
+	cmd := exec.Command(bin, args...) // #nosec G204 -- fixed tool names from this file; arguments are passed as argv, never through a shell
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
 	return cmd.Run()
 }
