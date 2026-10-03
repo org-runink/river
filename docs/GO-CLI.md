@@ -126,7 +126,10 @@ parameter, so nothing is ever spliced into shell text (`cli/internal/testcmd`).
 one entry per check under a stable machine name. Each subcommand declares its names in a
 static list; a declared check that never reports, or a reported one that was not declared,
 fails the document, and a check that does not apply on a host is a skip with its reason. The
-terminal output is unchanged, with or without the flag.
+terminal output is unchanged, with or without the flag. Evidence is refused, before the test
+runs, from a checkout with uncommitted changes, from a binary built from a modified tree, and
+on an architecture other than x86_64 or aarch64: a document must name a clean 40-character
+commit for both the subject and the harness.
 
 ## Order
 

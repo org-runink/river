@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -44,8 +45,15 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	// The tests run in a checkout that is being edited; the real dirty-tree refusal is tested
+	// on its own (TestEvidenceRefusesADirtyCheckout).
+	gitCheckoutDirty = checkoutDirty
+	checkoutDirty = func(context.Context, string) (bool, error) { return false, nil }
 	os.Exit(m.Run())
 }
+
+// gitCheckoutDirty is the real checkoutDirty, which TestMain replaces.
+var gitCheckoutDirty func(context.Context, string) (bool, error)
 
 // sub is one Tier 1 subcommand as `river test` wires it.
 type sub struct {
@@ -137,7 +145,8 @@ func checkDoc(t *testing.T, s sub, d *evidence.Document, stderr string) {
 	if d.Schema != evidence.Schema || d.Harness != tier1Harness(s.name) || d.Signing.Signed {
 		t.Errorf("%s: schema %q harness %q signed %v", s.name, d.Schema, d.Harness, d.Signing.Signed)
 	}
-	if d.Subject.Commit == "" || d.HarnessVersion == "" || d.Environment.HostKind != "ci" {
+	if !isCommit(d.Subject.Commit) || !isCommit(d.HarnessVersion) || d.Environment.HostKind != "ci" ||
+		(d.Environment.Arch != "x86_64" && d.Environment.Arch != "aarch64") {
 		t.Errorf("%s: subject %+v harness_version %q environment %+v", s.name, d.Subject, d.HarnessVersion, d.Environment)
 	}
 	want := slices.Clone(s.declared)
@@ -327,16 +336,104 @@ func TestEvidenceRunsThatDidNotHappen(t *testing.T) {
 	}
 }
 
-// Without a commit (not a checkout) the document is refused, and the run exits non-zero.
+// Without a commit (not a checkout) nothing runs and nothing is written; the run exits non-zero.
 func TestEvidenceNeedsACommit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "e.json")
+	ran := false
 	err := withEvidence(context.Background(), evidenceOpts{path: path}, "river-tier1/probe", []string{"one"}, t.TempDir(),
-		func(ctx context.Context) error { newChecks(ctx, io.Discard, io.Discard).ok("one", ""); return nil })
-	if err == nil || !strings.Contains(err.Error(), "subject.commit") {
-		t.Fatalf("err = %v", err)
+		func(ctx context.Context) error { ran = true; return nil })
+	if err == nil || !strings.Contains(err.Error(), "subject.commit") || ran {
+		t.Fatalf("err = %v, ran = %v", err, ran)
 	}
 	if _, serr := os.Stat(path); serr == nil {
 		t.Fatal("a document without a commit was written")
+	}
+}
+
+// A checkout with uncommitted changes (untracked files included) is refused before the test
+// runs, with a clear error; once it is clean, the same run writes its document.
+func TestEvidenceRefusesADirtyCheckout(t *testing.T) {
+	need(t)
+	saved := checkoutDirty
+	t.Cleanup(func() { checkoutDirty = saved })
+	checkoutDirty = gitCheckoutDirty
+
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.org",
+			"-c", "commit.gpgsign=false"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "base")
+
+	write := func() (bool, error) {
+		path := filepath.Join(t.TempDir(), "e.json")
+		ran := false
+		err := withEvidence(context.Background(), evidenceOpts{path: path}, "river-tier1/probe", []string{"one"}, repo,
+			func(ctx context.Context) error {
+				ran = true
+				newChecks(ctx, io.Discard, io.Discard).ok("one", "")
+				return nil
+			})
+		if _, serr := os.Stat(path); (serr == nil) != (err == nil) {
+			t.Errorf("err %v but document written = %v", err, serr == nil)
+		}
+		return ran, err
+	}
+	if err := os.WriteFile(filepath.Join(repo, "untracked"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ran, err := write(); err == nil || ran || !strings.Contains(err.Error(), "uncommitted changes") {
+		t.Fatalf("dirty checkout: ran %v err %v", ran, err)
+	}
+	git("add", "untracked")
+	git("commit", "-q", "-m", "clean")
+	if ran, err := write(); err != nil || !ran {
+		t.Fatalf("clean checkout: ran %v err %v", ran, err)
+	}
+}
+
+// harness_version is exactly a 40-hex commit: the stamped revision, else the checkout's; a
+// binary built from a modified tree is refused, and no "-dirty" suffix is ever emitted.
+func TestEvidenceHarnessVersion(t *testing.T) {
+	const a, b = "5bbc73db1a3819b1d54694726246d8466e6b47a5", "c15745a0c15745a0c15745a0c15745a0c15745a0"
+	rev := func(r string, modified string) []debug.BuildSetting {
+		return []debug.BuildSetting{{Key: "vcs.revision", Value: r}, {Key: "vcs.modified", Value: modified}}
+	}
+	for _, tc := range []struct {
+		settings []debug.BuildSetting
+		subject  string
+		want     string
+		err      string
+	}{
+		{rev(a, "false"), b, a, ""},
+		{nil, b, b, ""},
+		{rev(a, "true"), b, "", "uncommitted changes"},
+		{nil, "", "", "not a 40-character commit"},
+		{rev("ABC", "false"), b, "", "not a 40-character commit"},
+	} {
+		got, err := harnessVersion(tc.settings, tc.subject)
+		if got != tc.want || (tc.err == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tc.err)) {
+			t.Errorf("harnessVersion(%v, %q) = %q, %v; want %q, %q", tc.settings, tc.subject, got, err, tc.want, tc.err)
+		}
+	}
+}
+
+// environment.arch is x86_64 or aarch64; any other architecture is refused, not guessed.
+func TestEvidenceArch(t *testing.T) {
+	for goarch, want := range map[string]string{"amd64": "x86_64", "arm64": "aarch64"} {
+		if env, err := environment("ci", goarch); err != nil || env.Arch != want {
+			t.Errorf("%s: %+v %v", goarch, env, err)
+		}
+	}
+	for _, goarch := range []string{"386", "riscv64", "ppc64le"} {
+		if _, err := environment("ci", goarch); err == nil || !strings.Contains(err.Error(), "x86_64 and aarch64") {
+			t.Errorf("%s: err %v", goarch, err)
+		}
 	}
 }
 
