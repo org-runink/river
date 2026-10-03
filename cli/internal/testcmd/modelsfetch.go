@@ -20,6 +20,14 @@ import (
 	"github.com/org-runink/river/pkg/pipe"
 )
 
+// modelsFetchChecks is every check ModelsFetch reports, by its stable evidence name (static:
+// see testevidence.go).
+var modelsFetchChecks = []string{
+	"subset-listed-fetched", "subset-others-untouched", "subset-token-not-in-output", "subset-unknown-dest-fails",
+	"full-mirror-fallback", "full-token-not-in-output",
+	"token-sent-upstream", "token-not-sent-to-mirror", "token-dir-removed", "token-file-unreadable-fails",
+}
+
 // ModelsFetch — build/models-fetch.sh against a local upstream and mirror (no network):
 //
 //	subset   MODELS_ONLY fetches exactly the listed dests, and a name that is not a dest of
@@ -39,7 +47,7 @@ func ModelsFetch(ctx context.Context, repo string, outw, errw io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(t)
-	c := &checks{out: outw, err: errw}
+	c := newChecks(ctx, outw, errw)
 
 	const rev = "0123456789012345678901234567890123456789"
 	const token = "hf_contract_test_not_a_secret"
@@ -99,15 +107,15 @@ func ModelsFetch(ctx context.Context, repo string, outw, errw io.Writer) error {
 	}
 
 	out, ok := run("MODELS_ONLY="+only, "HF_TOKEN_FILE="+tok)
-	c.expect("MODELS_ONLY: the listed file is fetched", ok && isFile(filepath.Join(models, "sub/b.bin")))
-	c.expect("MODELS_ONLY: the others are left alone", !exists(filepath.Join(models, "sub/a.bin")) && !exists(filepath.Join(models, "sub/c.bin")))
-	c.expect("the token is never in the output", !strings.Contains(out, token))
+	c.expect("subset-listed-fetched", "MODELS_ONLY: the listed file is fetched", ok && isFile(filepath.Join(models, "sub/b.bin")))
+	c.expect("subset-others-untouched", "MODELS_ONLY: the others are left alone", !exists(filepath.Join(models, "sub/a.bin")) && !exists(filepath.Join(models, "sub/c.bin")))
+	c.expect("subset-token-not-in-output", "the token is never in the output", !strings.Contains(out, token))
 	_, ok = run("MODELS_ONLY=" + typo)
-	c.expect("MODELS_ONLY: a name that is not a dest of the lock fails", !ok)
+	c.expect("subset-unknown-dest-fails", "MODELS_ONLY: a name that is not a dest of the lock fails", !ok)
 
 	out, ok = run("HF_TOKEN_FILE="+tok, "RIVER_MODELS_MIRROR="+srv.URL+"/mirror")
-	c.expect("the whole lock, c.bin from the mirror", ok && isFile(filepath.Join(models, "sub/c.bin")))
-	c.expect("the token is never in the output", !strings.Contains(out, token))
+	c.expect("full-mirror-fallback", "the whole lock, c.bin from the mirror", ok && isFile(filepath.Join(models, "sub/c.bin")))
+	c.expect("full-token-not-in-output", "the token is never in the output", !strings.Contains(out, token))
 	mu.Lock()
 	up, mirror := auth["upstream"], auth["mirror"]
 	mu.Unlock()
@@ -115,16 +123,16 @@ func ModelsFetch(ctx context.Context, repo string, outw, errw io.Writer) error {
 	for _, h := range up {
 		sent = sent && h == "Bearer "+token
 	}
-	c.expect("HF_TOKEN_FILE: every upstream request carries the token", sent)
+	c.expect("token-sent-upstream", "HF_TOKEN_FILE: every upstream request carries the token", sent)
 	clean := len(mirror) > 0
 	for _, h := range mirror {
 		clean = clean && h == ""
 	}
-	c.expect("HF_TOKEN_FILE: no mirror request carries it", clean)
+	c.expect("token-not-sent-to-mirror", "HF_TOKEN_FILE: no mirror request carries it", clean)
 	left, _ := os.ReadDir(rt)
-	c.expect("HF_TOKEN_FILE: the private header directory is removed", len(left) == 0)
+	c.expect("token-dir-removed", "HF_TOKEN_FILE: the private header directory is removed", len(left) == 0)
 	_, ok = run("HF_TOKEN_FILE=" + filepath.Join(t, "missing"))
-	c.expect("an unreadable HF_TOKEN_FILE fails", !ok)
+	c.expect("token-file-unreadable-fails", "an unreadable HF_TOKEN_FILE fails", !ok)
 
 	if c.failed > 0 {
 		return fmt.Errorf("models-fetch: %d of %d check(s) failed", c.failed, c.n)

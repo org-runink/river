@@ -1,0 +1,11 @@
+  ok    MODELS_ONLY: the listed file is fetched
+  ok    MODELS_ONLY: the others are left alone
+  ok    the token is never in the output
+  ok    MODELS_ONLY: a name that is not a dest of the lock fails
+  ok    the whole lock, c.bin from the mirror
+  ok    the token is never in the output
+  ok    HF_TOKEN_FILE: every upstream request carries the token
+  ok    HF_TOKEN_FILE: no mirror request carries it
+  ok    HF_TOKEN_FILE: the private header directory is removed
+  ok    an unreadable HF_TOKEN_FILE fails
+models-fetch: 10 check(s) passed

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/org-runink/river/cli/internal/evidence"
 	"github.com/org-runink/river/cli/internal/rootcmd"
 	"github.com/org-runink/river/pkg/pipe"
 	"github.com/spf13/cobra"
@@ -36,13 +37,15 @@ func init() {
 			Short: "Host-side contract tests (were tests/*.sh)",
 		}
 		c.PersistentFlags().String("repo", ".", "the river checkout to test")
+		c.PersistentFlags().String("evidence", "", "also write the run's release-evidence document (JSON) to this file")
+		c.PersistentFlags().String("evidence-host-kind", "", "environment.host_kind in the evidence: server-node, dev-box or ci (default: ci when $CI is set, else dev-box)")
 		c.AddCommand(
-			simpleCmd(v, "memtune", "the install plan's ZFS ARC and zram sizes, in a scratch root", Memtune),
-			simpleCmd(v, "firstboot-hooks", "the first-boot hook contract (river-firstboot-hooks), in a scratch root", FirstbootHooks),
-			simpleCmd(v, "external-profile", "a profile outside this repository: described, staged, linted", ExternalProfile),
-			simpleCmd(v, "installed-hooks", "the profile-hook contract of qemu-gui-test (build/qemu-hooks.sh), without a VM", InstalledHooks),
-			simpleCmd(v, "models-required", "the model payload step's required mode (72-models-payload), with fake zfs", ModelsRequired),
-			simpleCmd(v, "models-fetch", "build/models-fetch.sh: MODELS_ONLY and HF_TOKEN_FILE, against a local upstream", ModelsFetch),
+			simpleCmd(v, "memtune", "the install plan's ZFS ARC and zram sizes, in a scratch root", Memtune, memtuneChecks),
+			simpleCmd(v, "firstboot-hooks", "the first-boot hook contract (river-firstboot-hooks), in a scratch root", FirstbootHooks, firstbootChecksDeclared),
+			simpleCmd(v, "external-profile", "a profile outside this repository: described, staged, linted", ExternalProfile, externalProfileChecks),
+			simpleCmd(v, "installed-hooks", "the profile-hook contract of qemu-gui-test (build/qemu-hooks.sh), without a VM", InstalledHooks, installedHooksDeclared),
+			simpleCmd(v, "models-required", "the model payload step's required mode (72-models-payload), with fake zfs", ModelsRequired, modelsRequiredChecks),
+			simpleCmd(v, "models-fetch", "build/models-fetch.sh: MODELS_ONLY and HF_TOKEN_FILE, against a local upstream", ModelsFetch, modelsFetchChecks),
 			sddmThemeCmd(v),
 		)
 		return c
@@ -51,53 +54,103 @@ func init() {
 
 // A Test is one ported script: it runs against the checkout at repo, writing its progress to
 // outw and its failures to errw, and returns an error when the script would have exited
-// non-zero.
+// non-zero. When ctx carries an evidence run (--evidence), every check it reports is also
+// recorded there, under its stable machine name.
 type Test func(ctx context.Context, repo string, outw, errw io.Writer) error
 
-func simpleCmd(v *viper.Viper, name, short string, t Test) *cobra.Command {
+func simpleCmd(v *viper.Viper, name, short string, t Test, declared []string) *cobra.Command {
 	return &cobra.Command{
 		Use:   name,
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return t(cmd.Context(), v.GetString("repo"), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			repo := v.GetString("repo")
+			return withEvidence(cmd.Context(), evidenceOptsFrom(v), tier1Harness(name), declared, repo,
+				func(ctx context.Context) error {
+					return t(ctx, repo, cmd.OutOrStdout(), cmd.ErrOrStderr())
+				})
 		},
 	}
 }
 
 // checks counts results the way the scripts' ok/ko helpers did: "  ok    <what>" on stdout,
-// "  FAIL  <what>" on stderr.
+// "  FAIL  <what>" on stderr. That text is unchanged by evidence: scripts and CI parse it.
+//
+// Every result also carries a stable machine NAME, which is what the evidence document
+// records (the human text embeds values, so it cannot be a name). Each subcommand declares
+// its names up front in a static list; a name reported but not declared, or declared but
+// never reported, fails the evidence run.
 type checks struct {
 	out, err  io.Writer
 	n, failed int
+	run       *evidence.Run // nil unless the run writes evidence
+	redact    func(string) string
 }
 
-func (c *checks) ok(d string) {
+// newChecks is the one way a subcommand gets its checks: they record into the evidence run
+// ctx carries, if any.
+func newChecks(ctx context.Context, outw, errw io.Writer) *checks {
+	c := &checks{out: outw, err: errw}
+	if e := evidenceFrom(ctx); e != nil {
+		c.run, c.redact = e.run, e.redact
+	}
+	return c
+}
+
+func (c *checks) record(name, verdict, d string) {
+	if c.run == nil {
+		return
+	}
+	d = c.redact(d)
+	switch verdict {
+	case evidence.Pass:
+		c.run.Pass(name, d)
+	case evidence.Skip:
+		c.run.Skip(name, d)
+	default:
+		c.run.Fail(name, d)
+	}
+}
+
+func (c *checks) ok(name, d string) {
 	c.n++
 	fmt.Fprintf(c.out, "  ok    %s\n", d)
+	c.record(name, evidence.Pass, d)
 }
 
-func (c *checks) ko(d string) {
+func (c *checks) ko(name, d string) {
 	c.n++
 	c.failed++
 	fmt.Fprintf(c.err, "  FAIL  %s\n", d)
+	c.record(name, evidence.Fail, d)
 }
 
 // expect is ok(d) when cond holds, else ko(d).
-func (c *checks) expect(d string, cond bool) {
+func (c *checks) expect(name, d string, cond bool) {
 	if cond {
-		c.ok(d)
+		c.ok(name, d)
 	} else {
-		c.ko(d)
+		c.ko(name, d)
 	}
 }
 
 // eq compares a value with the one wanted and names both on a failure.
-func (c *checks) eq(d, got, want string) {
+func (c *checks) eq(name, d, got, want string) {
 	if got == want {
-		c.ok(d)
+		c.ok(name, d)
 	} else {
-		c.ko(fmt.Sprintf("%s: got '%s', want '%s'", d, got, want))
+		c.ko(name, fmt.Sprintf("%s: got '%s', want '%s'", d, got, want))
+	}
+}
+
+// skipped is a conditional check that does not apply on this host. The human output keeps
+// the single "ok" line the script printed; the evidence records every named check as a skip
+// with the reason, because a skip is never a pass.
+func (c *checks) skipped(d, reason string, names ...string) {
+	c.n++
+	fmt.Fprintf(c.out, "  ok    %s\n", d)
+	for _, n := range names {
+		c.record(n, evidence.Skip, reason)
 	}
 }
 

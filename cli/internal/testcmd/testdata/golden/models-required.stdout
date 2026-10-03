@@ -1,0 +1,15 @@
+  ok    default: RUNINK_SKIP_MODELS=1 defers the models
+  ok    default: an unattended install without a passphrase defers the models
+  ok    default: a blank passphrase file defers the models
+  ok    default: a RUNINK_MODELS_PAYLOAD without a MANIFEST defers the models
+  ok    default: a payload with a passphrase is unpacked
+  ok    default: a pool without room for the set fails before unpacking
+  ok    required: RUNINK_SKIP_MODELS=1 FAILS the step
+  ok    required: an unattended install without a passphrase FAILS the step
+  ok    required: a blank passphrase file FAILS the step
+  ok    required: a RUNINK_MODELS_PAYLOAD without a MANIFEST FAILS the step
+  ok    required: a payload with a passphrase is unpacked
+  ok    required: a pool without room for the set fails before unpacking
+  ok    default: no payload on the medium defers the models
+  ok    required: no payload on the medium FAILS the step
+models-required: 14 check(s) passed

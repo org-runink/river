@@ -1,0 +1,25 @@
+  ok    only executable *.sh are hooks
+  ok    every *.sh counts in the kit (FAT has no mode bits)
+  ok    the declared checks join the verdict
+  ok    a missing hook directory adds nothing
+  ok    the budget is the timeouts plus a margin
+  ok    a hook without a header is refused
+  ok    a check name outside [a-z0-9-] is refused
+  ok    RIVER_HOOK_* variables are exported, others are not
+  ok    a quote in a value survives the config
+  ok    a hook's lines pass through
+  ok    a hook reporting every declared check passes
+  ok    a SKIP is a report
+  ok    a non-executable hook in the kit still runs
+  ok    a broken hook fails: exit 3
+  ok    a broken hook fails: d-missing reported 0 times
+  ok    a broken hook fails: e-twice reported 2 times
+  ok    a broken hook fails: f-stray not declared
+  ok    a hook past its timeout is killed and fails
+  ok    a kit hook without a header fails in the VM too
+  ok    OK and SKIP pass the verdict
+  ok    a SKIP is listed as SKIP
+  ok    a FAIL line fails
+  ok    a silent check fails
+  ok    SKIP with a FAIL fails
+installed-hooks: 24 checks passed

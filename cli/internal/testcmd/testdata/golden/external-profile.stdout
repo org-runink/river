@@ -1,0 +1,47 @@
+== the in-tree profile, known by name
+  ok    river: workstation, RIVER, runink-river, Runink River
+  ok    river: its own edition descriptor carries its label
+  ok    river is the only in-tree profile
+== an external profile describes itself
+  ok    no river-profile.env: refused
+  ok    river-profile.env read (kind, label, name, title)
+  ok    KIND=desktop refused
+  ok    lower-case ISO_LABEL refused
+  ok    33-character ISO_LABEL refused
+  ok    ISO_NAME with a slash refused
+  ok    GRUB_TITLE with a quote refused
+  ok    GRUB_TITLE with a pipe refused
+  ok    unknown key refused
+== the staged copy: branding overlay and remove list
+  ok    staged
+  ok    the source profile is untouched
+  ok    overlay file replaced the profile's
+  ok    overlay added the live GRUB theme (grub/theme/)
+  ok    remove list applied
+  ok    remove list deletes only what it names
+  ok    the staged profile finds itself among its edition descriptors
+  ok    the unbranded source does not (its descriptor still says RIVER)
+  ok    restaging replaces the previous copy
+  ok    no branding left over from the previous staging
+  ok    a stale remove entry is refused
+  ok    a remove entry with .. is refused
+  ok    an absolute remove entry is refused
+  ok    a branding dir without overlay/ is refused
+== one medium, several editions (EDITION, river.edition=)
+  ok    EDITION with upper case refused
+  ok    EDITION starting with a digit refused
+  ok    EDITION read
+  ok    two descriptors with one label and no EDITION: refused
+  ok    EDITION=river while the menu does not pass river.edition: refused
+  ok    EDITION=river with river.edition=river on every entry
+  ok    EDITION=other (no descriptor with that id): refused
+  ok    one entry passes another edition: refused
+  ok    EDITION without grub/kernels.cfg: refused
+== the profile lints accept the staged copy
+  ok    staged
+  ok    lint-installer-sync on the staged copy
+  ok    lint-profile-manifest on the staged copy
+  ok    lint-installer-sync catches a drifted step in the staged copy
+  ok    lint-profile-manifest on an external server profile
+  ok    lint-profile-manifest refuses an external server profile without common.yaml
+external-profile: 41 checks, all passed

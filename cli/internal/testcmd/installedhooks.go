@@ -19,6 +19,19 @@ import (
 // as the kit does, and checks that a single quote in a value survived.
 const evalHookEnv = `eval "$1"; [ "$RIVER_HOOK_Q" = "it's" ]`
 
+// installedHooksDeclared is every check InstalledHooks reports, by its stable evidence name
+// (static: see testevidence.go).
+var installedHooksDeclared = []string{
+	"host-only-executable-hooks", "host-any-mode-in-kit", "host-declared-join-verdict",
+	"host-missing-dir-adds-nothing", "host-budget", "host-no-header-refused", "host-bad-name-refused",
+	"host-env-exported", "host-env-quote-survives",
+	"vm-lines-pass-through", "vm-complete-hook-passes", "vm-skip-is-a-report", "vm-nonexec-kit-hook-runs",
+	"vm-broken-exit-status", "vm-broken-unreported", "vm-broken-reported-twice", "vm-broken-undeclared",
+	"vm-timeout-killed", "vm-kit-no-header-fails",
+	"verdict-ok-and-skip-pass", "verdict-skip-listed", "verdict-fail-fails", "verdict-silent-fails",
+	"verdict-skip-then-fail-fails",
+}
+
 // InstalledHooks — the profile hook contract of build/qemu-gui-test.sh (build/qemu-hooks.sh),
 // exercised without a VM against fake hooks in a scratch directory. Was
 // tests/installed-hooks.sh.
@@ -45,7 +58,7 @@ func InstalledHooks(ctx context.Context, repo string, outw, errw io.Writer) erro
 		return err
 	}
 	defer os.RemoveAll(t)
-	c := &checks{out: outw, err: errw}
+	c := newChecks(ctx, outw, errw)
 	if err := installedHooksChecks(ctx, lib, t, c, errw); err != nil {
 		return fmt.Errorf("installed-hooks: %w", err)
 	}
@@ -109,29 +122,29 @@ echo "RIVERTEST OK never"`},
 	for _, l := range lines(list) {
 		bases.WriteString(filepath.Base(l) + " ")
 	}
-	c.expect("only executable *.sh are hooks", bases.String() == "10-good.sh 20-skip.sh ")
+	c.expect("host-only-executable-hooks", "only executable *.sh are hooks", bases.String() == "10-good.sh 20-skip.sh ")
 	all, _ := out([]string{"HOOKS_ANY_MODE=1"}, "hooks_list", d)
-	c.expect("every *.sh counts in the kit (FAT has no mode bits)", len(lines(all)) == 3)
+	c.expect("host-any-mode-in-kit", "every *.sh counts in the kit (FAT has no mode bits)", len(lines(all)) == 3)
 	want, _ := out(nil, "hooks_want", d)
-	c.expect("the declared checks join the verdict", want == "hook-10-good a-one b-two hook-20-skip c-later")
+	c.expect("host-declared-join-verdict", "the declared checks join the verdict", want == "hook-10-good a-one b-two hook-20-skip c-later")
 	none, _ := out(nil, "hooks_want", filepath.Join(t, "none"))
-	c.expect("a missing hook directory adds nothing", none == "")
+	c.expect("host-missing-dir-adds-nothing", "a missing hook directory adds nothing", none == "")
 	budget, _ := out(nil, "hooks_budget", d)
-	c.expect("the budget is the timeouts plus a margin", budget == fmt.Sprint(2*(1200+15)))
+	c.expect("host-budget", "the budget is the timeouts plus a margin", budget == fmt.Sprint(2*(1200+15)))
 	nohdr := filepath.Join(bad, "nohdr.sh")
 	if err := writeExec(nohdr, "#!/bin/sh\necho \"RIVERTEST OK x\"\n", 0o755); err != nil {
 		return err
 	}
-	c.expect("a hook without a header is refused", quiet("hooks_want", bad) != nil)
+	c.expect("host-no-header-refused", "a hook without a header is refused", quiet("hooks_want", bad) != nil)
 	if err := os.WriteFile(nohdr, []byte("#!/bin/sh\n# RIVERTEST-CHECKS: Bad_Name\n"), 0o755); err != nil {
 		return err
 	}
-	c.expect("a check name outside [a-z0-9-] is refused", quiet("hooks_want", bad) != nil)
+	c.expect("host-bad-name-refused", "a check name outside [a-z0-9-] is refused", quiet("hooks_want", bad) != nil)
 	envOut, _ := out([]string{"RIVER_HOOK_LATER=1", "RIVER_HOOK_Q=it's", "NOT_A_HOOK=1"}, "hooks_env")
 	laterLine := regexp.MustCompile(`^export RIVER_HOOK_LATER=.1.$`)
-	c.expect("RIVER_HOOK_* variables are exported, others are not",
+	c.expect("host-env-exported", "RIVER_HOOK_* variables are exported, others are not",
 		len(matching(envOut, laterLine)) > 0 && !strings.Contains(envOut, "NOT_A_HOOK"))
-	c.expect("a quote in a value survives the config",
+	c.expect("host-env-quote-survives", "a quote in a value survives the config",
 		pipe.Run(ctx, pipe.IO{}, pipe.Cmd("sh", "-c", evalHookEnv, "sh", envOut)) == nil)
 
 	// --- in the VM ---------------------------------------------------------------------------
@@ -161,15 +174,20 @@ echo "RIVERTEST OK g-slow"`); err != nil {
 	if err := os.WriteFile(resultsFile, []byte(joinLines(results)), 0o644); err != nil {
 		return err
 	}
-	c.expect("a hook's lines pass through", hasLine(run, "RIVERTEST OK a-one"))
-	c.expect("a hook reporting every declared check passes", hasLine(run, "RIVERTEST OK hook-10-good"))
-	c.expect("a SKIP is a report", hasLine(run, "RIVERTEST OK hook-20-skip"))
-	c.expect("a non-executable hook in the kit still runs", hasLine(run, "RIVERTEST OK hook-30-off"))
+	c.expect("vm-lines-pass-through", "a hook's lines pass through", hasLine(run, "RIVERTEST OK a-one"))
+	c.expect("vm-complete-hook-passes", "a hook reporting every declared check passes", hasLine(run, "RIVERTEST OK hook-10-good"))
+	c.expect("vm-skip-is-a-report", "a SKIP is a report", hasLine(run, "RIVERTEST OK hook-20-skip"))
+	c.expect("vm-nonexec-kit-hook-runs", "a non-executable hook in the kit still runs", hasLine(run, "RIVERTEST OK hook-30-off"))
 	broken := strings.Join(matching(run, regexp.MustCompile(`^RIVERTEST FAIL hook-40-broken`)), "\n")
-	for _, w := range []string{"exit 3", "d-missing reported 0 times", "e-twice reported 2 times", "f-stray not declared"} {
-		c.expect("a broken hook fails: "+w, strings.Contains(broken, w))
+	for _, w := range []struct{ name, why string }{
+		{"vm-broken-exit-status", "exit 3"},
+		{"vm-broken-unreported", "d-missing reported 0 times"},
+		{"vm-broken-reported-twice", "e-twice reported 2 times"},
+		{"vm-broken-undeclared", "f-stray not declared"},
+	} {
+		c.expect(w.name, "a broken hook fails: "+w.why, strings.Contains(broken, w.why))
 	}
-	c.expect("a hook past its timeout is killed and fails",
+	c.expect("vm-timeout-killed", "a hook past its timeout is killed and fails",
 		len(matching(run, regexp.MustCompile(`^RIVERTEST FAIL hook-50-slow \(timed out after 1s`))) > 0)
 	kitNoHdr := filepath.Join(d, "60-nohdr.sh")
 	if err := os.WriteFile(kitNoHdr, []byte("#!/bin/sh\necho hi\n"), 0o644); err != nil {
@@ -177,7 +195,7 @@ echo "RIVERTEST OK g-slow"`); err != nil {
 	}
 	// Only its output matters here, as in `run_hooks ... | grep -q`.
 	again, _ := capture(ctx, libCall(lib, "run_hooks", d, logDir), errw)
-	c.expect("a kit hook without a header fails in the VM too",
+	c.expect("vm-kit-no-header-fails", "a kit hook without a header fails in the VM too",
 		len(matching(again, regexp.MustCompile(`^RIVERTEST FAIL hook-60-nohdr`))) > 0)
 	if err := os.Remove(kitNoHdr); err != nil {
 		return err
@@ -185,19 +203,19 @@ echo "RIVERTEST OK g-slow"`); err != nil {
 
 	// --- the verdict -------------------------------------------------------------------------
 	v, verr := combined(ctx, libCall(lib, "verdict", resultsFile, "a-one", "hook-10-good", "c-later"))
-	c.expect("OK and SKIP pass the verdict", verr == nil)
-	c.expect("a SKIP is listed as SKIP", len(matching(v, regexp.MustCompile(`SKIP  c-later .*\(not enabled\)`))) > 0)
+	c.expect("verdict-ok-and-skip-pass", "OK and SKIP pass the verdict", verr == nil)
+	c.expect("verdict-skip-listed", "a SKIP is listed as SKIP", len(matching(v, regexp.MustCompile(`SKIP  c-later .*\(not enabled\)`))) > 0)
 	verdictFails := func(results string, check string) bool {
 		_, err := capture(ctx, libCall(lib, "verdict", results, check), errw)
 		return err != nil
 	}
-	c.expect("a FAIL line fails", verdictFails(resultsFile, "b-two"))
-	c.expect("a silent check fails", verdictFails(resultsFile, "d-missing"))
+	c.expect("verdict-fail-fails", "a FAIL line fails", verdictFails(resultsFile, "b-two"))
+	c.expect("verdict-silent-fails", "a silent check fails", verdictFails(resultsFile, "d-missing"))
 	sf := filepath.Join(t, "sf.txt")
 	if err := os.WriteFile(sf, []byte("RIVERTEST SKIP z\nRIVERTEST FAIL z (then broke)\n"), 0o644); err != nil {
 		return err
 	}
-	c.expect("SKIP with a FAIL fails", verdictFails(sf, "z"))
+	c.expect("verdict-skip-then-fail-fails", "SKIP with a FAIL fails", verdictFails(sf, "z"))
 	return nil
 }
 

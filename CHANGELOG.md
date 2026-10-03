@@ -33,14 +33,9 @@ None.
 
 ### Added
 
-- **The installer plan decides an image-build reserve.** A server node that builds images
-  shares its RAM with inference, and inference wins: after the model tiers are placed at full
-  context, a build (about 30 GiB plus a 28 GiB work dir) gets a standing reserve only out of
-  what they leave, with its work dir on tmpfs when both fit and on disk when only the build
-  does. Otherwise the plan records `build.mode = windowed`: no standing reserve, builds run
-  only while inference is idle or scaled down. The plan's `build` object and `build` budget
-  line say which and why; a workstation plans none
-  ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
+- `river test <name> --evidence FILE`: every host-side contract test can also write its run
+  as a machine-readable release-evidence document, one entry per check under a stable name,
+  with its declared checks enforced. The terminal output is unchanged.
 
 ## [runink-os-2026.10] - 2026-10-02
 
