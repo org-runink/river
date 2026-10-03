@@ -84,7 +84,20 @@ podman run --rm --userns=keep-id --user builder \
 		( cd runink-kernel && nice -n 19 makepkg -f --nodeps --noconfirm )
 		[ -s runink-kernel/runink_signing.pem ] || { echo "no runink_signing.pem exported" >&2; exit 1; }
 		echo "== install the headers + kernel for the OpenZFS build (container only) =="
-		sudo pacman -U --noconfirm runink-kernel/linux-runink-[0-9]*.pkg.tar.zst \
+		# --assume-installed initramfs: linux-runink depends on an initramfs GENERATOR, which a
+		# container that never boots has no use for. Without this, pacman resolves that dep from
+		# the baked database and downloads mkinitcpio -- the ONLY repo fetch in this step, and
+		# the one that broke the build on 2026-10-03: the db was 44 h old, both pinned mirrors
+		# had moved past mkinitcpio-42.1-1, and the transaction died 404 AFTER the kernel had
+		# already compiled for an hour. Satisfying the dep instead of fetching it takes the
+		# repos off the critical path here; kernel and OpenZFS SOURCES stay pinned by sha256 and
+		# signature, so reproducibility is unchanged. Nothing in this container runs an
+		# initramfs: linux-runink has no .install hook, and runink-zfs is only built, never
+		# installed (its initcpio hook is a FILE it ships, which mkinitcpio reads on a real
+		# installed system). NO APOSTROPHES in this block: it lives inside a single-quoted
+		# container script.
+		sudo pacman -U --noconfirm --assume-installed initramfs \
+			runink-kernel/linux-runink-[0-9]*.pkg.tar.zst \
 			runink-kernel/linux-runink-headers-*.pkg.tar.zst
 		echo "== runink-zfs + runink-zfs-utils against it =="
 		( cd runink-zfs && nice -n 19 makepkg -f --nodeps --noconfirm )
