@@ -52,7 +52,7 @@ func init() {
 				"base/river-sign, verify checks every signature, and publish uploads it. Nothing\n" +
 				"here signs or ever reads a private key.",
 		}
-		c.AddCommand(assembleCmd(v), verifyCmd(v), publishCmd(v))
+		c.AddCommand(assembleCmd(v), verifyCmd(v), publishCmd(v), installTestCmd(v))
 		return c
 	})
 }

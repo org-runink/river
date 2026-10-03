@@ -278,3 +278,11 @@ livefs:
     # package. The menu itself is iso-profiles/river/grub/, which
     # scripts/patch-artools.go copies over whatever this layer supplied.
     - runink-grub-live
+    # wpewebkit: the web view river-kiosk draws with, straight to KMS/DRM with no X and no
+    # Wayland compositor. river-live-fallback's chain is a graphical session, else the kiosk,
+    # else the text installer -- and on the workstation image the kiosk could NEVER run,
+    # because wpewebkit was in no package list at all. On a machine whose desktop does not
+    # start, the one graphical path we advertise failed with "wpewebkit is not installed" and
+    # the user landed in a text installer (owner, real hardware, 2026-10-03). Live-only: an
+    # installed workstation has Plasma and a browser and no use for the kiosk.
+    - wpewebkit

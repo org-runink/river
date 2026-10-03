@@ -128,10 +128,25 @@ type Run struct {
 	out      io.Writer // human progress, so a terminal reader still sees what an agent reads
 }
 
-// New starts a run. declared is every check this harness intends to report; a declared check
-// that never reports makes the run FAIL, which is the whole point -- it is how "the harness
-// never ran" and "the harness died halfway" stop looking like success.
+// New starts a run with a freshly generated run id.
 func New(harness, harnessVersion string, subj Subject, env Environment, declared []string, out io.Writer) *Run {
+	return NewWithRunID("", harness, harnessVersion, subj, env, declared, out)
+}
+
+// NewWithRunID starts a run carrying a run id the CALLER was given -- CORE dispatches a job with
+// a run id and refuses a document that comes back with a different one, so an orchestrated run
+// must write that id through unchanged.
+//
+// The id is VALIDATED, not trusted: an id arriving from outside is still input, and a malformed
+// one would be refused by the consumer at the end of a long run instead of at the start of it.
+// An invalid id is replaced by a generated one, and Lint then fails the document against the
+// consumer's id -- which is the loud failure, rather than a document that quietly claims an id
+// nobody asked for. An empty id generates one, which is the un-orchestrated case.
+//
+// declared is every check this harness intends to report; a declared check that never reports
+// makes the run FAIL, which is the whole point -- it is how "the harness never ran" and "the
+// harness died halfway" stop looking like success.
+func NewWithRunID(runID, harness, harnessVersion string, subj Subject, env Environment, declared []string, out io.Writer) *Run {
 	if env.Arch == "" {
 		env.Arch = goArch()
 	}
@@ -142,7 +157,7 @@ func New(harness, harnessVersion string, subj Subject, env Environment, declared
 			Schema:         Schema,
 			Harness:        harness,
 			HarnessVersion: harnessVersion,
-			RunID:          newRunID(),
+			RunID:          chooseRunID(runID),
 			StartedAt:      time.Now().UTC().Format(time.RFC3339),
 			DeclaredChecks: d,
 			Subject:        subj,
@@ -408,6 +423,14 @@ var (
 	hex40       = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	ulid26      = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
 )
+
+// chooseRunID takes a caller's id when it is a well-formed ULID and generates one otherwise.
+func chooseRunID(given string) string {
+	if ulid26.MatchString(given) {
+		return given
+	}
+	return newRunID()
+}
 
 // crockford is Crockford base32: no I, L, O or U, so a transcribed run id cannot be misread.
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
