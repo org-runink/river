@@ -97,6 +97,9 @@ func Text(pl *Plan) string {
 		w("  untouched %-10s %s\n", u.Name, u.Reason)
 	}
 	w("\nZFS       zfs_arc_max=%d MiB\n", pl.ZFS.ARCMaxBytes>>20)
+	if b := pl.Build; b.Mode != "" && b.Mode != BuildNone {
+		w("Build     %s, %d MiB reserved, work dir %s (%d MiB)\n", b.Mode, b.ReservedMiB, b.WorkDir, b.WorkDirMiB)
+	}
 	w("Swap      no disk swap; zram %d MiB (%s)\n", pl.Swap.ZramMiB, pl.Swap.Algorithm)
 	w("Network   %d physical NIC(s), %d with link, global IPv6=%v\n", pl.Network.PhysicalNICs, pl.Network.WithCarrier, pl.Network.IPv6Global)
 	w("Compute   %s", pl.Accelerator.Mode)
