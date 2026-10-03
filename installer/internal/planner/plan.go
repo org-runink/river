@@ -47,9 +47,9 @@ const (
 	// slower on these nodes.
 	ARCUnifiedMaxMiB = 2048
 	HeadroomMinMiB   = 1024
-	HeadroomPercent    = 10
-	CtxStep            = 4096 // context grows in these steps between ctx_min and ctx_max
-	ZramMaxMiB         = 16384
+	HeadroomPercent  = 10
+	CtxStep          = 4096 // context grows in these steps between ctx_min and ctx_max
+	ZramMaxMiB       = 16384
 )
 
 // Image profiles. The server is the default; a workstation is a desktop that runs no
