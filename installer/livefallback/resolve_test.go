@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,67 @@ func TestResolvePrefersBinDirsOverPATH(t *testing.T) {
 
 	if got := resolve("river-kiosk"); got != filepath.Join(want, "river-kiosk") {
 		t.Errorf("resolve = %q, want the binDirs copy %q", got, filepath.Join(want, "river-kiosk"))
+	}
+}
+
+// The init context's $PATH does not include /usr/local/bin, and runink-install looks ITS OWN
+// helpers up with `command -v`. river#20 fixed only our lookup of runink-install; the child
+// still could not see river-hwprobe or river-netsetup, and reported them as a missing package
+// on a medium where the package was present and complete. These assert the child is handed a
+// PATH that can find them.
+func TestWithBinDirsPutsOurDirsFirst(t *testing.T) {
+	got := withBinDirs([]string{"HOME=/root", "PATH=/usr/bin:/bin", "TERM=linux"})
+	var path string
+	var sawHome, sawTerm bool
+	for _, kv := range got {
+		switch {
+		case strings.HasPrefix(kv, "PATH="):
+			path = strings.TrimPrefix(kv, "PATH=")
+		case kv == "HOME=/root":
+			sawHome = true
+		case kv == "TERM=linux":
+			sawTerm = true
+		}
+	}
+	if !strings.HasPrefix(path, "/usr/local/bin:") {
+		t.Errorf("PATH = %q; /usr/local/bin must come first, where runink-installer puts its helpers", path)
+	}
+	if !strings.HasSuffix(path, "/usr/bin:/bin") {
+		t.Errorf("PATH = %q; the inherited entries must be kept, not replaced", path)
+	}
+	if !sawHome || !sawTerm {
+		t.Error("other environment variables were dropped; only PATH may change")
+	}
+}
+
+// An init context may pass no PATH at all, which is the worst case and quite likely in an s6
+// oneshot.
+func TestWithBinDirsWhenThereIsNoPath(t *testing.T) {
+	got := withBinDirs([]string{"HOME=/root"})
+	var path string
+	for _, kv := range got {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			path = v
+		}
+	}
+	if path == "" {
+		t.Fatal("no PATH was added; the child would find nothing")
+	}
+	for _, d := range binDirs {
+		if !strings.Contains(path, d) {
+			t.Errorf("PATH = %q is missing %s", path, d)
+		}
+	}
+}
+
+// An empty PATH= is not the same as an absent one, and must not leave an empty element --
+// POSIX reads that as the current directory, i.e. wherever the installer happened to chdir.
+func TestWithBinDirsEmptyPathHasNoEmptyElement(t *testing.T) {
+	for _, kv := range withBinDirs([]string{"PATH="}) {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			if strings.HasSuffix(v, ":") || strings.Contains(v, "::") || strings.HasPrefix(v, ":") {
+				t.Errorf("PATH = %q has an empty element, which means the current directory", v)
+			}
+		}
 	}
 }

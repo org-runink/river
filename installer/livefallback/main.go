@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -219,7 +220,47 @@ func run(name string, tty *os.File, args ...string) error {
 	}
 	cmd := exec.Command(bin, args...) // #nosec G204 -- fixed tool names from this file; arguments are passed as argv, never through a shell
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
+	cmd.Env = withBinDirs(os.Environ())
 	return cmd.Run()
+}
+
+// withBinDirs puts binDirs at the FRONT of the child's PATH.
+//
+// Resolving our own two tools by absolute path was only half the problem. runink-install is a
+// shell script that looks ITS OWN helpers up with `command -v` -- installer/lib/hwplan.sh for
+// river-hwprobe and river-plan, runink-install itself for river-netsetup -- and a child inherits
+// this process's environment, which, started from /etc/s6/rc.local, carries an init-context
+// $PATH without /usr/local/bin. runink-installer installs every one of those helpers there.
+//
+// On the owner's hardware, 2026-10-03, that produced a text installer reporting
+// "river-hwprobe not found (runink-installer package missing from the live image?)" and
+// "river-netsetup is not on this image" on a medium where the package was present and COMPLETE
+// -- all eleven binaries in /usr/local/bin, verified in the shipped package. The diagnostic
+// blamed packaging because `command -v` cannot tell "absent" from "not on $PATH", and that sent
+// the investigation after a missing package that was never missing.
+//
+// Fixed here rather than in each script on purpose: this process is the one that knows it was
+// started from an init context, and it is the boundary where that context leaks into everything
+// it runs.
+func withBinDirs(env []string) []string {
+	want := strings.Join(binDirs, ":")
+	out := make([]string, 0, len(env)+1)
+	found := false
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			found = true
+			if v == "" {
+				kv = "PATH=" + want
+			} else {
+				kv = "PATH=" + want + ":" + v
+			}
+		}
+		out = append(out, kv)
+	}
+	if !found {
+		out = append(out, "PATH="+want)
+	}
+	return out
 }
 
 // activate brings the console to the front, so the message is on the screen the person is

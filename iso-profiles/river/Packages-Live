@@ -12,3 +12,19 @@
 ## image never used (iso-profiles/river/grub/ is the menu — see scripts/patch-artools.go).
 ## The PKGBUILD header lists, path by path, what artools reads and why each one is there.
 runink-grub-live
+
+## wpewebkit — the web view river-kiosk draws with, straight to the display through KMS/DRM
+## with no X and no Wayland compositor.
+##
+## WHY IT IS HERE. river-live-fallback's chain is: a graphical session, else river-kiosk, else
+## the text installer. On the workstation image the kiosk could NEVER run, because wpewebkit was
+## in no package list at all -- so on a machine whose desktop does not start, the one GRAPHICAL
+## path we advertise failed with "no web view (/usr/lib/wpe-webkit-2.0/MiniBrowser): wpewebkit
+## is not installed" and the user was dropped to a text installer. That is what the owner hit on
+## real hardware on 2026-10-03.
+##
+## It is LIVE-ONLY on purpose. An installed workstation has Plasma and a browser, so it has no
+## use for the kiosk; 20-clone-rootfs removes this layer from the installed machine, which keeps
+## the installed system's footprint unchanged. The cost is paid only on the medium that needs a
+## graphical installer without a desktop.
+wpewebkit
