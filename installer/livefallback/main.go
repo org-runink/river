@@ -264,13 +264,55 @@ func withBinDirs(env []string) []string {
 }
 
 // activate brings the console to the front, so the message is on the screen the person is
-// looking at rather than behind a splash. Best effort: a medium without chvt still works,
-// the text just waits on that console.
+// looking at rather than behind a splash, and then QUIETENS it so the installer is the only
+// thing drawing on it. Best effort throughout: a medium without these tools still works.
 func activate(ttyPath string) {
-	if _, err := exec.LookPath("chvt"); err != nil {
-		return
+	if _, err := exec.LookPath("chvt"); err == nil {
+		_ = exec.Command("chvt", vtOf(ttyPath)).Run() // #nosec G204 -- a fixed tool name; the argument is the console number, passed as argv, never through a shell
 	}
-	_ = exec.Command("chvt", vtOf(ttyPath)).Run() // #nosec G204 -- a fixed tool name; the argument is the console number, passed as argv, never through a shell
+	quieten(ttyPath)
+}
+
+// quieten stops everything else writing over the installer.
+//
+// WHY. The installer here is a full-screen dialog program on a text console, and on a live
+// medium that console is also where the kernel prints and where boot-time services log. On the
+// owner's hardware, 2026-10-03, the result was an ERASE confirmation and a ZFS pool-name prompt
+// being overwritten faster than a person could read them -- the installer was running and
+// unusable, which looks far worse than it not starting. A crash-looping web view supplied most
+// of that noise and is fixed separately, but it was only the loudest writer, not the only one:
+// kernel messages, rc.local, the firewall and the installer backend all land here too.
+//
+// So the console is quietened rather than each writer silenced one at a time, which is the
+// difference between fixing this failure and fixing this CLASS of failure. Nothing is lost:
+// kernel messages stay in dmesg and the services keep logging to s6, so the evidence is still
+// there for anyone diagnosing afterwards. It is only the screen that stops being shared.
+func quieten(ttyPath string) {
+	// Kernel messages to the console: off. They remain readable with `dmesg`.
+	if _, err := exec.LookPath("dmesg"); err == nil {
+		_ = exec.Command("dmesg", "--console-off").Run()
+	}
+	// The kernel's own printk level, for anything that bypasses the above. 1 = emergencies
+	// only, so a genuine panic still reaches the person in front of the machine.
+	if f, err := os.OpenFile("/proc/sys/kernel/printk", os.O_WRONLY, 0); err == nil {
+		_, _ = f.WriteString("1 4 1 7\n")
+		_ = f.Close()
+	}
+	// setterm's console messages, on the console we are about to use.
+	if _, err := exec.LookPath("setterm"); err == nil {
+		c := exec.Command("setterm", "--msg", "off") // #nosec G204 -- fixed arguments
+		if tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0); err == nil {
+			c.Stdout = tty
+			_ = c.Run()
+			_ = tty.Close()
+		}
+	}
+	// Start from a clean screen, so whatever was already printed is not mistaken for part of
+	// the installer.
+	if tty, err := os.OpenFile(ttyPath, os.O_WRONLY, 0); err == nil {
+		_, _ = tty.WriteString("\033[H\033[2J\033[3J")
+		_ = tty.Close()
+	}
 }
 
 // vtOf turns /dev/tty1 into "1". Anything unexpected falls back to the first console.
