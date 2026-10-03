@@ -1,0 +1,24 @@
+# Runink River LIVE MEDIUM: ports open on the installer medium.
+#
+# Lines are "<tcp|udp> <port>"; '#' comments allowed. runink-fw reads this at `apply`, which
+# the s6 oneshot runs at boot before NetworkManager and sshd.
+#
+# LIVE OVERLAY ONLY. 20-clone-rootfs does not carry this file to an installed machine, which
+# keeps the installed node's default-deny posture exactly as it was: SSH closed until an
+# operator opens it on purpose.
+#
+# tcp 22 — SSH into the live medium. sshd is already enabled in the live session, but the
+# firewall is default-deny, so the service was running and unreachable. Owner, 2026-10-03:
+# "also the ssh service. That way you'll test yourself if this not works; besides it's needed
+# by the wizard anyways."
+#
+# READ THIS BEFORE USING IT ON AN UNTRUSTED NETWORK. The live user's password is `runink`,
+# declared in profile.yaml and published in this repository, and sshd takes passwords by
+# default. So an open 22 on the live medium is reachable by anyone on the same network who has
+# read our source. That is an acceptable trade for an installer medium on a lab LAN and NOT one
+# for a conference, a hotel, or a customer site. The LAN-install path the wizard uses is
+# deliberately narrower -- a restricted sshd on tcp 47655, link-local sources only
+# (usr/local/lib/river-pair/fw-pair) -- and remains the right mechanism for pairing.
+# The proper fix is a per-boot random password shown on the console instead of a published one;
+# until that exists, this line is the reason the medium should not be left on a hostile network.
+tcp 22
