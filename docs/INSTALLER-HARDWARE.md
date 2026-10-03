@@ -99,12 +99,39 @@ total (MemTotal)
                (unified memory: capped to 2 GiB; see ZFS ARC below)
   - headroom   max(1 GiB, 10% of total)          never allocated
   = available for model tiers
+  - build      what the tiers leave, if a build fits; else 0 (see Image-build reserve)
 ```
 
 A manifest may override the three fixed reserves (`reserve=os|k0s|platform mib=N`). Each
 model tier costs `resident_mib + kv_mib_per_1k × context / 1024`. The plan's
 `memory.budget` table lists every line. The planner guarantees that reserves + tiers +
 headroom ≤ total, and the tests check it.
+
+#### Image-build reserve
+
+A downstream platform may build and test images on a server node. One build uses about
+30 GiB of RAM (`BuildMiB`) plus a 28 GiB work dir (`BuildWorkDirMiB`), and a tmpfs work dir
+is RAM too. A build must not take memory from inference, so the planner decides the build
+reserve **after** the model tiers are placed and grown to their full context, out of what
+they leave (`spare`):
+
+| Condition | `build.mode` | `build.work_dir` | `build` budget line |
+|---|---|---|---|
+| workstation profile | `none` | -- | none: the node does not build images |
+| server, no models manifest | `windowed` | `disk` | 0 MiB: the inference working set is unknown, so nothing is called spare |
+| `spare` ≥ build + work dir | `reserved` | `tmpfs` | 30720 + 28672 MiB: builds run beside inference, entirely in RAM |
+| `spare` ≥ build | `reserved` | `disk` | 30720 MiB: builds run beside inference; the work dir goes on the pool |
+| otherwise | `windowed` | `disk` | 0 MiB: no standing reserve |
+
+Inference wins. `reserved` means a build may start at any time, beside inference.
+`windowed` means there is no standing reserve: a build may run only while inference is idle
+or scaled down, and whatever schedules builds finds that window. A disk-backed work dir is
+preferred whenever RAM is short, because the pool has room and RAM does not. The reserve is
+part of `memory.reserved_mib`, and the budget line and a plan note say which case applied
+and why. With the fixture manifest, `server-256g-avx512` reserves with a tmpfs, `gpu-128g`
+and `unified-128g` reserve with the work dir on disk, and `server-64g` is windowed
+(`TestBuildReserve`). The CPU is not split for builds: a build runs on the same cores as
+inference, at whatever priority its scheduler gives it.
 
 ### Model tiers
 
@@ -319,7 +346,8 @@ The load-bearing fields:
   `firmware.uefi`, `tpm.present`.
 - **Plan:** `verdict`, `refusals[]`, `tiers[].{tier, status, variant, context_tokens,
   kv_budget_mib, threads, env}`, `memory.budget[]`, `storage.{layout, disks[], data_vdevs[],
-  special_vdev, unused[]}`, `zfs.arc_max_bytes`, `swap.zram_mib`.
+  special_vdev, unused[]}`, `zfs.arc_max_bytes`, `swap.zram_mib`, `build.{mode,
+  reserved_mib, work_dir}`.
 
 Both schemas are the Go types in `installer/internal/hw/types.go` and
 `installer/internal/planner/plan.go`.
