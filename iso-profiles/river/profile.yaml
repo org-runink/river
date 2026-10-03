@@ -56,6 +56,15 @@ live-session:
     # river-perms: the shadow-grade modes oneshot (invariant 4).
     - river-perms
     - NetworkManager
+    # wpa_supplicant: NetworkManager's Wi-Fi backend. Without it NM manages wired devices and
+    # cannot associate with ANY wireless network -- `nmcli device wifi connect` fails even when
+    # the card is present and its driver is loaded. The package and its s6 service were both in
+    # the image while this list did not enable it, so the medium looked like it supported Wi-Fi
+    # and did not. On a laptop with no ethernet port (the owner's XPS 13 9300 has only the
+    # AX201) that means no network at all during an install, which also takes the LAN-install
+    # path and any remote help down with it. Owner, 2026-10-03: "no wifi found during the
+    # installation".
+    - wpa_supplicant
     - sshd
     # NO chrony here, deliberately. This list is the LIVE session's, and the live layer
     # (Packages-Live) installs only runink-grub-live — chrony and chrony-s6 are in
