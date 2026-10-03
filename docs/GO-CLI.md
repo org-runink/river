@@ -120,6 +120,14 @@ as a program until its own port. `river test` does it with one constant script,
 `sh -c '. "$1" && shift && "$@"' sh LIB FUNCTION ARGS...`, every value a positional
 parameter, so nothing is ever spliced into shell text (`cli/internal/testcmd`).
 
+`river test <name> --evidence FILE` also writes the run as a release-evidence document
+(`runink.release-evidence/1`, `cli/internal/evidence`): harness `river-tier1/<name>`
+(`river-dev/sddm-theme` for the developer check), the checkout's commit as the subject, and
+one entry per check under a stable machine name. Each subcommand declares its names in a
+static list; a declared check that never reports, or a reported one that was not declared,
+fails the document, and a check that does not apply on a host is a skip with its reason. The
+terminal output is unchanged, with or without the flag.
+
 ## Order
 
 Lowest risk first. Each phase ends with Tier 1 green and, from phase 3 on, a full

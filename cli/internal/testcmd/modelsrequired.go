@@ -15,6 +15,17 @@ import (
 	"github.com/org-runink/river/pkg/pipe"
 )
 
+// modelsRequiredChecks is every check ModelsRequired reports, by its stable evidence name
+// (static: see testevidence.go). The medium-* pair is skipped, with its reason, on a host that
+// has a model payload mounted.
+var modelsRequiredChecks = []string{
+	"default-skip-models", "default-no-passphrase", "default-blank-passphrase", "default-no-manifest",
+	"default-unpacked", "default-no-room-fails",
+	"required-skip-models", "required-no-passphrase", "required-blank-passphrase", "required-no-manifest",
+	"required-unpacked", "required-no-room-fails",
+	"medium-default-defers", "medium-required-fails",
+}
+
 // ModelsRequired — the model payload step's required mode, without ZFS or a medium
 // (installer/lib/72-models-payload.sh; docs/MODEL-PAYLOAD.md, "Installing from it").
 //
@@ -37,7 +48,7 @@ func ModelsRequired(ctx context.Context, repo string, outw, errw io.Writer) erro
 		return err
 	}
 	defer os.RemoveAll(t)
-	c := &checks{out: outw, err: errw}
+	c := newChecks(ctx, outw, errw)
 
 	bin := filepath.Join(t, "bin")
 	payload := filepath.Join(t, "medium", "river-models")
@@ -103,36 +114,38 @@ echo unpacked >> "$FAKE_LOG"
 			name = "required"
 		}
 		reqEnv := "RUNINK_MODELS_REQUIRED=" + req
-		want := func(d string, out string, ok bool) {
+		want := func(check, d string, out string, ok bool) {
 			if req == "1" {
-				c.expect(name+": "+d+" FAILS the step", !ok && strings.Contains(out, "REQUIRED") && !strings.Contains(out, "unpacked"))
+				c.expect(name+"-"+check, name+": "+d+" FAILS the step", !ok && strings.Contains(out, "REQUIRED") && !strings.Contains(out, "unpacked"))
 			} else {
-				c.expect(name+": "+d+" defers the models", ok && !strings.Contains(out, "unpacked"))
+				c.expect(name+"-"+check, name+": "+d+" defers the models", ok && !strings.Contains(out, "unpacked"))
 			}
 		}
 		out, ok := run(reqEnv, "RUNINK_SKIP_MODELS=1")
-		want("RUNINK_SKIP_MODELS=1", out, ok)
+		want("skip-models", "RUNINK_SKIP_MODELS=1", out, ok)
 		out, ok = run(reqEnv, withPayload)
-		want("an unattended install without a passphrase", out, ok)
+		want("no-passphrase", "an unattended install without a passphrase", out, ok)
 		out, ok = run(reqEnv, withPayload, "RUNINK_MODELS_PASSPHRASE_FILE="+blank)
-		want("a blank passphrase file", out, ok)
+		want("blank-passphrase", "a blank passphrase file", out, ok)
 		out, ok = run(reqEnv, noPayload)
-		want("a RUNINK_MODELS_PAYLOAD without a MANIFEST", out, ok)
+		want("no-manifest", "a RUNINK_MODELS_PAYLOAD without a MANIFEST", out, ok)
 		out, ok = run(reqEnv, withPayload, "RUNINK_MODELS_PASSPHRASE_FILE="+pass)
-		c.expect(name+": a payload with a passphrase is unpacked", ok && strings.Contains(out, "unpacked") && strings.Contains(out, "installed and verified"))
+		c.expect(name+"-unpacked", name+": a payload with a passphrase is unpacked", ok && strings.Contains(out, "unpacked") && strings.Contains(out, "installed and verified"))
 		out, ok = run(reqEnv, withPayload, "RUNINK_MODELS_PASSPHRASE_FILE="+pass, "FAKE_AVAIL=1000")
-		c.expect(name+": a pool without room for the set fails before unpacking", !ok && !strings.Contains(out, "unpacked") && strings.Contains(out, "free"))
+		c.expect(name+"-no-room-fails", name+": a pool without room for the set fails before unpacking", !ok && !strings.Contains(out, "unpacked") && strings.Contains(out, "free"))
 	}
 	// The medium search: with nothing mounted where a live medium would be, the default mode
 	// defers and the required mode fails. (/proc/mounts of the test host is searched too; a
 	// host with a river-models payload on an iso9660 mount would skew this, so it is checked.)
 	if hostHasPayload() {
-		c.ok("medium search: skipped (this host has a river-models payload mounted)")
+		c.skipped("medium search: skipped (this host has a river-models payload mounted)",
+			"this host has a river-models payload mounted, which the step would find",
+			"medium-default-defers", "medium-required-fails")
 	} else {
 		out, ok := run()
-		c.expect("default: no payload on the medium defers the models", ok && strings.Contains(out, "no model payload"))
+		c.expect("medium-default-defers", "default: no payload on the medium defers the models", ok && strings.Contains(out, "no model payload"))
 		out, ok = run("RUNINK_MODELS_REQUIRED=1")
-		c.expect("required: no payload on the medium FAILS the step", !ok && strings.Contains(out, "REQUIRED"))
+		c.expect("medium-required-fails", "required: no payload on the medium FAILS the step", !ok && strings.Contains(out, "REQUIRED"))
 	}
 	if c.failed > 0 {
 		return fmt.Errorf("models-required: %d of %d check(s) failed", c.failed, c.n)
@@ -142,8 +155,9 @@ echo unpacked >> "$FAKE_LOG"
 }
 
 // hostHasPayload reports whether a live-medium mount point or an iso9660 mount of this host
-// carries river-models/MANIFEST (the step would find it).
-func hostHasPayload() bool {
+// carries river-models/MANIFEST (the step would find it). A variable so a test can take the
+// skip branch.
+var hostHasPayload = func() bool {
 	dirs := []string{"/run/initramfs/live", "/run/archiso/bootmnt", "/run/artix/bootmnt", "/run/miso/bootmnt", "/bootmnt"}
 	if b, err := os.ReadFile("/proc/mounts"); err == nil {
 		for _, l := range lines(string(b)) {

@@ -31,6 +31,12 @@ their packages, the installer and (once it has code) the RIVER runtime.
 
 None.
 
+### Added
+
+- `river test <name> --evidence FILE`: every host-side contract test can also write its run
+  as a machine-readable release-evidence document, one entry per check under a stable name,
+  with its declared checks enforced. The terminal output is unchanged.
+
 ## [runink-os-2026.10] - 2026-10-02
 
 ### Security

@@ -16,6 +16,17 @@ import (
 	"github.com/org-runink/river/pkg/pipe"
 )
 
+// memtuneChecks is every check Memtune reports, by its stable evidence name (static: see
+// testevidence.go).
+var memtuneChecks = []string{
+	"arc-plan-wins", "arc-fallback-93g", "arc-malformed-plan-falls-back", "arc-floor-16g",
+	"arc-ceiling-512g", "arc-no-meminfo-fails", "arc-written-once", "arc-value-is-plan",
+	"arc-keeps-zfs-options", "arc-keeps-other-modules", "arc-keeps-comments", "arc-fresh-target-created",
+	"zram-conf-size", "zram-conf-mode", "zram-dir-mode", "zram-malformed-refused",
+	"zram-refused-leaves-file", "zram-script-reads-plan", "zram-env-overrides-plan",
+	"zram-image-default", "zram-builtin-default", "zram-quoted-value", "zram-malformed-conf-falls-back",
+}
+
 // Memtune — the install plan's memory sizes on the target, in a scratch root, no root needed
 // (docs/INSTALLER-HARDWARE.md, "Swap, ARC, GPU, TPM, network"). Was tests/memtune.sh.
 //
@@ -43,7 +54,7 @@ func Memtune(ctx context.Context, repo string, outw, errw io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(t)
-	c := &checks{out: outw, err: errw}
+	c := newChecks(ctx, outw, errw)
 
 	meminfo := filepath.Join(t, "meminfo")
 	writeMeminfo := func(gib int64) error {
@@ -69,26 +80,26 @@ func Memtune(ctx context.Context, repo string, outw, errw io.Writer) error {
 		return err
 	}
 	got, _ := arc("123456789", false)
-	c.eq("plan value wins over meminfo", got, "123456789")
+	c.eq("arc-plan-wins", "plan value wins over meminfo", got, "123456789")
 	got, _ = arc("", false)
-	c.eq("93 GiB, no plan: RAM/16 = 5952 MiB", got, "6241124352")
+	c.eq("arc-fallback-93g", "93 GiB, no plan: RAM/16 = 5952 MiB", got, "6241124352")
 	got, _ = arc("6G", true)
-	c.eq("malformed plan value falls back to RAM/16", got, "6241124352")
+	c.eq("arc-malformed-plan-falls-back", "malformed plan value falls back to RAM/16", got, "6241124352")
 	if err := writeMeminfo(16); err != nil {
 		return err
 	}
 	got, _ = arc("", false)
-	c.eq("16 GiB, no plan: the 1 GiB floor", got, "1073741824")
+	c.eq("arc-floor-16g", "16 GiB, no plan: the 1 GiB floor", got, "1073741824")
 	if err := writeMeminfo(512); err != nil {
 		return err
 	}
 	got, _ = arc("", false)
-	c.eq("512 GiB, no plan: the 16 GiB ceiling", got, "17179869184")
+	c.eq("arc-ceiling-512g", "512 GiB, no plan: the 16 GiB ceiling", got, "17179869184")
 	memPath = filepath.Join(t, "absent")
 	if _, err := arc("", true); err == nil {
-		c.ko("no plan and no meminfo must fail")
+		c.ko("arc-no-meminfo-fails", "no plan and no meminfo must fail")
 	} else {
-		c.ok("no plan and no meminfo fails (ZFS default left alone)")
+		c.ok("arc-no-meminfo-fails", "no plan and no meminfo fails (ZFS default left alone)")
 	}
 	memPath = meminfo
 
@@ -106,18 +117,18 @@ func Memtune(ctx context.Context, repo string, outw, errw io.Writer) error {
 		}
 	}
 	zc := readTrim(conf)
-	c.eq("one zfs_arc_max after two runs", countMatching(zc, regexp.MustCompile(`zfs_arc_max=`)), "1")
-	c.eq("zfs_arc_max is the plan's", arcValue(zc), "6241124352")
-	c.eq("other zfs options kept", countMatching(zc, regexp.MustCompile(`^options zfs zfs_txg_timeout=10$`)), "1")
-	c.eq("other modules' lines kept", countMatching(zc, regexp.MustCompile(`^options spl spl_hostid=1$`)), "1")
-	c.eq("comments kept", countMatching(zc, regexp.MustCompile(`^# local$`)), "1")
+	c.eq("arc-written-once", "one zfs_arc_max after two runs", countMatching(zc, regexp.MustCompile(`zfs_arc_max=`)), "1")
+	c.eq("arc-value-is-plan", "zfs_arc_max is the plan's", arcValue(zc), "6241124352")
+	c.eq("arc-keeps-zfs-options", "other zfs options kept", countMatching(zc, regexp.MustCompile(`^options zfs zfs_txg_timeout=10$`)), "1")
+	c.eq("arc-keeps-other-modules", "other modules' lines kept", countMatching(zc, regexp.MustCompile(`^options spl spl_hostid=1$`)), "1")
+	c.eq("arc-keeps-comments", "comments kept", countMatching(zc, regexp.MustCompile(`^# local$`)), "1")
 	if err := os.RemoveAll(r); err != nil {
 		return err
 	}
 	if err := call("memtune_write_arc", r, "1073741824"); err != nil {
 		return fmt.Errorf("memtune: memtune_write_arc: %w", err)
 	}
-	c.eq("fresh target: the file is created", strings.Join(matching(readTrim(conf), regexp.MustCompile(`^options`)), "\n"), "options zfs zfs_arc_max=1073741824")
+	c.eq("arc-fresh-target-created", "fresh target: the file is created", strings.Join(matching(readTrim(conf), regexp.MustCompile(`^options`)), "\n"), "options zfs zfs_arc_max=1073741824")
 
 	// --- zram --------------------------------------------------------------------------------
 	if err := call("memtune_write_zram", r, "16384M"); err != nil {
@@ -127,15 +138,15 @@ func Memtune(ctx context.Context, repo string, outw, errw io.Writer) error {
 	sizeLine := func() string {
 		return strings.Join(matching(readTrim(z), regexp.MustCompile(`^RUNINK_ZRAM_SIZE=`)), "\n")
 	}
-	c.eq("zram.conf holds the plan's size", sizeLine(), "RUNINK_ZRAM_SIZE=16384M")
-	c.eq("zram.conf is 0600", mode(z), "600")
-	c.eq("etc/runink is 0700", mode(filepath.Join(r, "etc/runink")), "700")
+	c.eq("zram-conf-size", "zram.conf holds the plan's size", sizeLine(), "RUNINK_ZRAM_SIZE=16384M")
+	c.eq("zram-conf-mode", "zram.conf is 0600", mode(z), "600")
+	c.eq("zram-dir-mode", "etc/runink is 0700", mode(filepath.Join(r, "etc/runink")), "700")
 	if err := pipe.Run(ctx, pipe.IO{Stdout: outw}, libCall(lib, "memtune_write_zram", r, "16G; reboot")); err == nil {
-		c.ko("a malformed zram size must be refused")
+		c.ko("zram-malformed-refused", "a malformed zram size must be refused")
 	} else {
-		c.ok("a malformed zram size is refused")
+		c.ok("zram-malformed-refused", "a malformed zram size is refused")
 	}
-	c.eq("a refused size leaves the file alone", sizeLine(), "RUNINK_ZRAM_SIZE=16384M")
+	c.eq("zram-refused-leaves-file", "a refused size leaves the file alone", sizeLine(), "RUNINK_ZRAM_SIZE=16384M")
 
 	// zsize is `env -u RUNINK_ZRAM_SIZE -u RUNINK_ZRAM_DEFAULT VARS... sh runink-zram.sh
 	// --print-size 2>/dev/null`: the zram script with only the given variables of its own.
@@ -146,20 +157,20 @@ func Memtune(ctx context.Context, repo string, outw, errw io.Writer) error {
 		return out
 	}
 	absent := filepath.Join(t, "absent")
-	c.eq("runink-zram reads the plan's size", zsize("RUNINK_ZRAM_CONF="+z), "16384M")
-	c.eq("the environment overrides the plan", zsize("RUNINK_ZRAM_CONF="+z, "RUNINK_ZRAM_SIZE=4G"), "4G")
-	c.eq("no zram.conf: the image default", zsize("RUNINK_ZRAM_CONF="+absent, "RUNINK_ZRAM_DEFAULT=8G"), "8G")
-	c.eq("no zram.conf, no default: 16G", zsize("RUNINK_ZRAM_CONF="+absent), "16G")
+	c.eq("zram-script-reads-plan", "runink-zram reads the plan's size", zsize("RUNINK_ZRAM_CONF="+z), "16384M")
+	c.eq("zram-env-overrides-plan", "the environment overrides the plan", zsize("RUNINK_ZRAM_CONF="+z, "RUNINK_ZRAM_SIZE=4G"), "4G")
+	c.eq("zram-image-default", "no zram.conf: the image default", zsize("RUNINK_ZRAM_CONF="+absent, "RUNINK_ZRAM_DEFAULT=8G"), "8G")
+	c.eq("zram-builtin-default", "no zram.conf, no default: 16G", zsize("RUNINK_ZRAM_CONF="+absent), "16G")
 	quoted := filepath.Join(t, "quoted.conf")
 	if err := os.WriteFile(quoted, []byte("RUNINK_ZRAM_SIZE=\"12G\"\n"), 0o644); err != nil {
 		return err
 	}
-	c.eq("a quoted value is read", zsize("RUNINK_ZRAM_CONF="+quoted), "12G")
+	c.eq("zram-quoted-value", "a quoted value is read", zsize("RUNINK_ZRAM_CONF="+quoted), "12G")
 	bad := filepath.Join(t, "bad.conf")
 	if err := os.WriteFile(bad, []byte("RUNINK_ZRAM_SIZE=$(reboot)\n"), 0o644); err != nil {
 		return err
 	}
-	c.eq("a malformed zram.conf falls back to the default", zsize("RUNINK_ZRAM_CONF="+bad, "RUNINK_ZRAM_DEFAULT=2G"), "2G")
+	c.eq("zram-malformed-conf-falls-back", "a malformed zram.conf falls back to the default", zsize("RUNINK_ZRAM_CONF="+bad, "RUNINK_ZRAM_DEFAULT=2G"), "2G")
 
 	if c.n == 0 {
 		fmt.Fprintln(errw, "memtune: no checks ran")

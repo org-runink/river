@@ -5,6 +5,8 @@ package testcmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/org-runink/river/cli/internal/evidence"
 	"github.com/org-runink/river/pkg/pipe"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -47,7 +50,11 @@ With ImageMagick (magick) installed it also checks that the mark moves between t
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return SDDMTheme(cmd.Context(), v.GetString("repo"), args[0], cmd.OutOrStdout(), cmd.ErrOrStderr())
+			repo := v.GetString("repo")
+			return withEvidence(cmd.Context(), evidenceOptsFrom(v), "river-dev/sddm-theme", sddmThemeChecks, repo,
+				func(ctx context.Context) error {
+					return SDDMTheme(ctx, repo, args[0], cmd.OutOrStdout(), cmd.ErrOrStderr())
+				})
 		},
 	}
 }
@@ -71,6 +78,17 @@ var sddmShots = []struct {
 	{"handoff", "1920", "1080", "handoff", "0.25", false},
 	{"splash-1920x1080", "1920", "1080", "splash", "0.25", true},
 }
+
+// sddmThemeChecks is every check SDDMTheme reports, by its stable evidence name: one render
+// per scenario of the static table above, and whether the mark moves (skipped, with the
+// reason, without ImageMagick).
+var sddmThemeChecks = func() []string {
+	var names []string
+	for _, s := range sddmShots {
+		names = append(names, "render-"+s.name)
+	}
+	return append(names, "mark-moves")
+}()
 
 // SDDMTheme renders every scenario into out and checks the harness's output. Was
 // tests/sddm-theme.sh.
@@ -101,14 +119,26 @@ func SDDMTheme(ctx context.Context, repo, out string, outw, errw io.Writer) erro
 		return errors.New("sddm-theme: theme or splash missing")
 	}
 
+	// The human output is this command's own; the evidence only records alongside it.
+	ev := newChecks(ctx, io.Discard, io.Discard)
 	bad := 0
 	for _, s := range sddmShots {
 		dir := theme
 		if s.splash {
 			dir = splash
 		}
-		if !sddmShot(ctx, qml, harness, out, dir, s.name, s.w, s.h, s.scenario, s.phase, outw) {
+		ok, detail := sddmShot(ctx, qml, harness, out, dir, s.name, s.w, s.h, s.scenario, s.phase, outw)
+		if !ok {
 			bad++
+			ev.record("render-"+s.name, evidence.Fail, detail)
+		} else {
+			ev.record("render-"+s.name, evidence.Pass, detail)
+		}
+		if e := evidenceFrom(ctx); e != nil {
+			if b, err := os.ReadFile(filepath.Join(out, s.name+".log")); err == nil {
+				sum := sha256.Sum256(b)
+				e.run.AddLog(s.name+".log", s.name+".log", hex.EncodeToString(sum[:]))
+			}
 		}
 	}
 
@@ -122,9 +152,13 @@ func SDDMTheme(ctx context.Context, repo, out string, outw, errw io.Writer) erro
 		case "0", "":
 			fmt.Fprintln(outw, "sddm-theme: the mark does not move between phases 0.25 and 0.75")
 			bad++
+			ev.record("mark-moves", evidence.Fail, "the mark does not move between phases 0.25 and 0.75")
 		default:
 			fmt.Fprintf(outw, "sddm-theme: phases 0.25 and 0.75 differ in %s pixels\n", n)
+			ev.record("mark-moves", evidence.Pass, fmt.Sprintf("phases 0.25 and 0.75 differ in %s pixels", n))
 		}
+	} else {
+		ev.record("mark-moves", evidence.Skip, "ImageMagick (magick) is not installed on this host")
 	}
 	if bad != 0 {
 		fmt.Fprintln(errw, "sddm-theme: FAILED")
@@ -136,8 +170,9 @@ func SDDMTheme(ctx context.Context, repo, out string, outw, errw io.Writer) erro
 
 // sddmShot renders one scenario to <out>/<name>.png with its log beside it, and reports
 // whether it came out clean: the harness exited 0 within a minute, printed nothing but its
-// own "qml: harness: " lines, and wrote a non-empty PNG.
-func sddmShot(ctx context.Context, qml, harness, out, dir, name, w, h, scenario, phase string, outw io.Writer) bool {
+// own "qml: harness: " lines, and wrote a non-empty PNG. The detail, for the evidence, says
+// why not without naming a path.
+func sddmShot(ctx context.Context, qml, harness, out, dir, name, w, h, scenario, phase string, outw io.Writer) (bool, string) {
 	logPath := filepath.Join(out, name+".log")
 	png := filepath.Join(out, name+".png")
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -150,7 +185,7 @@ func sddmShot(ctx context.Context, qml, harness, out, dir, name, w, h, scenario,
 	}
 	if err != nil {
 		fmt.Fprintf(outw, "sddm-theme: %s: harness failed\n%s", name, log)
-		return false
+		return false, "the harness failed (see the log)"
 	}
 	clean := true
 	for _, l := range lines(log) {
@@ -168,8 +203,11 @@ func sddmShot(ctx context.Context, qml, harness, out, dir, name, w, h, scenario,
 	}
 	if st, err := os.Stat(png); err != nil || st.Size() == 0 {
 		fmt.Fprintf(outw, "sddm-theme: %s: no PNG\n", name)
-		return false
+		return false, "no PNG written"
 	}
 	fmt.Fprintf(outw, "sddm-theme: %s\n", png)
-	return clean
+	if !clean {
+		return false, "QML warnings or errors (see the log)"
+	}
+	return true, name + ".png rendered, no QML warnings"
 }

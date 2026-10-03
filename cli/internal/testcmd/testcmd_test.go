@@ -34,10 +34,10 @@ func needSh(t *testing.T) {
 func TestChecksCountAndReport(t *testing.T) {
 	var out, errb bytes.Buffer
 	c := &checks{out: &out, err: &errb}
-	c.ok("first")
-	c.expect("second", false)
-	c.eq("third", "a", "b")
-	c.eq("fourth", "x", "x")
+	c.ok("first", "first")
+	c.expect("second", "second", false)
+	c.eq("third", "third", "a", "b")
+	c.eq("fourth", "fourth", "x", "x")
 	if c.n != 4 || c.failed != 2 {
 		t.Fatalf("n=%d failed=%d, want 4 and 2", c.n, c.failed)
 	}

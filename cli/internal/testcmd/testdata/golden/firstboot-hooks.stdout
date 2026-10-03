@@ -1,0 +1,27 @@
+firstboot-hooks: contract checks
+  ok    done: exit 0 without setup.json marks the hook done
+  ok    done: status file says done
+  ok    done: a done hook never runs again
+  ok    registered: done only after the page wrote done
+  ok    registered: the page directory (and its token) is deleted
+  ok    registered: the pages parent is 0711
+  ok    registered: not done when the graphical first boot ends first
+  ok    registered: reported as deferred for the next boot
+  ok    deferred (display): exit 75 is not done
+  ok    deferred (display): it runs again
+  ok    deferred (display): status says deferred
+  ok    deferred (display): not logged as a failure
+  ok    deferred (headless): exit 75 is not done
+  ok    deferred (headless): it runs again
+  ok    deferred (headless): status says deferred
+  ok    deferred (headless): not logged as a failure
+  ok    failed: not done
+  ok    failed: status says failed with the exit code
+  ok    failed: logged
+  ok    failed: runs again (Retry / next boot)
+  ok    headless: no RIVER_PAGE_DIR without a display
+  ok    no graphical first boot pending: no RIVER_PAGE_DIR
+  ok    answers: kept while a hook is deferred
+  ok    answers: shredded once every hook is done
+  ok    role: RIVER_ROLE is the installer's choice
+firstboot-hooks: OK (25 checks)

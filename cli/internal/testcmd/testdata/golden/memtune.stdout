@@ -1,0 +1,24 @@
+  ok    plan value wins over meminfo
+  ok    93 GiB, no plan: RAM/16 = 5952 MiB
+  ok    malformed plan value falls back to RAM/16
+  ok    16 GiB, no plan: the 1 GiB floor
+  ok    512 GiB, no plan: the 16 GiB ceiling
+  ok    no plan and no meminfo fails (ZFS default left alone)
+  ok    one zfs_arc_max after two runs
+  ok    zfs_arc_max is the plan's
+  ok    other zfs options kept
+  ok    other modules' lines kept
+  ok    comments kept
+  ok    fresh target: the file is created
+  ok    zram.conf holds the plan's size
+  ok    zram.conf is 0600
+  ok    etc/runink is 0700
+  ok    a malformed zram size is refused
+  ok    a refused size leaves the file alone
+  ok    runink-zram reads the plan's size
+  ok    the environment overrides the plan
+  ok    no zram.conf: the image default
+  ok    no zram.conf, no default: 16G
+  ok    a quoted value is read
+  ok    a malformed zram.conf falls back to the default
+memtune: 23 checks ok

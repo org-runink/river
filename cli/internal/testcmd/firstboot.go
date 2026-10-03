@@ -15,6 +15,20 @@ import (
 	"github.com/org-runink/river/pkg/pipe"
 )
 
+// firstbootChecksDeclared is every check FirstbootHooks reports, by its stable evidence name
+// (static: see testevidence.go). The deferred ones run once with a display and once headless.
+var firstbootChecksDeclared = []string{
+	"done-marks-done", "done-status", "done-runs-once",
+	"registered-done-after-page", "registered-page-dir-removed", "registered-pages-parent-mode",
+	"registered-ui-ended-not-done", "registered-ui-ended-deferred",
+	"deferred-display-not-done", "deferred-display-runs-again", "deferred-display-status", "deferred-display-not-a-failure",
+	"deferred-headless-not-done", "deferred-headless-runs-again", "deferred-headless-status", "deferred-headless-not-a-failure",
+	"failed-not-done", "failed-status", "failed-logged", "failed-runs-again",
+	"headless-no-page-dir", "no-ui-pending-no-page-dir",
+	"answers-kept-while-deferred", "answers-shredded-when-done",
+	"role-passed-through",
+}
+
 // FirstbootHooks — the first-boot hook contract, run against river-firstboot-hooks in a
 // scratch root (RIVER_FIRSTBOOT_ROOT), no root needed (docs/PAYLOADS.md). Was
 // tests/firstboot-hooks.sh.
@@ -41,7 +55,7 @@ func FirstbootHooks(ctx context.Context, repo string, outw, errw io.Writer) erro
 	}
 	defer os.RemoveAll(t)
 	f := &fbFixture{ctx: ctx, runner: runner, t: t, r: filepath.Join(t, "root")}
-	c := &checks{out: outw, err: errw}
+	c := newChecks(ctx, outw, errw)
 
 	fmt.Fprintln(outw, "firstboot-hooks: contract checks")
 	if err := firstbootChecks(f, c); err != nil {
@@ -148,12 +162,12 @@ func firstbootChecks(f *fbFixture, c *checks) error {
 		hook("10-done", fmt.Sprintf(`echo run >> "%s/count-10"; exit 0`, root)), f.run); err != nil {
 		return err
 	}
-	c.expect("done: exit 0 without setup.json marks the hook done", f.done("10-done"))
-	c.expect("done: status file says done", f.statusIs("10-done", "done 0"))
+	c.expect("done-marks-done", "done: exit 0 without setup.json marks the hook done", f.done("10-done"))
+	c.expect("done-status", "done: status file says done", f.statusIs("10-done", "done 0"))
 	if err := f.run(); err != nil {
 		return err
 	}
-	c.expect("done: a done hook never runs again", f.count("10") == "1")
+	c.expect("done-runs-once", "done: a done hook never runs again", f.count("10") == "1")
 
 	// --- registered: exit 0 with setup.json, done when the page writes `done` ----------------
 	// The hook registers a page, and its "page" (a background job) finishes a moment later.
@@ -165,17 +179,17 @@ printf '{"version":1,"title":"T","url":"http://[::1]:9/?token=x","order":1}\n' >
 exit 0`), f.run); err != nil {
 		return err
 	}
-	c.expect("registered: done only after the page wrote done", f.done("20-page"))
-	c.expect("registered: the page directory (and its token) is deleted", !exists(f.p("run/runink/firstboot-pages/20-page")))
-	c.expect("registered: the pages parent is 0711", mode(f.p("run/runink/firstboot-pages")) == "711")
+	c.expect("registered-done-after-page", "registered: done only after the page wrote done", f.done("20-page"))
+	c.expect("registered-page-dir-removed", "registered: the page directory (and its token) is deleted", !exists(f.p("run/runink/firstboot-pages/20-page")))
+	c.expect("registered-pages-parent-mode", "registered: the pages parent is 0711", mode(f.p("run/runink/firstboot-pages")) == "711")
 	// A registered page whose first boot ends (UI no longer pending) before it finishes: not done.
 	if err := steps(func() error { return f.setup(true) },
 		hook("21-page", fmt.Sprintf(`printf '{}' > "$RIVER_PAGE_DIR/setup.json"; ( sleep 1; rm -f "%s/var/lib/runink/firstboot-ui" ) & exit 0`, root)),
 		f.run); err != nil {
 		return err
 	}
-	c.expect("registered: not done when the graphical first boot ends first", !f.done("21-page"))
-	c.expect("registered: reported as deferred for the next boot", f.statusIs("21-page", "deferred 0"))
+	c.expect("registered-ui-ended-not-done", "registered: not done when the graphical first boot ends first", !f.done("21-page"))
+	c.expect("registered-ui-ended-deferred", "registered: reported as deferred for the next boot", f.statusIs("21-page", "deferred 0"))
 
 	// --- deferred: exit 75, on a display boot and on a headless one --------------------------
 	for _, m := range []string{"display", "headless"} {
@@ -183,10 +197,10 @@ exit 0`), f.run); err != nil {
 			hook("30-defer", fmt.Sprintf(`echo run >> "%s/count-30"; exit 75`, root)), f.run, f.run); err != nil {
 			return err
 		}
-		c.expect("deferred ("+m+"): exit 75 is not done", !f.done("30-defer"))
-		c.expect("deferred ("+m+"): it runs again", f.count("30") == "2")
-		c.expect("deferred ("+m+"): status says deferred", f.statusIs("30-defer", "deferred 75"))
-		c.expect("deferred ("+m+"): not logged as a failure", !strings.Contains(f.out, "FAILED"))
+		c.expect("deferred-"+m+"-not-done", "deferred ("+m+"): exit 75 is not done", !f.done("30-defer"))
+		c.expect("deferred-"+m+"-runs-again", "deferred ("+m+"): it runs again", f.count("30") == "2")
+		c.expect("deferred-"+m+"-status", "deferred ("+m+"): status says deferred", f.statusIs("30-defer", "deferred 75"))
+		c.expect("deferred-"+m+"-not-a-failure", "deferred ("+m+"): not logged as a failure", !strings.Contains(f.out, "FAILED"))
 	}
 
 	// --- failed: any other status ------------------------------------------------------------
@@ -194,26 +208,26 @@ exit 0`), f.run); err != nil {
 		hook("40-fail", fmt.Sprintf(`echo run >> "%s/count-40"; exit 3`, root)), f.run); err != nil {
 		return err
 	}
-	c.expect("failed: not done", !f.done("40-fail"))
-	c.expect("failed: status says failed with the exit code", f.statusIs("40-fail", "failed 3"))
-	c.expect("failed: logged", strings.Contains(f.out, "40-fail FAILED (rc=3)"))
+	c.expect("failed-not-done", "failed: not done", !f.done("40-fail"))
+	c.expect("failed-status", "failed: status says failed with the exit code", f.statusIs("40-fail", "failed 3"))
+	c.expect("failed-logged", "failed: logged", strings.Contains(f.out, "40-fail FAILED (rc=3)"))
 	if err := f.run(); err != nil {
 		return err
 	}
-	c.expect("failed: runs again (Retry / next boot)", f.count("40") == "2")
+	c.expect("failed-runs-again", "failed: runs again (Retry / next boot)", f.count("40") == "2")
 
 	// --- headless: no display, no RIVER_PAGE_DIR ---------------------------------------------
 	const probe = `[ -z "${RIVER_PAGE_DIR:-}" ] || exit 7; exit 0`
 	if err := steps(func() error { return f.setup(false) }, hook("50-probe", probe), f.run); err != nil {
 		return err
 	}
-	c.expect("headless: no RIVER_PAGE_DIR without a display", f.done("50-probe"))
+	c.expect("headless-no-page-dir", "headless: no RIVER_PAGE_DIR without a display", f.done("50-probe"))
 	if err := steps(func() error { return f.setup(true) },
 		func() error { return os.Remove(f.p("var/lib/runink/firstboot-ui")) },
 		hook("51-probe", probe), f.run); err != nil {
 		return err
 	}
-	c.expect("no graphical first boot pending: no RIVER_PAGE_DIR", f.done("51-probe"))
+	c.expect("no-ui-pending-no-page-dir", "no graphical first boot pending: no RIVER_PAGE_DIR", f.done("51-probe"))
 
 	// --- answers: kept while a hook is not done, shredded once all are -----------------------
 	answers := f.p("var/lib/runink/firstboot.d/setup-answers")
@@ -224,11 +238,11 @@ exit 0`), f.run); err != nil {
 		f.run); err != nil {
 		return err
 	}
-	c.expect("answers: kept while a hook is deferred", isFile(answers))
+	c.expect("answers-kept-while-deferred", "answers: kept while a hook is deferred", isFile(answers))
 	if err := steps(func() error { return touch(f.p("ok-61")) }, f.run); err != nil {
 		return err
 	}
-	c.expect("answers: shredded once every hook is done", !exists(answers))
+	c.expect("answers-shredded-when-done", "answers: shredded once every hook is done", !exists(answers))
 
 	// --- role: passed through ----------------------------------------------------------------
 	if err := steps(func() error { return f.setup(true) },
@@ -236,6 +250,6 @@ exit 0`), f.run); err != nil {
 		hook("70-role", `[ "${RIVER_ROLE:-}" = runner ]`), f.run); err != nil {
 		return err
 	}
-	c.expect("role: RIVER_ROLE is the installer's choice", f.done("70-role"))
+	c.expect("role-passed-through", "role: RIVER_ROLE is the installer's choice", f.done("70-role"))
 	return nil
 }
