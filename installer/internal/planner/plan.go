@@ -37,10 +37,19 @@ const (
 	DefaultPlatformMiB = 6144 // the downstream platform's non-inference services
 	ARCMinMiB          = 1024
 	ARCMaxMiB          = 16384
-	HeadroomMinMiB     = 1024
-	HeadroomPercent    = 10
-	CtxStep            = 4096 // context grows in these steps between ctx_min and ctx_max
-	ZramMaxMiB         = 16384
+	// ARCUnifiedMaxMiB caps zfs_arc_max on a node whose GPU has no memory of its own and so
+	// serves models out of the same MemTotal the ARC caches into. There RAM/16 is not a
+	// conservative slice of a large pool, it is a direct subtraction from what inference can
+	// load: on a 128 GiB unified-memory box RAM/16 reserves 8 GiB of ARC the model can never
+	// use. Owner decision 2026-10-02 for GB10/Grace-class hardware: "inference wins, cap ARC
+	// hard". 2 GiB keeps metadata and a small data cache, so the pool is not crawling, and
+	// returns the rest to the model. The trade is accepted and explicit: storage reads are
+	// slower on these nodes.
+	ARCUnifiedMaxMiB = 2048
+	HeadroomMinMiB   = 1024
+	HeadroomPercent  = 10
+	CtxStep          = 4096 // context grows in these steps between ctx_min and ctx_max
+	ZramMaxMiB       = 16384
 )
 
 // Image profiles. The server is the default; a workstation is a desktop that runs no
@@ -311,6 +320,13 @@ func Build(p *hw.Probe, m *Manifest, opt Options) *Plan {
 		}
 	}
 	arc := clamp(memMiB/16, ARCMinMiB, ARCMaxMiB)
+	arcNote := "zfs_arc_max: RAM/16, clamped to [1 GiB, 16 GiB]"
+	if unified, why := unifiedMemory(p, ws); unified {
+		arc = min(arc, ARCUnifiedMaxMiB)
+		arcNote = fmt.Sprintf("zfs_arc_max: capped to %d MiB — %s, so ARC and the models draw on one pool and inference wins", arc, why)
+		note("unified memory: %s. zfs_arc_max is capped to %d MiB instead of RAM/16 (%d MiB) so the models keep that memory; storage reads are slower in exchange.",
+			why, arc, clamp(memMiB/16, ARCMinMiB, ARCMaxMiB))
+	}
 	head := max(HeadroomMinMiB, memMiB*HeadroomPercent/100)
 	pl.Memory.TotalMiB = memMiB
 	pl.Memory.Budget = []BudgetLine{{"os", res["os"], "kernel, s6, udev, sshd, NetworkManager, ZFS userland"}}
@@ -319,7 +335,7 @@ func Build(p *hw.Probe, m *Manifest, opt Options) *Plan {
 			BudgetLine{"k0s", res["k0s"], "controller + worker, containerd, CNI, cluster DNS"},
 			BudgetLine{"platform", res["platform"], "the downstream platform's non-inference services"})
 	}
-	pl.Memory.Budget = append(pl.Memory.Budget, BudgetLine{"zfs-arc", arc, "zfs_arc_max: RAM/16, clamped to [1 GiB, 16 GiB]"})
+	pl.Memory.Budget = append(pl.Memory.Budget, BudgetLine{"zfs-arc", arc, arcNote})
 	pl.Memory.ReservedMiB = res["os"] + res["k0s"] + res["platform"] + arc
 	pl.Memory.HeadroomMiB = head
 	avail := memMiB - pl.Memory.ReservedMiB - head
@@ -543,6 +559,40 @@ func placeTiers(pl *Plan, m *Manifest, avail int64) int64 {
 		tp.Env = map[string]string{"RAYON_NUM_THREADS": fmt.Sprint(tp.Threads)}
 	}
 	return used
+}
+
+// unifiedMemory reports whether this node's GPU memory IS its system memory, and says why in
+// words the plan can print. It is deliberately derived from what the probe already collects
+// rather than from a list of known boards: an integrated GPU is, by definition, one with no
+// memory of its own, so it allocates from MemTotal. That is the whole condition, and it is
+// true of GB10/Grace as it is of an APU.
+//
+// A GB10-specific device-tree match was the alternative and was rejected: it would have to be
+// written against hardware we cannot test on (the one aarch64 box we have is the training
+// host), so it would be a guess that silently matches nothing. This rule is testable today on
+// x86_64 with a probe fixture, which is the only way it gets exercised before the hardware
+// window opens.
+//
+// A workstation is excluded because nothing competes there: it plans no model tiers at all
+// ("a workstation serves no models"), so capping its ARC would cost cache for no gain. The
+// cap exists to settle a contest between ARC and inference, and on a workstation there is no
+// contest.
+func unifiedMemory(p *hw.Probe, ws bool) (bool, string) {
+	if ws || len(p.GPUs) == 0 {
+		return false, ""
+	}
+	for _, g := range p.GPUs {
+		if !g.Integrated {
+			// Any discrete GPU means the models have memory of their own to live in, so the
+			// ARC is not taking it from them and RAM/16 is the right reservation.
+			return false, ""
+		}
+	}
+	vendor := p.GPUs[0].Vendor
+	if len(p.GPUs) > 1 {
+		return true, fmt.Sprintf("%d integrated GPUs (%s) and no discrete GPU, so GPU memory is system memory", len(p.GPUs), vendor)
+	}
+	return true, fmt.Sprintf("an integrated %s GPU and no discrete GPU, so GPU memory is system memory", vendor)
 }
 
 func accelerators(p *hw.Probe, tiers []TierPlan) Accelerator {

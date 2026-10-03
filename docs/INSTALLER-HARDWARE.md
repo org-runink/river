@@ -96,6 +96,7 @@ total (MemTotal)
   - k0s        2048 MiB   controller + worker, containerd, CNI, cluster DNS
   - platform   6144 MiB   the downstream platform's non-inference services
   - zfs-arc    clamp(total/16, 1 GiB, 16 GiB)   recommended zfs_arc_max
+               (unified memory: capped to 2 GiB; see ZFS ARC below)
   - headroom   max(1 GiB, 10% of total)          never allocated
   = available for model tiers
 ```
@@ -162,7 +163,7 @@ is listed in `storage.unused`, with the reason.
 | Item | Decision |
 |---|---|
 | Swap | Never on disk or on ZFS. A zstd zram device: RAM/2 below 32 GiB, else RAM/4, capped at 16 GiB. Applied: `30-target-config` writes it to `/etc/runink/zram.conf`, which `runink-zram.sh` reads at every boot. |
-| ZFS ARC | `zfs_arc_max = clamp(RAM/16, 1 GiB, 16 GiB)`, counted in the RAM budget. Applied: `30-target-config` writes `options zfs zfs_arc_max=<bytes>` to `/etc/modprobe.d/zfs.conf`, before `40-boot-grub-zfs` builds the initramfs that loads the module. |
+| ZFS ARC | `zfs_arc_max = clamp(RAM/16, 1 GiB, 16 GiB)`, counted in the RAM budget. **On a node with unified memory it is capped to 2 GiB instead** (`ARCUnifiedMaxMiB`): a GPU that is integrated has no memory of its own, so it serves models out of the same `MemTotal` the ARC caches into, and RAM/16 would subtract straight from what inference can load -- 8 GiB of it on a 128 GiB box. Owner decision for GB10/Grace-class hardware: inference wins. Storage reads are slower in exchange, and the plan's `zfs-arc` budget line says so. A workstation is excluded: it plans no model tiers, so nothing competes. Applied: `30-target-config` writes `options zfs zfs_arc_max=<bytes>` to `/etc/modprobe.d/zfs.conf`, before `40-boot-grub-zfs` builds the initramfs that loads the module. |
 | GPU | The inference build is CPU-only (`accelerator.mode = cpu`). Discrete GPUs are reported, and tiers that would fit in 90% of a known VRAM are listed as `gpu_offload_candidates`. VRAM is readable from sysfs only on amdgpu. |
 | TPM 2.0 | Noted as eligible for a future unattended-unlock key provider. None ships yet. |
 | Network | Warns when no physical NIC has link, or none has a global IPv6 address. The host may be dual-stack, but the k0s cluster network is IPv6-only and takes its node address from the host's IPv6. |
@@ -181,7 +182,10 @@ applies them through `installer/lib/memtune.sh`:
 
 Without a plan (a driver that resolves none), the ARC falls back to the same rule,
 `clamp(MemTotal/16, 1 GiB, 16 GiB)`, computed from `/proc/meminfo` of the machine being
-installed. OpenZFS's own default takes most of RAM, which suits a file server and not a
+installed. The fallback does NOT know about unified memory -- it reads `/proc/meminfo` and
+has no probe to tell it the GPU is integrated -- so a unified-memory node installed without
+a resolved plan gets RAM/16, not the 2 GiB cap. The cap travels in the plan, via
+`RUNINK_ZFS_ARC_MAX`. OpenZFS's own default takes most of RAM, which suits a file server and not a
 desktop. The zram size has no fallback: no `zram.conf` is written, and `runink-zram.sh` keeps
 the image default. A cloud image (`RUNINK_CLOUD`) is built in a VM that is not the instance,
 so step 30 sizes neither. `tests/assert-golden.sh` checks the running value of `zfs_arc_max`
