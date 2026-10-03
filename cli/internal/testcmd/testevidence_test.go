@@ -145,7 +145,8 @@ func checkDoc(t *testing.T, s sub, d *evidence.Document, stderr string) {
 	if d.Schema != evidence.Schema || d.Harness != tier1Harness(s.name) || d.Signing.Signed {
 		t.Errorf("%s: schema %q harness %q signed %v", s.name, d.Schema, d.Harness, d.Signing.Signed)
 	}
-	if !isCommit(d.Subject.Commit) || !isCommit(d.HarnessVersion) || d.Environment.HostKind != "ci" ||
+	hex40 := regexp.MustCompile(`^[0-9a-f]{40}$`)
+	if !hex40.MatchString(d.Subject.Commit) || !hex40.MatchString(d.HarnessVersion) || d.Environment.HostKind != "ci" ||
 		(d.Environment.Arch != "x86_64" && d.Environment.Arch != "aarch64") {
 		t.Errorf("%s: subject %+v harness_version %q environment %+v", s.name, d.Subject, d.HarnessVersion, d.Environment)
 	}
@@ -336,14 +337,13 @@ func TestEvidenceRunsThatDidNotHappen(t *testing.T) {
 	}
 }
 
-// Without a commit (not a checkout) nothing runs and nothing is written; the run exits non-zero.
+// Without a commit (not a checkout) the producer refuses the document, and the run exits non-zero.
 func TestEvidenceNeedsACommit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "e.json")
-	ran := false
 	err := withEvidence(context.Background(), evidenceOpts{path: path}, "river-tier1/probe", []string{"one"}, t.TempDir(),
-		func(ctx context.Context) error { ran = true; return nil })
-	if err == nil || !strings.Contains(err.Error(), "subject.commit") || ran {
-		t.Fatalf("err = %v, ran = %v", err, ran)
+		func(ctx context.Context) error { newChecks(ctx, io.Discard, io.Discard).ok("one", ""); return nil })
+	if err == nil || !strings.Contains(err.Error(), "subject.commit") {
+		t.Fatalf("err = %v", err)
 	}
 	if _, serr := os.Stat(path); serr == nil {
 		t.Fatal("a document without a commit was written")
@@ -397,8 +397,9 @@ func TestEvidenceRefusesADirtyCheckout(t *testing.T) {
 	}
 }
 
-// harness_version is exactly a 40-hex commit: the stamped revision, else the checkout's; a
-// binary built from a modified tree is refused, and no "-dirty" suffix is ever emitted.
+// harness_version is the stamped revision, else the checkout's commit; a binary built from a
+// modified tree is refused, and no "-dirty" suffix is ever emitted. (Its 40-hex shape is
+// evidence.Lint's to check, when the document is written.)
 func TestEvidenceHarnessVersion(t *testing.T) {
 	const a, b = "5bbc73db1a3819b1d54694726246d8466e6b47a5", "c15745a0c15745a0c15745a0c15745a0c15745a0"
 	rev := func(r string, modified string) []debug.BuildSetting {
@@ -413,8 +414,6 @@ func TestEvidenceHarnessVersion(t *testing.T) {
 		{rev(a, "false"), b, a, ""},
 		{nil, b, b, ""},
 		{rev(a, "true"), b, "", "uncommitted changes"},
-		{nil, "", "", "not a 40-character commit"},
-		{rev("ABC", "false"), b, "", "not a 40-character commit"},
 	} {
 		got, err := harnessVersion(tc.settings, tc.subject)
 		if got != tc.want || (tc.err == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tc.err)) {
@@ -423,17 +422,15 @@ func TestEvidenceHarnessVersion(t *testing.T) {
 	}
 }
 
-// environment.arch is x86_64 or aarch64; any other architecture is refused, not guessed.
-func TestEvidenceArch(t *testing.T) {
-	for goarch, want := range map[string]string{"amd64": "x86_64", "arm64": "aarch64"} {
-		if env, err := environment("ci", goarch); err != nil || env.Arch != want {
-			t.Errorf("%s: %+v %v", goarch, env, err)
-		}
+// The architecture is evidence.New's to map, once: this package leaves it empty, and the
+// document carries the contract's name, never Go's.
+func TestEvidenceArchIsMappedOnceByTheProducer(t *testing.T) {
+	if env := environment("ci"); env.Arch != "" {
+		t.Fatalf("environment sets arch %q itself; evidence.New maps GOARCH", env.Arch)
 	}
-	for _, goarch := range []string{"386", "riscv64", "ppc64le"} {
-		if _, err := environment("ci", goarch); err == nil || !strings.Contains(err.Error(), "x86_64 and aarch64") {
-			t.Errorf("%s: err %v", goarch, err)
-		}
+	d := evidence.New("river-tier1/probe", strings.Repeat("a", 40), evidence.Subject{Kind: "source"}, environment("ci"), []string{"one"}, nil).Finish()
+	if d.Environment.Arch == "amd64" || d.Environment.Arch == "arm64" || d.Environment.Arch == "" {
+		t.Fatalf("arch %q is not the contract's", d.Environment.Arch)
 	}
 }
 

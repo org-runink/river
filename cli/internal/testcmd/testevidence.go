@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -60,9 +59,8 @@ func evidenceFrom(ctx context.Context) *evidenceRun {
 }
 
 // withEvidence runs fn and, when opts.path is set, records its checks and writes the document.
-// What the document must say about its origin is settled BEFORE the test runs: a checkout that
-// is not a clean commit, a binary built from a modified tree, or a CPU the consumer does not
-// know is refused up front, with nothing run and nothing written. Evidence from a dirty tree
+// A checkout with uncommitted changes, or a binary built from a modified tree, is refused BEFORE
+// the test runs, with nothing run and nothing written. Evidence from a dirty tree
 // cannot be re-derived from any commit, so it is not evidence.
 //
 // After the run, the test's own error is always returned as it was; a document that cannot be
@@ -96,18 +94,20 @@ func withEvidence(ctx context.Context, opts evidenceOpts, harness string, declar
 }
 
 // evidenceOrigin is the subject commit, the harness version and the environment, or why the
-// run cannot produce trustworthy evidence.
+// run cannot produce trustworthy evidence. It refuses only what the producer cannot see: a
+// dirty checkout and a binary built from a modified tree. The shapes (40-hex commits, the
+// architecture, which evidence.New maps from GOARCH itself, the host kind) are evidence.Lint's,
+// checked once, when the document is written.
 func evidenceOrigin(ctx context.Context, repo, hostKind string) (commit, version string, env evidence.Environment, err error) {
 	commit = gitHead(ctx, repo)
-	if !isCommit(commit) {
-		return "", "", env, fmt.Errorf("the checkout under test has no commit (not a git checkout?): subject.commit is required")
-	}
-	dirty, err := checkoutDirty(ctx, repo)
-	if err != nil {
-		return "", "", env, fmt.Errorf("cannot tell whether the checkout is clean: %w", err)
-	}
-	if dirty {
-		return "", "", env, errors.New("the checkout under test has uncommitted changes: evidence from a dirty tree cannot be tied to a commit; commit or clean it first")
+	if commit != "" { // no commit at all: the document is refused when written, by evidence.Lint
+		dirty, err := checkoutDirty(ctx, repo)
+		if err != nil {
+			return "", "", env, fmt.Errorf("cannot tell whether the checkout is clean: %w", err)
+		}
+		if dirty {
+			return "", "", env, errors.New("the checkout under test has uncommitted changes: evidence from a dirty tree cannot be tied to a commit; commit or clean it first")
+		}
 	}
 	var settings []debug.BuildSetting
 	if bi, ok := debug.ReadBuildInfo(); ok {
@@ -116,16 +116,8 @@ func evidenceOrigin(ctx context.Context, repo, hostKind string) (commit, version
 	if version, err = harnessVersion(settings, commit); err != nil {
 		return "", "", env, err
 	}
-	if env, err = environment(hostKind, runtime.GOARCH); err != nil {
-		return "", "", env, err
-	}
-	return commit, version, env, nil
+	return commit, version, environment(hostKind), nil
 }
-
-var commitRE = regexp.MustCompile(`^[0-9a-f]{40}$`)
-
-// isCommit is the shape the consumer accepts: exactly 40 lower-case hex characters.
-func isCommit(s string) bool { return commitRE.MatchString(s) }
 
 // gitHead is the commit of the checkout under test, "" when it is not a git checkout.
 func gitHead(ctx context.Context, repo string) string {
@@ -148,9 +140,9 @@ var checkoutDirty = func(ctx context.Context, repo string) (bool, error) {
 }
 
 // harnessVersion is the river commit this binary was built from, from its build settings. A
-// binary built from a modified tree is refused. Tier 1 builds with -buildvcs=false from the
-// same checkout it tests, so without a stamped revision the checkout's (clean) commit is the
-// harness's.
+// binary built from a modified tree is refused: no commit names it. Tier 1 builds with
+// -buildvcs=false from the same checkout it tests, so without a stamped revision the
+// checkout's (clean) commit is the harness's.
 func harnessVersion(settings []debug.BuildSetting, subjectCommit string) (string, error) {
 	rev := ""
 	for _, s := range settings {
@@ -166,40 +158,23 @@ func harnessVersion(settings []debug.BuildSetting, subjectCommit string) (string
 	if rev == "" {
 		rev = subjectCommit
 	}
-	if !isCommit(rev) {
-		return "", fmt.Errorf("harness_version %q is not a 40-character commit", rev)
-	}
 	return rev, nil
 }
 
-// evidenceArch maps Go's architecture name to the one the consumer accepts.
-func evidenceArch(goarch string) (string, error) {
-	switch goarch {
-	case "amd64":
-		return "x86_64", nil
-	case "arm64":
-		return "aarch64", nil
-	}
-	return "", fmt.Errorf("architecture %q has no evidence name (only x86_64 and aarch64 are accepted)", goarch)
-}
-
-// environment describes the host by category only: the document is public.
-func environment(hostKind, goarch string) (evidence.Environment, error) {
-	arch, err := evidenceArch(goarch)
-	if err != nil {
-		return evidence.Environment{}, err
-	}
+// environment describes the host by category only: the document is public. Arch is left to
+// evidence.New, which maps GOARCH onto the contract's names.
+func environment(hostKind string) evidence.Environment {
 	if hostKind == "" {
 		hostKind = "dev-box"
 		if os.Getenv("CI") != "" {
 			hostKind = "ci"
 		}
 	}
-	env := evidence.Environment{HostKind: hostKind, Arch: arch, KVM: exists("/dev/kvm")}
+	env := evidence.Environment{HostKind: hostKind, KVM: exists("/dev/kvm")}
 	if os.Getenv("RIVER_TIER1_IN_CONTAINER") == "1" {
 		env.ContainerImage = "river-tier1"
 	}
-	return env, nil
+	return env
 }
 
 // redactor rewrites what would place a detail on this machine: the checkout's path, scratch
