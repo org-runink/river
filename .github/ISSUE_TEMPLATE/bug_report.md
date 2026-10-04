@@ -21,9 +21,9 @@ What should have happened? Describe the correct behavior.
 What actually happened? Describe the incorrect behavior.
 
 ## Environment
-- **River version**: (run `cat /etc/runink-os-version`)
+- **Runink River version**: (run `cat /etc/runink-os-version`)
 - **Hardware**: CPU model, RAM, storage type (NVMe/SATA/HDD)
-- **Installation date**: When was River installed?
+- **Installation date**: When was Runink River installed?
 - **Last boot**: When was the last boot (for timing-related issues)?
 - **Relevant software**: Other tools/packages involved?
 

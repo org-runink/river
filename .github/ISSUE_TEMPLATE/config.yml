@@ -2,13 +2,13 @@ blank_issues_enabled: false
 contact_links:
   - name: "❓ Ask a Question"
     url: https://github.com/org-runink/river/discussions/new?category=q-a
-    about: "Start a discussion if you have a question about River."
+    about: "Start a discussion if you have a question about Runink River."
   - name: "💡 Share an Idea"
     url: https://github.com/org-runink/river/discussions/new?category=ideas
     about: "Propose a feature or improvement in discussions first."
-  - name: "🔐 Report Security Issue"
-    url: mailto:security@runink.org
-    about: "Report vulnerabilities privately to security@runink.org"
-  - name: "📖 View Contribution Guide"
-    url: https://runink.org/docs/governance/
-    about: "Read the full contribution guidelines and code of conduct."
+  - name: "🔐 Report a Security Vulnerability (privately)"
+    url: https://github.com/org-runink/river/security/advisories/new
+    about: "Never in a public issue. Use GitHub private vulnerability reporting, or encrypted mail to security@runink.org (SECURITY.md)."
+  - name: "📖 Contributing and Governance"
+    url: https://docs.runink.org/river/docs/contributing/governance/
+    about: "How to contribute, how decisions are made, and the Code of Conduct."

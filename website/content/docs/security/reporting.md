@@ -17,8 +17,7 @@ Report it privately through either channel:
    repository's [Security tab](https://github.com/org-runink/river/security).
 
 {{< callout type="warning" >}}
-The key was published on 2026-09-27; {{< repo "SECURITY.md" >}} still describes it as
-pending. If you cannot encrypt to it, use GitHub's private reporting. Until a second
+If you cannot encrypt to the key, use GitHub's private reporting. Until a second
 maintainer joins, one person handles every report.
 {{< /callout >}}
 

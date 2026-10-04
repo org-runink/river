@@ -9,9 +9,16 @@ The answers Runink River will enter for the [OpenSSF Best Practices badge](https
 criterion by criterion, for the **passing** and **silver** levels. The criteria IDs and
 categories are those of the badge's
 [criteria.yml](https://github.com/coreinfrastructure/best-practices-badge/blob/main/criteria/criteria.yml)
-as of 2026-09-24 (retired and future criteria left out). **Not submitted:** registration
-needs the public repository URL (owner-side). LF AI & Data requires *passing* for Sandbox
-and *silver* for Incubation ([LF-AIDATA.md](LF-AIDATA.md)).
+as of 2026-09-24 (retired and future criteria left out). **Not submitted, no badge
+awarded:** the repository is public, but the project has not been registered on
+bestpractices.dev yet (owner-side). LF AI & Data requires *passing* for Sandbox and
+*silver* for Incubation ([LF-AIDATA.md](LF-AIDATA.md)). Where this self-assessment sits
+among the other foundation criteria: [FOUNDATION-READINESS.md](FOUNDATION-READINESS.md).
+
+**Re-checked 2026-10-04.** Since the first assessment the repository became public, private
+vulnerability reporting and branch protection with required checks were enabled, and the
+release-signing key was published. The **After** column below is the state on that date; the
+rows that changed are marked *2026-10-04*.
 
 Columns:
 
@@ -26,14 +33,14 @@ Columns:
 
 | Level | Criteria | Before: Met / Unmet / N/A / Owner | After: Met / Unmet / N/A / Owner |
 | --- | --- | --- | --- |
-| Passing | 67 | 54 / 7 / 2 / 4 | **59 / 2 / 2 / 4** |
-| Silver | 55 | 35 / 12 / 3 / 5 | **40 / 7 / 3 / 5** |
+| Passing | 67 | 54 / 7 / 2 / 4 | **63 / 2 / 2 / 0** |
+| Silver | 55 | 35 / 12 / 3 / 5 | **40 / 8 / 2 / 5** |
 
-After this change every **passing** MUST that a pull request can meet is met; the two
-unmet passing items are SUGGESTED. Passing is reached once the four owner items are done
-(publication, the public tracker and archive, private reporting). For **silver**, five
-MUST criteria remain unmet and need engineering (listed under "Silver: what is left"), plus
-the five owner items.
+Every **passing** MUST is now met; the two unmet passing items are SUGGESTED. What remains
+for *passing* is the registration itself: an owner creates the bestpractices.dev entry and
+enters these answers. For **silver**, eight criteria remain unmet (five MUST, three
+SHOULD) and need engineering (listed under "Silver: what is left"), plus the five owner
+items.
 
 ## Passing level
 
@@ -51,7 +58,7 @@ the five owner items.
 | `documentation_basics` | MUST | Met | Met | `README.md`, `docs/INSTALL.md`, `docs/BUILD.md`, `docs/ARCHITECTURE.md` | |
 | `documentation_interface` | MUST | Met | Met | `docs/INSTALLER-HARDWARE.md` (CLI and JSON contract of `river-hwprobe`/`river-plan`), `docs/INSTALL-GUIDE-AGENT.md`, `docs/ENCRYPTION.md` (key-provider contract), `docs/BUILD.md` (payload contract) | |
 | `sites_https` | MUST | Met | Met | GitHub; `https://runink.org` | |
-| `discussion` | MUST | Owner | Owner | GitHub Issues | Searchable and open to newcomers only once the repository is public |
+| `discussion` | MUST | Owner | Met | GitHub Issues, Pull requests and Discussions | *2026-10-04*: public, searchable, URL-addressable and open to newcomers |
 | `english` | SHOULD | Met | Met | All documentation | |
 | `maintained` | MUST | Met | Met | Active development since July 2026 | |
 
@@ -59,7 +66,7 @@ the five owner items.
 
 | Criterion | Req. | Before | After | Evidence | Fix / note |
 | --- | --- | --- | --- | --- | --- |
-| `repo_public` | MUST | Owner | Owner | | `org-runink/river` is public (2026-09-28) with its full history; [docs/PUBLICATION.md](../PUBLICATION.md) is the owner's step-by-step, including republishing from a clean snapshot |
+| `repo_public` | MUST | Owner | Met | `https://github.com/org-runink/river` | *2026-10-04*: public since 2026-09-28 |
 | `repo_track` | MUST | Met | Met | git | |
 | `repo_interim` | MUST | Met | Met | `main` between releases | |
 | `repo_distributed` | SUGG | Met | Met | git | |
@@ -77,9 +84,9 @@ the five owner items.
 | `report_tracker` | SHOULD | Met | Met | GitHub Issues | |
 | `report_responses` | MUST | Met | Met | No external bug reports in the window | Re-assess after publication |
 | `enhancement_responses` | SHOULD | Met | Met | No external requests in the window | Re-assess after publication |
-| `report_archive` | MUST | Owner | Owner | GitHub Issues | Public archive only once the repository is public |
+| `report_archive` | MUST | Owner | Met | GitHub Issues | *2026-10-04*: public, searchable archive |
 | `vulnerability_report_process` | MUST | Met | Met | `SECURITY.md` | |
-| `vulnerability_report_private` | MUST | Owner | Owner | `SECURITY.md` (encrypted mail, GitHub private reporting) | Owner: enable private vulnerability reporting, confirm `security@runink.org`, publish the release key used to encrypt reports |
+| `vulnerability_report_private` | MUST | Owner | Met | `SECURITY.md` (GitHub private vulnerability reporting, encrypted mail to `security@runink.org`) | *2026-10-04*: private vulnerability reporting is enabled and the release key used to encrypt reports is published |
 | `vulnerability_report_response` | MUST | Met | Met | `SECURITY.md`: acknowledge within 3 working days | No reports in the last 6 months |
 
 ### Quality
@@ -151,8 +158,8 @@ the five owner items.
 | `documentation_security` | MUST | Met | Met | `SECURITY.md` (known weaknesses), `docs/ENCRYPTION.md`, `docs/SECURITY-ASSURANCE.md` §6 | |
 | `documentation_quick_start` | MUST | Met | Met | `README.md` "Install" | |
 | `documentation_current` | MUST | Met | Met | | *fixed*: a stale "models.tiers is not written yet" note in `docs/INSTALLER-HARDWARE.md` |
-| `documentation_achievements` | MUST | Met | Met | `README.md` "Project status" | *fixed*: the section links the badge once awarded; nothing is claimed before |
-| `accessibility_best_practices` | SHOULD | N/A | N/A | No project-authored GUI; the installer and guide are text consoles | |
+| `documentation_achievements` | MUST | Met | Met | `README.md` "Project status" | *fixed*: the section states that no badge is awarded yet and links the badge once it is; nothing is claimed before |
+| `accessibility_best_practices` | SHOULD | N/A | Unmet | | *2026-10-04*: the installer is now graphical (a local web UI in the live Plasma session), so N/A no longer holds. Fix: assess the installer UI against WCAG 2.2 (keyboard-only use, contrast, screen-reader labels) and record the result |
 | `internationalization` | SHOULD | Unmet | Unmet | Installer and guide messages are English only | Fix: message catalogues for the installer TUI and `river-guide` |
 | `sites_password_security` | MUST | N/A | N/A | Project sites store no user passwords (GitHub) | |
 | `maintenance_or_update` | MUST | Unmet | Unmet | Only the latest release is supported (`SECURITY.md`) | Fix: document the in-place upgrade path (install a new boot environment from a new release, keep the pool and enrollment); today the documented path is a reinstall |
@@ -186,8 +193,8 @@ the five owner items.
 | `crypto_tls12` | SHOULD | Met | Met | `install.sh --tlsv1.2`; Go clients default to TLS 1.2+ and no code lowers it | |
 | `crypto_certificate_verification` | MUST | Met | Met | No `InsecureSkipVerify`, no `curl -k` anywhere in the tree | |
 | `crypto_verification_private` | MUST | Met | Met | Certificates are verified before the guide sends its token | |
-| `signed_releases` | MUST | Owner | Owner | Process: `docs/RELEASE-SIGNING.md`, `RELEASE.md` | The release key does not exist yet |
-| `version_tags_signed` | SUGG | Owner | Owner | `git tag -s` in `RELEASE.md` | Same key |
+| `signed_releases` | MUST | Owner | Owner | Process: `docs/RELEASE-SIGNING.md`, `RELEASE.md`, `KEYS` | *2026-10-04*: the key exists and is published (fingerprint in `KEYS`); met with the first signed release |
+| `version_tags_signed` | SUGG | Owner | Owner | `git tag -s` in `RELEASE.md` | Same key; met with the first signed tag |
 | `input_validation` | MUST | Met | Met | Planner rejects unparsable probes and manifests; bundles verified against an ed25519 anchor and syntax-restricted; sandbox `--rw` paths canonicalised and checked | |
 | `hardening` | SHOULD | Met | Met | Kernel hardening floor (`config.require`), sysctl hardening, default-deny firewall, `river-sandbox` | |
 | `assurance_case` | MUST | Unmet | Met | `docs/SECURITY-ASSURANCE.md` | *fixed*: requirements, threat model, trust boundaries, design principles, CWE countermeasures, known gaps |
@@ -204,23 +211,26 @@ MUST criteria a pull request can close, in rough order of effort:
 4. `regression_tests_added50`: follow the new policy for six months, then re-measure.
 5. `build_repeatable`: the own from-source base; the largest item.
 
-SHOULD items: `internationalization`, `build_preserve_debug`.
+SHOULD items: `internationalization`, `build_preserve_debug`, `accessibility_best_practices`.
 
 Owner items: `achieve_passing`, `access_continuity`, `bus_factor`, `signed_releases`,
 `version_tags_signed`.
 
 ## Owner actions for the badge
 
-1. Publish the repository (this unblocks `repo_public`, `discussion`, `report_archive`).
+1. ~~Publish the repository~~ (done 2026-09-28: `repo_public`, `discussion`, `report_archive`).
 2. Create the bestpractices.dev account, register the project with the public URL, and enter
-   the answers above.
-3. Enable GitHub private vulnerability reporting; confirm `security@runink.org` is read by
-   at least two people (`vulnerability_report_private`).
+   the answers above. This is the one step left for *passing*.
+3. ~~Enable GitHub private vulnerability reporting~~ (done; verified 2026-10-04). Still
+   open: confirm `security@runink.org` is read by at least two people once there are two
+   maintainers.
 4. Enforce 2FA for every member of the GitHub organisation (the badge form asks; LF AI &
    Data requires it).
 5. Add a second maintainer with admin rights (`access_continuity`, `bus_factor`).
-6. Generate the release-engineering key and publish its fingerprint (`signed_releases`,
-   `version_tags_signed`); keep a revocation certificate offline and document recovery.
+6. ~~Generate the release-signing key and publish its fingerprint~~ (done 2026-09-27,
+   [KEYS](../../KEYS)). Still open: cut the first signed release and tag
+   (`signed_releases`, `version_tags_signed`), keep a revocation certificate offline and
+   document key recovery.
 7. When the badge is awarded, add it to `README.md` "Project status" within 48 hours
    (`documentation_achievements`).
 
@@ -239,20 +249,24 @@ Owner items: `achieve_passing`, `access_continuity`, `bus_factor`, `signed_relea
 | CI | `.github/workflows/ci.yml` | Tier 1: every PR and push to `main`, in rootless podman, on GitHub-hosted runners (never self-hosted; fork PRs after a maintainer's approval); no secrets. |
 | Tier 2 | `.github/workflows/tier2-vm.yml` | ISO build + QEMU/KVM boot smoke; `workflow_dispatch` only, never on a pull request. Does not fit a standard GitHub-hosted runner (disk, time, RAM), so maintainers run it locally. |
 | OpenSSF Scorecard | `.github/workflows/scorecard.yml` | Weekly, on push to `main` and on branch-protection changes once public; uploads SARIF and publishes results to the Scorecard API (GitHub-hosted runner, as the API requires). |
-| DCO check | `.github/workflows/dco.yml` | Runs on every PR. To be made a required check. |
+| DCO check | `.github/workflows/dco.yml` | Runs on every PR; a required status check on `main` (verified 2026-10-04). |
 | Go security analysis | `.github/workflows/ci.yml` (job `go-security`) | gosec and govulncheck, pinned by version, on every PR and push. |
-| Org security gate | `.github/workflows/gatekeeper.yml` | gitleaks, actionlint, zizmor, SHA-pin and self-hosted-runner checks, credential checks, dependency review; one required status check. Its source is in the organisation's private `.github` repository (owner action: make it readable). |
-| Action pinning updates | `.github/dependabot.yml` | Weekly, grouped. `ci:` prefix. |
+| Branch protection | repository settings | On `main` (verified 2026-10-04): the six CI checks above are required, admins included; no force pushes or deletions; linear history; conversations resolved. Not yet: a required approving review (impossible with one maintainer) and required signed commits. |
+| Org security gate | organisation-level workflow, not in this repository | gitleaks, actionlint, zizmor, SHA-pin and self-hosted-runner checks. It does **not** run on this repository's pull requests today (2026-10-04); its source is not public. Until it is, the gitleaks scan in `release-gate.yml` and the Tier 1 lints are the in-repository equivalents. |
+| Action pinning updates | `.github/dependabot.yml` | Weekly, grouped, GitHub Actions only (Go modules are not configured). `ci:` prefix. |
 | SBOM (SPDX + CycloneDX) | `.github/workflows/release-attest.yml` | Built with syft v1.51.1, pinned by digest. Covers the source tree and each ISO's unpacked rootfs (pacman DB). Kept as a run artifact, optionally uploaded to the release. |
 | SLSA provenance | same | `actions/attest-build-provenance` over `SHA256SUMS`. |
 | cosign keyless | same | **Optional and additive** (`cosign: true`). |
 
 ### Signed releases (`signed_releases`)
 
-**Decision (owner, 2026-09-24):** Runink River releases, packages and tags are signed with a
-**dedicated "Runink River Release Engineering" OpenPGP key** (Ed25519 or RSA 4096). The public
-key is published at <https://runink.org/.well-known/gpg-key.txt>; its fingerprint is
-**pending** and will be recorded in `docs/RELEASE-SIGNING.md` and `SECURITY.md`.
+**Decision (owner, 2026-09-24; key published 2026-09-27):** Runink River releases, packages
+and tags are signed with the OpenPGP key whose fingerprint is in [KEYS](../../KEYS)
+(`95C0A7B97D547413E42660DDB06FE75626F15BF3`, today the lead maintainer's key). The public key
+is published at <https://runink.org/.well-known/gpg-key.txt>, and the fingerprint is pinned
+in `KEYS`, `install.sh`, `docs/RELEASE-SIGNING.md`, `SECURITY.md` and
+`base/keys/owner/fingerprint`. A dedicated release-engineering identity and a second signer
+are still open (owner actions above).
 
 - The release workflow produces **unsigned** artifacts: `SHA256SUMS`, SBOMs and
   provenance. **It never holds a signing key.** No GPG or cosign private key is ever
@@ -267,9 +281,9 @@ key is published at <https://runink.org/.well-known/gpg-key.txt>; its fingerprin
 - cosign keyless bundles and GitHub attestations may be added **alongside**. They are never
   the primary signature.
 
-**Owner actions:** generate the key, publish the fingerprint in `SECURITY.md`,
-`docs/RELEASE-SIGNING.md` and on keys.openpgp.org. Keep a revocation certificate offline.
-Document key rotation and recovery (this closes the bus-factor gap for signing).
+**Owner actions:** the key and its fingerprint are published (done). Still open: cut the
+first signed release, keep a revocation certificate offline, and document key rotation and
+recovery (this closes the bus-factor gap for signing).
 
 ### Honest SLSA level
 

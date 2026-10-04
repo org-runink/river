@@ -9,7 +9,37 @@ Thanks for your interest in Runink River, the developer workstation on s6. This 
 how to propose a change, what we check before merging, and the one legal requirement: the
 **Developer Certificate of Origin (DCO)**.
 
-Only the maintainers in [MAINTAINERS.md](MAINTAINERS.md) can merge.
+Only the maintainers in [MAINTAINERS.md](MAINTAINERS.md) can merge. Anyone can review, and
+reviews from contributors are welcome.
+
+## Ways to contribute
+
+Code is one way among several, and every one of them counts toward becoming a maintainer:
+
+- **Test on real hardware.** Install on a machine you own and report what worked and what
+  did not, with the hardware model ([Reporting bugs](#reporting-bugs)).
+- **Review pull requests.** A careful review from a contributor is as useful as one from a
+  maintainer, and it is the fastest way to learn the codebase.
+- **Improve the documentation**: the Markdown under [`docs/`](docs/) and the website under
+  [`website/`](website/) (every page has an "Edit this page" link).
+- **Answer questions** in [Discussions](https://github.com/org-runink/river/discussions).
+- **Fix bugs and build features.** Issues that are ready for someone new are labelled
+  `good first issue` when there are any; otherwise ask in Discussions what would help.
+- **Package and port.** Packaging the kernel for the AUR, or building a downstream
+  distribution with an external profile ([docs/BUILD.md](docs/BUILD.md)), exercises the
+  interfaces other people depend on.
+
+## Where to talk
+
+| What | Where |
+| --- | --- |
+| A question, or an idea you want feedback on before writing code | [Discussions](https://github.com/org-runink/river/discussions) |
+| A bug, or a feature that has been agreed | [Issues](https://github.com/org-runink/river/issues) |
+| A change | a pull request |
+| A security problem | privately, never in public: [SECURITY.md](SECURITY.md) |
+
+Decisions are made on issues and pull requests, in public, so that everyone can follow and
+take part ([GOVERNANCE.md](GOVERNANCE.md#working-in-the-open)).
 
 ## Ground rules
 
@@ -120,14 +150,18 @@ follow.
 1. Open an issue first for anything larger than a bug fix, so the design can be agreed
    before you spend time on it.
 2. Branch from `main`. Keep each PR to one topic.
-3. Run the local checks before you push:
+3. Run the local checks before you push (the exact commands are in
+   [AGENTS.md](AGENTS.md), "Build, test, lint"):
    ```bash
-   make lint           # shellcheck + closure-lint + sync linters (needs Arch tooling)
+   sh scripts/ci-tier1.sh   # the Tier 1 lints, in an ephemeral rootless container
+   make test                # Go tests of installer/ (make test-guide for guide/)
+   make docs                # the website, if you changed website/
+   make lint                # adds the closure lint (needs Arch tooling)
    ```
-   CI runs `shellcheck`, `river lint installer-sync` and the hermetic lints
-   (branding sync, no-python guard, k0s pin cross-check) on every PR, on GitHub-hosted runners only (a fork's PR runs once a maintainer approves
+   CI runs Tier 1, the Go tests, `gosec` and `govulncheck`, the REUSE lint and the DCO check
+   on every PR, on GitHub-hosted runners only (a fork's PR runs once a maintainer approves
    it; see `.github/workflows/ci.yml` and
-   [docs/governance/CI.md](docs/governance/CI.md)). The closure-lint is **not** run in
+   [docs/governance/CI.md](docs/governance/CI.md)). The closure lint is **not** run in
    CI, so run it yourself.
 4. Shell: POSIX `#!/bin/sh` where possible, `set -eu`, and it must pass `shellcheck`.
 5. Pin every upstream by checksum and, where one exists, by signature. New GitHub Actions
@@ -174,3 +208,13 @@ fail instead. Security fixes follow the same rule; see [SECURITY.md](SECURITY.md
 Open a GitHub issue with the Runink River version (`/etc/runink-os-version`), the hardware, what
 you expected and what happened. Remove hostnames, IP addresses and any credentials from
 logs before you paste them.
+
+## From contributor to maintainer
+
+Maintainers are chosen from contributors, on the record of their work in this repository:
+roughly three months of sustained, good-quality contributions (code, reviews,
+documentation, testing, release or packaging work, helping users), a nomination by a
+maintainer and a TSC vote. Your employer does not matter, and no one is excluded because
+they work for a competitor of any vendor that builds on Runink River. The full process is
+[GOVERNANCE.md](GOVERNANCE.md#becoming-a-maintainer). The project needs a second
+maintainer, so this path is open now ([MAINTAINERS.md](MAINTAINERS.md)).

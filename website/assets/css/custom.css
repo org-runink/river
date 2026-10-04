@@ -82,6 +82,14 @@ html.dark .rv {
 .rv-link { color: var(--rv-accent); font-weight: 700; text-decoration: none; }
 .rv-link:hover { text-decoration: underline; }
 
-@media (max-width: 960px) { .rv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rv-facts { max-width: 1180px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 24px; padding-block: clamp(40px, 6vw, 64px) 0; }
+.rv-facts h2 { font-size: clamp(1.6rem, 3.2vw, 2.3rem); font-weight: 800; color: var(--rv-ink); }
+.rv-facts-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; margin: 0; }
+.rv-facts-list > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 16px; padding-block: 14px; border-top: 1px solid var(--rv-rule); }
+.rv-facts-list dt { font-family: var(--rv-mono); font-size: 0.78rem; color: var(--rv-accent); letter-spacing: 0.06em; text-transform: uppercase; padding-top: 3px; }
+.rv-facts-list dd { margin: 0; color: var(--rv-ink-2); font-size: 0.96rem; line-height: 1.6; }
+
+@media (max-width: 960px) { .rv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-facts-list { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) { .rv-facts-list > div { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
 @media (max-width: 620px) { .rv-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .rv-strand-lit { animation: none; } .rv-btn, .rv-card { transition: none; } }
