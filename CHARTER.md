@@ -7,9 +7,10 @@ SPDX-License-Identifier: MIT
 
 > **DRAFT. Not in force.** This draft follows the structure of the standard LF Projects,
 > LLC technical charter, so that the umbrella foundation's counsel can review it quickly.
-> The final text is set by the Linux Foundation when the project is accepted. Everything
-> in `[brackets]` is a decision still open. Until adoption, [GOVERNANCE.md](GOVERNANCE.md)
-> governs the project.
+> The final text is set by the Linux Foundation if and when the project is accepted; no
+> application has been submitted. Everything in `[brackets]` is a decision still open.
+> Until adoption, [GOVERNANCE.md](GOVERNANCE.md) governs the project, and changes to this
+> draft follow its governance row (TSC vote, 2/3 majority, 7 days).
 
 **Adopted:** `[date]`
 
@@ -23,19 +24,21 @@ comply with the terms of this Charter.
 
 ## 1. Mission and scope of the Project
 
-a. The mission of the Project is to build and maintain a **sovereign, reproducible,
-   minimal Linux server distribution** (s6 init, ZFS root, IPv6-only cluster network, no runtime
-   fetch), together with a **raft-based, validated data-pipeline runtime** (`riverd`) that
-   runs on it, suitable for air-gapped and self-hosted deployments.
+a. The mission of the Project is to build and maintain a **minimal, auditable Linux
+   distribution for developer workstations** (s6 init and never systemd, one pinned kernel,
+   an encrypted ZFS root, a default-deny firewall, every upstream pinned, no telemetry),
+   which other distributions can build on, together with a **validated data-pipeline
+   runtime** (`riverd`) that runs on it, suitable for self-hosted and air-gapped use.
 
 b. The scope includes: the distribution's kernel and ZFS packaging, the userland base, the
-   installer, the image-build tooling, the firewall and sandbox, release engineering and
-   supply-chain attestation, the RIVER runtime library and `riverd`, and their
-   documentation and tests.
+   desktop image, the installer, the image-build tooling, the firewall and sandbox, the
+   interfaces downstream distributions build on (external profiles, payloads and the
+   first-boot contract), release engineering and supply-chain attestation, the RIVER
+   runtime library and `riverd`, and their documentation and tests.
 
 c. **Out of scope:** application products built on Runink River, including any vendor's
-   commercial offerings (these ship as optional downstream payloads outside the
-   repository), and any component that is not available under the Project's licenses.
+   commercial offerings (these ship as optional downstream profiles and payloads outside
+   the repository), and any component that is not available under the Project's licenses.
 
 ## 2. Technical Steering Committee
 

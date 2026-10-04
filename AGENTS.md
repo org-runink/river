@@ -352,6 +352,6 @@ instead; several of the existing linters assert their own inputs for exactly tha
 | [docs/REPOSITORY.md](docs/REPOSITORY.md) | the public signed `[runink]` repository: mirrors, `river repo assemble/verify/publish`, what is never published | current |
 | [docs/governance/CI.md](docs/governance/CI.md) | CI tiers and runner safety | current |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/GOLDEN-IMAGE.md](docs/GOLDEN-IMAGE.md), [docs/CLOUD-IMAGES.md](docs/CLOUD-IMAGES.md) | the server-era architecture, node contract, cloud images | **server-era**: they describe a downstream server, not this workstation |
-| [CHARTER.md](CHARTER.md) | the project charter | §1 still says "server distribution"; changing it is a TSC decision |
+| [CHARTER.md](CHARTER.md) | the draft foundation-era charter (not in force) | draft; §1 describes the workstation; changing it is a TSC decision |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md), `bench/` | tuning and benchmark method | current |
 | [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md) | what changed, what is next | current |

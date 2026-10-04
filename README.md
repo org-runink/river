@@ -48,11 +48,24 @@ that repoints them if the project moves. -->
 [![SLSA Build Level 1 provenance](https://slsa.dev/images/gh-badge-level1.svg)](https://slsa.dev/spec/v1.0/levels#build-l1)
 -->
 
-**Runink River** is a small, reproducible Linux distribution for developers who work with
+**Runink River** is a small, auditable Linux distribution for developers who work with
 data, analytics and AI on hardware they own. It installs KDE Plasma (Wayland) on **s6**,
 never systemd, with one pinned throughput-tuned kernel, an **encrypted ZFS root** with boot
 environments, a **default-deny firewall** and a **sandbox** for code you do not trust. There
 is no app store and no telemetry, and nothing in the image calls a hosted AI service.
+
+## At a glance
+
+| | |
+|---|---|
+| **What it is** | A developer workstation operating system: KDE Plasma on s6, one pinned kernel (`linux-runink`), an encrypted ZFS root with boot environments, a default-deny firewall, `river-sandbox` for untrusted code, and a graphical installer that sizes the machine before it touches a disk. |
+| **Who it is for** | Developers and teams who build data, analytics and AI software on their own machines and need to know exactly what runs there; and distributions that want a small, auditable base to build on. |
+| **Why it matters** | You can check what runs on your machine. Every upstream is pinned by version and checksum, the rules every change must keep are written down as [invariants](AGENTS.md) and checked in CI, releases are signed offline, and the whole image can be rebuilt from this repository. |
+| **Status** | Pre-release. **No signed release has been published yet.** The first release ships only after it installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that gate is still open. The image is assembled with transitional Artix Linux ISO tooling while the project moves to its own from-source base ([docs/OWN-BASE.md](docs/OWN-BASE.md)). |
+| **Licence** | **MIT** by default ([LICENSE](LICENSE)); the kernel packaging tree is GPL-2.0-only and the OpenZFS packaging tree CDDL-1.0, shipped as a separate module package. Every file is mapped in [REUSE.toml](REUSE.toml), and CI checks REUSE 3.3 compliance ([docs/LICENSING.md](docs/LICENSING.md)). |
+| **Governance** | Open and written down: [GOVERNANCE.md](GOVERNANCE.md) (lazy consensus, with a public TSC vote as the fallback), [MAINTAINERS.md](MAINTAINERS.md), a draft foundation [CHARTER.md](CHARTER.md). Today Runink River is a single-vendor project with one maintainer. Incubation at a vendor-neutral foundation is planned; **nothing has been submitted**. |
+| **Contribute** | [CONTRIBUTING.md](CONTRIBUTING.md): sign off every commit under the [DCO](CONTRIBUTING.md#developer-certificate-of-origin-dco) (`git commit -s`); there is no CLA. Ask in [Discussions](https://github.com/org-runink/river/discussions), report bugs in [Issues](https://github.com/org-runink/river/issues). |
+| **Security** | Report privately through GitHub's [private vulnerability reporting](https://github.com/org-runink/river/security/advisories/new) or to `security@runink.org` (OpenPGP). Receipt is acknowledged within 3 working days ([SECURITY.md](SECURITY.md)). |
 
 Runink River is the open-source upstream: vendors build their own distributions on it with
 out-of-tree profiles and payloads, and none of them is part of this repository.
@@ -64,17 +77,13 @@ unrelated Wayland compositor. The identifiers (`runink-*` packages, `river-*` to
 Releases are dated image sets (`runink-os-YYYY.MM`). Every release ISO, its `SHA256SUMS`
 and the packages are signed offline with the Runink River release-signing OpenPGP key
 ([KEYS](KEYS): `95C0A7B97D547413E42660DDB06FE75626F15BF3`), with SBOMs (SPDX, CycloneDX) and
-build provenance ([RELEASE.md](RELEASE.md)). **No signed Runink River release exists yet.**
-Until the first one is published, `install.sh` stops before downloading any image, because
-there is nothing it could verify.
+build provenance ([RELEASE.md](RELEASE.md)). Until the first release is published,
+`install.sh` stops before downloading any image, because there is nothing it could verify.
 
 * Documentation: <https://docs.runink.org/river/> (built from [`website/`](website/))
 * Continuous integration: [Tier 1 on every pull request](docs/governance/CI.md) (lint,
-  REUSE, Go tests, installer checks in an ephemeral rootless container)
+  REUSE, Go tests, gosec and govulncheck, installer checks in an ephemeral rootless container)
 * Downloads: GitHub Releases, from the first signed release (see [Get Runink River](#get-runink-river))
-* Status: early. The distribution boots and installs; the image is still assembled with
-  transitional Artix Linux ISO tooling while Runink River moves to its own from-source base
-  ([docs/OWN-BASE.md](docs/OWN-BASE.md)).
 
 ## Overview and scope
 
@@ -215,22 +224,45 @@ No benchmark comparison with linux-zen or linux-lts has been published yet;
 
 ## Roadmap
 
-The RIVER pipeline runtime (`riverd`, *Raft-Integrated Validated Event Runtime*: typed data
-contracts, golden tests and per-step lineage), the own from-source base, reproducible ISOs,
-Secure Boot and published benchmarks are in the **[roadmap](ROADMAP.md)**. Runink River has
-applied to the [LF AI & Data Foundation as a Sandbox project](docs/governance/LF-AIDATA.md).
+The **[roadmap](ROADMAP.md)** lists outcomes in dependency order: the first signed release,
+CI that installs the image in a VM on every change, the own from-source base, reproducible
+ISOs, Secure Boot, published kernel benchmarks, the RIVER pipeline runtime (`riverd`,
+*Raft-Integrated Validated Event Runtime*: typed data contracts, golden tests and per-step
+lineage) and vendor-neutral governance. Incubation at a Linux Foundation umbrella
+(LF AI & Data) is planned; the [application](docs/governance/lfaidata-proposal.md) is a
+draft and **has not been submitted**. Where the project stands against the foundation and
+OpenSSF criteria is in [docs/governance/FOUNDATION-READINESS.md](docs/governance/FOUNDATION-READINESS.md).
 
-## Communications
+## Project status
 
-If you think you have found a security issue, please **do not** open a public issue.
-Report it privately through GitHub's private vulnerability reporting or to
-`security@runink.org`, as described in [SECURITY.md](SECURITY.md).
+* **Release:** no signed release yet (see [At a glance](#at-a-glance)).
+* **Maintainers:** one, from one organisation ([MAINTAINERS.md](MAINTAINERS.md)). A second
+  maintainer, then maintainers from other organisations, is the project's most important
+  open need.
+* **OpenSSF Best Practices:** not yet registered. The criterion-by-criterion
+  self-assessment is [docs/governance/OPENSSF-BEST-PRACTICES.md](docs/governance/OPENSSF-BEST-PRACTICES.md);
+  the badge will be shown above once it is awarded, and not before.
+* **OpenSSF Scorecard:** runs on every push to `main` (`.github/workflows/scorecard.yml`);
+  the current score is the badge above.
+* **Adopters:** none are listed yet ([ADOPTERS.md](ADOPTERS.md) says how to add yours).
 
-For bugs, features and questions, use GitHub
-[issues](https://github.com/org-runink/river/issues) and
-[pull requests](https://github.com/org-runink/river/pulls). There is no mailing list, chat
-channel or community meeting yet; they will be announced here. Help channels:
-[SUPPORT.md](SUPPORT.md).
+## Community and communication
+
+Runink River works in public. Decisions are made, and recorded, where everyone can read
+them: on issues, pull requests and discussions in this repository. Only security reports and
+Code of Conduct reports are handled privately ([GOVERNANCE.md](GOVERNANCE.md#working-in-the-open)).
+
+| Channel | Use it for |
+|---|---|
+| [GitHub Discussions](https://github.com/org-runink/river/discussions) | questions (Q&A), ideas and proposals before they become issues, announcements |
+| [GitHub Issues](https://github.com/org-runink/river/issues) | bugs and agreed feature work |
+| [Pull requests](https://github.com/org-runink/river/pulls) | changes, reviews and every governance decision |
+| GitHub private vulnerability reporting, `security@runink.org` | security problems only, never in public ([SECURITY.md](SECURITY.md)) |
+| The contact in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Code of Conduct reports, handled privately |
+
+There is no mailing list, chat channel or community meeting yet. When one is created it
+will be announced in Discussions and listed here, and decisions taken there will still be
+recorded in this repository. Help with using Runink River: [SUPPORT.md](SUPPORT.md).
 
 ## Out of scope
 
@@ -295,13 +327,27 @@ What changed in each dated image set.
 
 ## Contributing
 
-Contributions are welcome under the [Developer Certificate of Origin](CONTRIBUTING.md):
-sign off every commit with `git commit -s`. Read [CONTRIBUTING.md](CONTRIBUTING.md),
+Contributions are welcome, and not only code: bug reports, reviews, documentation, testing
+on real hardware and packaging all count toward becoming a maintainer
+([GOVERNANCE.md](GOVERNANCE.md#becoming-a-maintainer)). Sign off every commit under the
+[Developer Certificate of Origin](CONTRIBUTING.md#developer-certificate-of-origin-dco) with
+`git commit -s`; there is no CLA. Read [CONTRIBUTING.md](CONTRIBUTING.md),
 [AGENTS.md](AGENTS.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first.
 
-Governance: [GOVERNANCE.md](GOVERNANCE.md) · [MAINTAINERS.md](MAINTAINERS.md) ·
-[CHARTER.md](CHARTER.md) (draft) · [ROADMAP.md](ROADMAP.md) · [RELEASE.md](RELEASE.md) ·
-[SUPPORT.md](SUPPORT.md).
+## Governance
+
+| Document | What it covers |
+|---|---|
+| [GOVERNANCE.md](GOVERNANCE.md) | roles, how decisions are made, how to become a maintainer, neutrality, the path to a foundation |
+| [CHARTER.md](CHARTER.md) | the draft technical charter for the foundation era (not in force) |
+| [MAINTAINERS.md](MAINTAINERS.md) | who the maintainers are, their affiliation and signing key |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | how to send a change, the DCO, the test policy |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 |
+| [SECURITY.md](SECURITY.md) | private reporting, response targets, the disclosure process |
+| [ROADMAP.md](ROADMAP.md), [RELEASE.md](RELEASE.md) | what is next, and how a release is cut and signed |
+| [TRADEMARKS.md](TRADEMARKS.md) | the project name and marks, and the project's neutrality |
+| [ADOPTERS.md](ADOPTERS.md), [SUPPORT.md](SUPPORT.md) | who uses Runink River, and where to get help |
+| [docs/governance/](docs/governance/) | the foundation-readiness map, the OpenSSF self-assessment, CI and licensing notes |
 
 ## License
 
@@ -314,5 +360,5 @@ built as a separate module package and never merged into the kernel
 licences ([LICENSES/](LICENSES/)).
 
 The Runink name and logo are trademarks of Runink and are not licensed under any of the
-above; see [NOTICE](NOTICE). Linux® is the registered trademark of Linus Torvalds in the
+above; see [TRADEMARKS.md](TRADEMARKS.md) and [NOTICE](NOTICE). Linux® is the registered trademark of Linus Torvalds in the
 U.S. and other countries.

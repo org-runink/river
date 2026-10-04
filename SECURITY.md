@@ -5,11 +5,17 @@ SPDX-License-Identifier: MIT
 
 # Security policy
 
-> **Pending owner actions.**
-> - `security@runink.org` must be read by at least two people.
-> - **Private vulnerability reporting** must be enabled under Settings → Code security.
-> - Until a second maintainer joins ([MAINTAINERS.md](MAINTAINERS.md)), one person handles
->   every report, so the independent review in step 3 below cannot happen yet.
+**In short:** report privately (GitHub private vulnerability reporting, or encrypted mail to
+`security@runink.org`); we acknowledge within 3 working days, assess within 10, fix a
+critical issue within 14 days of the assessment, and publish an advisory when the fix
+ships. An embargo never lasts longer than 90 days.
+
+> **Known limits of the response today.**
+> - One maintainer handles every report until a second one joins
+>   ([MAINTAINERS.md](MAINTAINERS.md)), so the independent review in step 3 below cannot
+>   happen yet.
+> - `security@runink.org` is to be read by at least two people once there are two; the
+>   foundation's security list replaces it if the project joins one.
 
 ## Supported versions
 
@@ -97,6 +103,10 @@ it came in on, and to vulnerabilities a maintainer finds on their own.
 
 Reporters are credited in the advisory and in the release notes, by the name they choose,
 unless they ask not to be.
+
+Published advisories are listed on the repository's
+[Security advisories](https://github.com/org-runink/river/security/advisories) page. None has
+been published yet.
 
 ## Scope notes
 
