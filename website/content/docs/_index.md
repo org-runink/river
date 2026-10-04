@@ -25,10 +25,12 @@ unrelated Wayland compositor. Package, path and binary names (`runink-*`, `river
 `/etc/runink`) are identifiers and keep their spelling.
 
 {{< callout type="warning" >}}
-**Status: early.** The system boots and installs, and there is **no signed public release
-yet**: the release-signing key is published, but no release has been cut with it. The ISO is still assembled with a
-fork of Artix Linux's ISO tooling while Runink River moves to its own from-source base.
-See [the roadmap]({{< relref "/docs/roadmap" >}}).
+**Status: pre-release.** There is **no signed public release yet**: the release-signing key
+is published, but no release has been cut with it. The first release ships only after it
+installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that
+gate is still open. The ISO is still assembled with a fork of Artix Linux's ISO tooling
+while Runink River moves to its own from-source base. See
+[the roadmap]({{< relref "/docs/roadmap" >}}).
 {{< /callout >}}
 
 ## Where to start
@@ -45,7 +47,8 @@ See [the roadmap]({{< relref "/docs/roadmap" >}}).
   {{< card link="build" title="Build from source" icon="terminal" subtitle="Build and test the ISO yourself." >}}
   {{< card link="kernel-on-arch" title="Kernel on Arch (AUR)" icon="archive" subtitle="Run linux-runink on an existing Arch Linux system." >}}
   {{< card link="security" title="Security" icon="shield-check" subtitle="Report a vulnerability, verify a release, Secure Boot plans." >}}
-  {{< card link="contributing" title="Contributing" icon="users" subtitle="DCO sign-off, the invariants, governance." >}}
+  {{< card link="contributing" title="Contributing" icon="users" subtitle="DCO sign-off, the invariants, your first change." >}}
+  {{< card link="contributing/governance" title="Governance & community" icon="user-group" subtitle="How decisions are made, becoming a maintainer, where to talk." >}}
   {{< card link="faq" title="FAQ" icon="question-mark-circle" subtitle="Why s6, why not systemd, is it Arch, and more." >}}
   {{< card link="roadmap" title="Roadmap" icon="map" subtitle="What is done, what is planned, what is out of scope." >}}
 {{< /cards >}}

@@ -40,6 +40,20 @@ the documentation. Styles: rv-* in assets/css/custom.css.
   </div>
 </section>
 
+<section class="rv-facts" aria-labelledby="rv-facts-title">
+  <h2 id="rv-facts-title" class="rv-center">At a glance</h2>
+  <dl class="rv-facts-list">
+    <div><dt>What it is</dt><dd>A developer workstation operating system: KDE Plasma on s6 (never systemd), one pinned kernel, an encrypted ZFS root with boot environments, a default-deny firewall, a sandbox for untrusted code and a graphical installer.</dd></div>
+    <div><dt>Who it is for</dt><dd>Developers and teams who build data, analytics and AI software on machines they own and need to know exactly what runs there, and distributions that want an auditable base to build on.</dd></div>
+    <div><dt>Why it matters</dt><dd>Every upstream is pinned by version and checksum, the rules every change must keep are written down and checked in CI, releases are signed offline, and nothing in the image reports usage or calls a hosted service.</dd></div>
+    <div><dt>Status</dt><dd>Pre-release: <strong>no signed release yet</strong>. The first one ships only after it installs, unlocks and reaches a working desktop on real hardware. <a class="rv-link" href="{{ "docs/roadmap/" | relURL }}">Roadmap</a></dd></div>
+    <div><dt>Licence</dt><dd>MIT by default; GPL-2.0-only kernel packaging and CDDL-1.0 OpenZFS packaging; every file mapped and checked with REUSE. <a class="rv-link" href="{{ "docs/governance/" | relURL }}">Licensing</a></dd></div>
+    <div><dt>Governance</dt><dd>Open and written down: lazy consensus, a public vote as the fallback, a path from contributor to maintainer. Single-vendor today, one maintainer; foundation incubation is planned and nothing has been submitted. <a class="rv-link" href="{{ "docs/contributing/governance/" | relURL }}">Governance &amp; community</a></dd></div>
+    <div><dt>Contribute</dt><dd>Sign off every commit under the DCO (no CLA); ask in GitHub Discussions, report bugs in Issues. <a class="rv-link" href="{{ "docs/contributing/" | relURL }}">Contributing</a></dd></div>
+    <div><dt>Security</dt><dd>Report privately through GitHub private vulnerability reporting or <code>security@runink.org</code>; receipt acknowledged within 3 working days. <a class="rv-link" href="{{ "docs/security/reporting/" | relURL }}">Report a vulnerability</a></dd></div>
+  </dl>
+</section>
+
 <section class="rv-hub" aria-labelledby="rv-hub-title">
   <h2 id="rv-hub-title" class="rv-center">Find what you need</h2>
   <div class="rv-grid">
@@ -48,7 +62,7 @@ the documentation. Styles: rv-* in assets/css/custom.css.
     <a class="rv-card" href="{{ "docs/configuration/" | relURL }}"><span class="rv-card-k">day to day</span><h3>Configuration</h3><p>Boot environments and rollback, updates and the signed [runink] package repository, keyboard and language, networking and opening ports.</p></a>
     <a class="rv-card" href="{{ "docs/kernel-on-arch/" | relURL }}"><span class="rv-card-k">arch linux</span><h3>The kernel on Arch</h3><p>Build and run <code>linux-runink</code> and <code>zfs-linux-runink</code> from the AUR on an existing Arch system.</p></a>
     <a class="rv-card" href="{{ "docs/security/" | relURL }}"><span class="rv-card-k">security</span><h3>Security</h3><p>Report a vulnerability, verify a release signature, and the Secure Boot plan.</p></a>
-    <a class="rv-card" href="{{ "docs/contributing/" | relURL }}"><span class="rv-card-k">community</span><h3>Contributing</h3><p>How to send a change, the DCO, governance, and the roadmap.</p></a>
+    <a class="rv-card" href="{{ "docs/contributing/governance/" | relURL }}"><span class="rv-card-k">community</span><h3>Governance &amp; community</h3><p>How decisions are made, how to become a maintainer, where to talk, and how to send your first change.</p></a>
   </div>
   <p class="rv-hub-more"><a class="rv-link" href="{{ "docs/faq/" | relURL }}">Frequently asked questions →</a></p>
 </section>

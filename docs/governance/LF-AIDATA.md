@@ -10,7 +10,7 @@ stage. The requirements are quoted from the
 [LF AI & Data Project Lifecycle Document](https://github.com/lfai/foundation/blob/main/LF%20AI%20&%20Data%20Project%20Lifecycle%20Document.md)
 (approved and in effect as of 2023-06-01; check the current version before applying). The
 proposal itself is [lfaidata-proposal.md](lfaidata-proposal.md); the OpenSSF badge
-self-assessment is [OPENSSF-BEST-PRACTICES.md](OPENSSF-BEST-PRACTICES.md). The README badges, what
+self-assessment is [OPENSSF-BEST-PRACTICES.md](OPENSSF-BEST-PRACTICES.md); every criterion on one page is [FOUNDATION-READINESS.md](FOUNDATION-READINESS.md). The README badges, what
 each proves and the owner action that unlocks the pending ones, are in [BADGES.md](BADGES.md).
 
 **Status:** LF AI & Data Sandbox application (planned). Nothing has been submitted.
@@ -24,13 +24,15 @@ Legend:
 
 ## Positioning
 
-Runink River applies as **"Runink River — an analytics-intensive data and agentic operating
-system"**: an appliance-grade Linux distribution whose job is to run data pipelines,
-local model inference and agent workloads on hardware the operator owns, with no data
-leaving the site. The proposal separates what exists today (with file paths) from the
-roadmap, and explains the scope fit, including the precedent of an operating system hosted
-by an LF umbrella (LF Edge's EVE-OS). An earlier draft of this checklist targeted CNCF
-Sandbox first; the owner chose LF AI & Data on 2026-09-24.
+Runink River applies as **"Runink River — a minimal, auditable developer workstation for
+data, analytics and AI work on hardware you own"**: a Linux distribution (KDE Plasma on s6,
+one pinned kernel, an encrypted ZFS root, a default-deny firewall, a sandbox for untrusted
+code) whose every upstream is pinned and whose rules are written down and checked in CI,
+plus a planned validated pipeline runtime (`riverd`). The proposal separates what exists
+today (with file paths) from the roadmap, and explains the scope fit, including the
+precedent of an operating system hosted by an LF umbrella (LF Edge's EVE-OS). An earlier
+draft of this checklist targeted CNCF Sandbox first; the owner chose LF AI & Data on
+2026-09-24.
 
 ## Stage 1: Sandbox
 
@@ -56,7 +58,7 @@ Sandbox first; the owner chose LF AI & Data on 2026-09-24.
 | T4 | The GitHub DCO app on every repository | owner-side | DCO is adopted and checked by a workflow ([CONTRIBUTING.md](../../CONTRIBUTING.md), `.github/workflows/dco.yml`); installing the app is an organisation setting. Owner action 3. |
 | T5 | `@thelinuxfoundation` as a co-owner of the GitHub organisation | owner-side | At acceptance. Owner action 10. |
 | T6 | OpenSSF Best Practices badge, **passing** | missing (repository side done; registration is owner-side) | Self-assessment: [OPENSSF-BEST-PRACTICES.md](OPENSSF-BEST-PRACTICES.md). Registration needs the public URL: owner action 7. |
-| T7 | Identify who handles security issues | done (one person) | [SECURITY.md](/SECURITY.md) (response process), [MAINTAINERS.md](../../MAINTAINERS.md). A second handler is owner action 11. |
+| T7 | Identify who handles security issues | done (one person) | [SECURITY.md](../../SECURITY.md) (response process), [MAINTAINERS.md](../../MAINTAINERS.md). A second handler is owner action 11. |
 | T8 | A security mailing list, set up by LF AI & Data | owner-side | At acceptance; until then `security@runink.org` (owner action 12). |
 | T9 | `LICENSE` at the root, with third-party licence information | done | [LICENSE](../../LICENSE) (named `LICENSE`, not `LICENSE.md`), [NOTICE](../../NOTICE), [LICENSES/](../../LICENSES), [docs/LICENSING.md](../LICENSING.md) |
 | T9 | `README.md` | done | [README.md](../../README.md) |
@@ -66,7 +68,7 @@ Sandbox first; the owner chose LF AI & Data on 2026-09-24.
 | T9 | `RELEASE.md` (methodology, cadence, criteria) | done (cadence open) | [RELEASE.md](../../RELEASE.md), [CHANGELOG.md](../../CHANGELOG.md). A fixed cadence is owner action 14. |
 | T9 | `GOVERNANCE.md` | done | [GOVERNANCE.md](../../GOVERNANCE.md) |
 | T9 | `SUPPORT.md` | done | [SUPPORT.md](../../SUPPORT.md) |
-| T9 | `SECURITY.md` | done | [SECURITY.md](/SECURITY.md) |
+| T9 | `SECURITY.md` | done | [SECURITY.md](../../SECURITY.md) |
 | T9 | SPDX identifiers in file headers (recommended) | done | Every file has an SPDX header or a [REUSE.toml](../../REUSE.toml) entry; the REUSE lint runs in CI. |
 
 ## Stage 2: Incubation
@@ -77,7 +79,7 @@ All of Sandbox, plus:
 | --- | --- | --- | --- |
 | I1 | At least three organisations actively contributing | missing | One organisation (Runink) and one person today. [GOVERNANCE.md](../../GOVERNANCE.md), "Path to vendor-neutral governance". |
 | I2 | A Technical Steering Committee with a chair, communicating openly | missing | Until there are five maintainers, all maintainers form the TSC ([GOVERNANCE.md](../../GOVERNANCE.md)); no chair is defined. Needs I1 and a governance change. |
-| I3 | At least 500 GitHub stars | missing | 1 star on 2026-09-28. |
+| I3 | At least 500 GitHub stars | missing | 0 stars on 2026-10-04. |
 | I4 | OpenSSF Best Practices badge, **silver** | missing | See [OPENSSF-BEST-PRACTICES.md](OPENSSF-BEST-PRACTICES.md), silver section: the unmet items are listed with their fixes. |
 | I5 | A majority TAC vote | owner-side | After I1 to I4. |
 
@@ -101,9 +103,9 @@ Numbered so other documents can refer to them. None can be done by a pull reques
 | # | Action | State |
 | --- | --- | --- |
 | 1 | **Find a sponsor**: an existing LF AI & Data member organisation (or a new member) willing to sponsor the Sandbox application. | Open (OWNER-TODO) |
-| 2 | **Publish the repository** from a reviewed clean snapshot (never flip a private one: GitHub keeps every `refs/pull/*`). The step-by-step, and the remedy for `org-runink/river` having been made public with its full history, is [docs/PUBLICATION.md](../PUBLICATION.md). Then enable private vulnerability reporting, branch protection on `main` requiring the DCO, `tier1`, `REUSE lint`, `installer-go`, `river-guide` and `go-security` checks, signed tags, and "require approval for all outside collaborators". | Open: the repository is public with its full history (see PUBLICATION.md); none of the settings is enabled yet (2026-09-28) |
+| 2 | **Publish the repository** from a reviewed clean snapshot (never flip a private one: GitHub keeps every `refs/pull/*`). The step-by-step, and the remedy for `org-runink/river` having been made public with its full history, is [docs/PUBLICATION.md](../PUBLICATION.md). Then enable private vulnerability reporting, branch protection on `main` requiring the DCO, `tier1`, `REUSE lint`, `installer-go`, `river-guide` and `go-security` checks, signed tags, and "require approval for all outside collaborators". | Partly done (verified 2026-10-04): the repository is public (with its full history, see PUBLICATION.md); private vulnerability reporting is on; `main` is protected with the six required checks above, admins included. Open: signed tags with the first release, a required approving review (needs a second maintainer), confirming the outside-collaborator approval setting |
 | 3 | **Project GitHub organisation**: move the repository to an organisation of its own (lifecycle task T2), enforce 2FA for every member, install the GitHub DCO app. Make the org-wide `gatekeeper` workflow's source public or vendor it into this repository, so reviewers can read what it checks. | Open |
-| 4 | **Trademark clearance**: USPTO and EUIPO searches for "Runink River" (and "Runink River Server" / "Runink River Workstation"), Class 9 and Class 42. The project never uses a bare "River" as a mark because of the unrelated *river* Wayland compositor. | Open |
+| 4 | **Trademark clearance**: USPTO and EUIPO searches for "Runink River", Class 9 and Class 42. The project never uses a bare "River" as a mark because of the unrelated *river* Wayland compositor. | Open |
 | 5 | **Trademark transfer plan**: which marks go to LF Projects, LLC on acceptance (normally "Runink River" and its logo) and which stay with Runink under a licence back; what happens to the installed identifiers (`runink-*` packages, `/etc/runink`, `ID=runink`). Fill in the brackets in [CHARTER.md](../../CHARTER.md) §5. | Open |
 | 6 | **ZFS/CDDL legal note**: a written opinion from counsel on distributing the prebuilt CDDL `runink-zfs` module package beside the GPL-2.0 kernel ([ZFS-LICENSING.md](ZFS-LICENSING.md)). Also confirm with LF AI & Data that the non-default licences (MIT; GPL-2.0-only and CDDL-1.0 by necessity; Apache-2.0 in `validation/`) are acceptable, and decide whether `validation/` stays Apache-2.0 or moves to the MIT default. | Open |
 | 7 | **OpenSSF Best Practices**: create the bestpractices.dev account, register the project with the public repository URL, enter the self-assessment, reach *passing*. | Open (needs 2) |
@@ -114,7 +116,7 @@ Numbered so other documents can refer to them. None can be done by a pull reques
 | 12 | **Mailboxes** `security@runink.org` and `conduct@runink.org` exist and are read by at least two people, until the foundation's lists replace them. | Open |
 | 13 | **Code of Conduct**: keep Contributor Covenant 2.1 (needs approval as an alternate) or adopt the LF Projects Code of Conduct. | Open |
 | 14 | **Release cadence** for [RELEASE.md](../../RELEASE.md). | Open |
-| 15 | **Release key**: publish it at `https://runink.org/.well-known/gpg-key.txt` and on keyservers, and set the fingerprint in `KEYS`, `install.sh`, [RELEASE-SIGNING.md](../RELEASE-SIGNING.md), [SECURITY.md](/SECURITY.md) and `base/keys/owner/fingerprint` in one commit. | Done 2026-09-27: the lead maintainer's key `95C0A7B97D547413E42660DDB06FE75626F15BF3`, published at that URL and pinned in all five places. A dedicated "Release Engineering" uid and a second signer (action 11) remain open. |
+| 15 | **Release key**: publish it at `https://runink.org/.well-known/gpg-key.txt` and on keyservers, and set the fingerprint in `KEYS`, `install.sh`, [RELEASE-SIGNING.md](../RELEASE-SIGNING.md), [SECURITY.md](../../SECURITY.md) and `base/keys/owner/fingerprint` in one commit. | Done 2026-09-27: the lead maintainer's key `95C0A7B97D547413E42660DDB06FE75626F15BF3`, published at that URL and pinned in all five places. A dedicated "Release Engineering" uid and a second signer (action 11) remain open. |
 | 16 | **Secure Boot**: the organisation Root CA and signing certificate (HSM decision) for MOK enrollment; later a Runink River shim through rhboot/shim-review ([SECURE-BOOT.md](../SECURE-BOOT.md)). | Open (roadmap) |
 | 17 | **CI runners**: this public repository runs only on GitHub-hosted runners and never on a self-hosted one; fork pull requests need a maintainer's approval ("Require approval for all external contributors", a repository setting to confirm) ([CI.md](CI.md)). Tier 2 (ISO build + VM boot) does not fit a standard hosted runner and runs locally until a larger runner is chosen. | Open (setting to confirm) |
 | 18 | **Project website and social accounts** for the proposal's website field (none exist for the project itself). | Open (OWNER-TODO) |
@@ -126,8 +128,6 @@ Numbered so other documents can refer to them. None can be done by a pull reques
 | Close the remaining OpenSSF *passing* and *silver* gaps a PR can close | Listed with their fixes in [OPENSSF-BEST-PRACTICES.md](OPENSSF-BEST-PRACTICES.md) |
 | Tier 2: register a KVM runner, make the install test unattended, add ZFS/encryption tests | `tests/vm-boot-test.sh` is still interactive |
 | Wire the closure lint into the ISO build job | Needs the post-`localrepo` closure |
-| Convert `kernel-build.yml` / `zfs-build.yml` to SHA-pinned actions | Dependabot proposes the bumps |
-| `ADOPTERS.md` and two or three written use cases | Only once real adopters exist; none are claimed today |
+| Two or three written use cases | Only once real adopters exist. [ADOPTERS.md](../../ADOPTERS.md) exists as an empty list with instructions; none are claimed |
 | `riverd` dependency plan: every dependency under an OSI licence | [runtime/README.md](../../runtime/README.md) |
 | Own from-source base replaces the Artix-derived tooling (removes the GPL-3.0 artools patching and the BSD-2-Clause profile files) | [OWN-BASE.md](../OWN-BASE.md) |
-| Known image gaps found during the public-readiness review | The autoinstall path skips the step that wires first-boot enrollment; an un-enrolled node starts k0s without the CoreDNS/cluster-DNS overrides; the k0s pin comments disagree with the pinned value; `HE_UPDATE_*` cannot be set through enrollment |
