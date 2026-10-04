@@ -85,6 +85,68 @@ chown "$U:$U" "$H/filter.json"
 river-installer wait --url "${BASE%/}/api/state" --timeout 120s || log "the installer is not answering yet; starting anyway"
 [ -n "$VT" ] && river-installer vt "$VT"
 
+# WAIT FOR A DISPLAY BEFORE TRYING TO DRAW ON ONE.
+#
+# The web view talks straight to KMS/DRM, so it needs a card with a connected output. Nothing
+# here used to check that: the kiosk waited for the installer's HTTP API -- which is up in
+# seconds, it is just a Go process binding a socket -- and then started the view immediately.
+#
+# On the owner's XPS 13 9300 (Ice Lake) that lost a race it should have won. The view aborted
+# with "Failed to connect to display of type wpe-display-drm: No suitable DRM device found",
+# and because a failed start costs about two seconds (1 s after the exit, 1 s at the foot of the
+# loop) the five allowed failures were spent in roughly TEN SECONDS. The kiosk then gave up for
+# good. A GPU that finishes probing at t+15s -- i915 loading firmware and reading EDID is not
+# instant -- arrives to find the graphical installer already surrendered, with nothing left to
+# retry. The machine is perfectly capable of showing the wizard; it was simply asked too early.
+#
+# So wait, with a bound, and say which of the two things happened. The distinction matters:
+# "no display appeared at all" is a driver problem on this hardware, while "a display appeared
+# and the view still failed" is a WPE problem, and they are fixed in completely different
+# places. Telling them apart in the log is most of the next diagnosis.
+#
+# A card node alone is NOT enough. A machine can expose /dev/dri/card0 whose every connector is
+# disconnected, and WPE refuses that exactly as it refuses no card at all -- so check for a
+# connector that is actually `connected`.
+DRMWAIT=${RIVER_KIOSK_DRMWAIT:-60}
+# Ready means: a card node exists AND some connector is not `disconnected`.
+#
+# Deliberately NOT `= connected`. A DRM connector reports connected, disconnected or UNKNOWN,
+# and "unknown" is what virtual and some embedded drivers report for a panel that is perfectly
+# usable -- QEMU's virtio-vga among them. Requiring `connected` would make this wait the full
+# timeout on exactly the machines where the kiosk already works, turning a fix into a delay.
+# Treating only `disconnected` as not-ready keeps the check permissive: its job is to avoid
+# starting into the void, not to adjudicate what WPE will accept. WPE still gets the final say.
+drm_connected() {
+	ls /dev/dri/card* >/dev/null 2>&1 || return 1
+	for st in /sys/class/drm/card*-*/status; do
+		[ -r "$st" ] || continue
+		[ "$(cat "$st" 2>/dev/null)" = disconnected ] || return 0
+	done
+	return 1
+}
+if drm_connected; then
+	log "display: a connected output is already present"
+else
+	log "display: waiting up to ${DRMWAIT}s for a connected output (the GPU driver may still be probing)"
+	i=0
+	while [ "$i" -lt "$DRMWAIT" ]; do
+		drm_connected && break
+		sleep 1
+		i=$((i + 1))
+	done
+	if drm_connected; then
+		log "display: a connected output appeared after ${i}s"
+	else
+		# Not fatal: say what was found and let the view try anyway, so its own error is still
+		# the one on the record. Giving up here would replace a precise WPE message with a
+		# guess from this script.
+		log "display: NO connected output after ${DRMWAIT}s. Cards present: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo none)."
+		log "display:   This machine has no usable display driver yet -- the graphical installer"
+		log "display:   will almost certainly fail and the text installer will take over."
+		log "display:   Check: ls -l /dev/dri; lsmod | grep -E 'i915|amdgpu|nouveau'; dmesg | grep -i drm"
+	fi
+fi
+
 active_vt() { cat /sys/class/tty/tty0/active 2>/dev/null; }
 xkb() { # the XKB_* lines of kiosk.env, nothing else
 	[ -r "$RUN/kiosk.env" ] && grep -E '^XKB_DEFAULT_(LAYOUT|VARIANT)=[A-Za-z0-9_-]*$' "$RUN/kiosk.env"
@@ -167,12 +229,19 @@ while :; do
 				fi
 				exit 1
 			fi
-			log "view exited after ${ran}s (failure $fails of $MAXFAIL); restarting"
+			# BACK OFF, so the retries cover a useful span of time instead of a blink.
+			# At a flat 1 s the five allowed failures were gone in about ten seconds, which is
+			# shorter than a GPU driver takes to probe on real hardware -- the kiosk could lose
+			# a race it only had to wait out. Backing off 2, 4, 8, 16 s spreads the same five
+			# attempts across roughly half a minute, on top of the DRM wait above.
+			back=$(( 1 << fails )); [ "$back" -gt 16 ] && back=16
+			log "view exited after ${ran}s (failure $fails of $MAXFAIL); retrying in ${back}s"
+			sleep "$back"
 		else
 			fails=0
 			log "view exited after ${ran}s; restarting"
+			sleep 1
 		fi
-		sleep 1
 	fi
 	[ -n "$pid" ] || start
 	sleep 1
