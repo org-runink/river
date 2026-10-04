@@ -562,7 +562,17 @@ if seen "RIVERTEST OK export" live; then
 	echo "qemu-gui-test: phase 2 — installed"
 	: > "$WORK/serial-installed.log"
 	start_vm installed
-	if wait_for "passphrase" installed 300; then
+	# "assphrase", not "passphrase": the prompt ZFS prints is "Passphrase for zriver:" with a
+	# capital P, and `seen` is a case-SENSITIVE `grep -aq`. So this never matched, the recovery
+	# key below was never sent, the pool was never unlocked, and `follow` then sat for its full
+	# 80-minute budget waiting for markers that could not arrive. The `unlocked` and `fb-ready`
+	# checks have therefore never once passed.
+	#
+	# Matching the tail of the word sidesteps the capital without making `seen` case-insensitive
+	# everywhere -- every other caller matches a RIVERTEST/RIVERGUI marker this harness emits
+	# itself, and those should stay exact. This is the only pattern that matches text written by
+	# something else, which is why it is the only one that got the case wrong.
+	if wait_for "assphrase" installed 300; then
 		# Send the key; resend while the boot has not gone on (a key typed before the prompt
 		# is listening is lost).
 		n=0
@@ -574,6 +584,13 @@ if seen "RIVERTEST OK export" live; then
 			[ "$(wc -c < "$WORK/serial-installed.log")" -gt $((sz + 200)) ] && break
 			n=$((n + 1))
 		done
+	else
+		# Say so. Silently falling through to `follow` means an unanswered prompt looks exactly
+		# like a slow boot for the next eighty minutes.
+		snap no-passphrase-prompt
+		echo "qemu-gui-test: no passphrase prompt after 300s -- the key was NOT sent, so the pool" >&2
+		echo "qemu-gui-test:   stays locked and every check after this one will fail. See" >&2
+		echo "qemu-gui-test:   $WORK/serial-installed.log and $WORK/shots/no-passphrase-prompt.png" >&2
 	fi
 	follow installed $((4800 + HOOK_BUDGET)) || echo "qemu-gui-test: installed phase did not finish" >&2
 	wait_exit 120 || true
