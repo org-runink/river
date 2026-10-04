@@ -161,7 +161,8 @@ func main() {
 
 	// The console kiosk first: it draws the same graphical installer straight through
 	// KMS, with no desktop and no display manager, so a machine whose compositor failed
-	// can still get the full UI.
+	// can still get the full UI. Give it the display before asking it to draw on one.
+	releaseDisplay(tty)
 	if err := run(kioskBin, tty, "--vt", vtOf(*ttyPath)); err == nil {
 		return
 	} else {
@@ -261,6 +262,48 @@ func withBinDirs(env []string) []string {
 		out = append(out, "PATH="+want)
 	}
 	return out
+}
+
+// releaseDisplay stops the display manager, because the kiosk cannot draw while it is running.
+//
+// THE KIOSK IS A KMS CLIENT. It renders through wpe-display-drm, straight to /dev/dri, which
+// means it has to become DRM MASTER. The kernel allows exactly one master per device, and a
+// second client asking for it is refused -- measured on this project's own hardware,
+// 2026-10-03: DRM_IOCTL_SET_MASTER returns EACCES ("Permission denied") while a compositor
+// holds the device.
+//
+// A DISPLAY MANAGER HOLDS THAT DEVICE EVEN WHEN IT HAS PRODUCED NOTHING. On the owner's laptop
+// SDDM was up for 836 seconds with one pid and no restarts, and no session ever appeared: no
+// Wayland socket, no X socket, no plasmashell. From the outside that looks like an idle
+// service. To the kernel it is the owner of the screen. So when the fallback handed over to the
+// kiosk, the web view asked for DRM master, was refused, and aborted in under a second -- five
+// times, deterministically, which is exactly the shape of a resource that is held rather than a
+// race that is lost.
+//
+// Stopping it here is safe BECAUSE OF WHERE WE ARE. This code runs only after waitForSession
+// has looked for a compositor and found none; the display manager has already failed to produce
+// one. It is not a working desktop being killed, it is a service holding a device it never used.
+// If the kiosk then fails too, the text installer gets a console that nothing else is driving.
+//
+// Best effort: a medium without s6-rc still reaches the installer, just without the display.
+func releaseDisplay(tty *os.File) {
+	if _, err := exec.LookPath("s6-rc"); err != nil {
+		return
+	}
+	// "sddm" is the bundle name this image enables (iso-profiles/river/profile.yaml services,
+	// re-asserted by installer/lib/80-enable-s6.sh), not the sddm-srv servicedir.
+	cmd := exec.Command("s6-rc", "-d", "change", "sddm") // #nosec G204 -- fixed tool and arguments
+	cmd.Env = withBinDirs(os.Environ())
+	if err := cmd.Run(); err != nil {
+		// Not fatal: it may already be down, or not be this image's display manager.
+		fmt.Fprintf(os.Stderr, "river-live-fallback: could not stop the display manager (%v); "+
+			"the kiosk may not get the display\n", err)
+		return
+	}
+	say(tty, "  Freeing the display from the display manager, which never started a session.\n")
+	// The device is not released the instant the service is told to stop. A short wait costs
+	// nothing next to five failed view starts.
+	time.Sleep(2 * time.Second)
 }
 
 // activate brings the console to the front, so the message is on the screen the person is
