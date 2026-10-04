@@ -7,6 +7,14 @@
 #
 #   build/qemu-gui-test.sh [options] ISO
 #
+# WHAT THIS IS NOT: A GATE. Before it judges anything, this harness overlays repo-built binaries
+# over the ISO's own /usr/local/bin/river-installer and river-kiosk (you can see it on the serial
+# log as "RIVERTEST NOTE overlay ..."), and it starts the wizard itself when the image did not.
+# So a green `gui-desktop` or `gui-install` says the INSTALLER works -- it does NOT say a medium
+# boots to the wizard unaided, which is the thing an owner is actually asked to trust. A check
+# that repairs what it observes cannot fail. For medium behaviour use a run that injects nothing,
+# starts nothing and asserts nothing, and have a human read the frames.
+#
 # The flow is driven through the installer's API with exactly the calls its UI makes
 # (`river-installer drive`, which prints "RIVERGUI SCREEN <name>" as each screen is up); the
 # harness takes a QEMU screendump of the real kiosk (server) or desktop browser (workstation)
