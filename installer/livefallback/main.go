@@ -168,6 +168,13 @@ func main() {
 	} else {
 		fmt.Fprintf(os.Stderr, "river-live-fallback: %s did not start (%v); using the text installer\n", kioskBin, err)
 		say(tty, "\n  The graphical installer could not start either. Using the text installer.\n\n")
+		// This is the moment worth having a file from: neither the desktop nor the kiosk could
+		// draw, and on a machine with no serial port and no network that fact has so far only
+		// ever reached us as a photograph. river-evidence writes the state -- including the web
+		// view's own log, which says why it died -- to the boot medium, so the stick can be
+		// pulled out and read. Best effort: the fallback must reach the text installer whatever
+		// happens here.
+		recordEvidence("kiosk-failed")
 	}
 
 	if err := run(textBin, tty); err != nil {
@@ -262,6 +269,20 @@ func withBinDirs(env []string) []string {
 		out = append(out, "PATH="+want)
 	}
 	return out
+}
+
+// recordEvidence asks river-evidence to write this boot's state onto the boot medium's ESP.
+// Best effort by design: it is a diagnostic, and nothing it does may stop the installer the
+// person is waiting for. It is live-medium only and absent on an installed system, so a missing
+// binary is the normal case there, not an error worth reporting.
+func recordEvidence(label string) {
+	path, err := exec.LookPath("river-evidence")
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(path, label)
+	cmd.Env = withBinDirs(os.Environ())
+	_ = cmd.Run()
 }
 
 // releaseDisplay stops the display manager, because the kiosk cannot draw while it is running.

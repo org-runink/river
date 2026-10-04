@@ -1,0 +1,172 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river-evidence — write what this machine actually did onto the boot medium itself, so a boot
+# that goes wrong can be read afterwards instead of photographed.
+#
+#   river-evidence [LABEL]     collect once, now, filed under LABEL
+#   river-evidence --watch     collect at 60s, 150s and 300s, then idle (the s6 service)
+#
+# WHY. On 2026-10-03 and 2026-10-04 the live medium failed to reach the desktop on the owner's
+# laptop three times, and there was no way to find out why: no graphical session, no network
+# device, and -- because the serial getty was configured for ttyAMA0, an ARM port that does not
+# exist on x86_64 -- no serial console either. A boot of that medium emitted 350 bytes in total,
+# all of it firmware. The only channel left was photographs of the screen, which cannot carry a
+# log. Every theory about that failure has been built on indirect evidence.
+#
+# A USB stick, unlike a screen, comes back. The medium's ESP (partition 2, label RIVER_EFI) is
+# FAT and has about 3.9 MB free next to a 164 KB bootx64.efi. This writes a plain text file
+# there. Boot the stick, let it fail, pull it out, read RIVER-EVIDENCE.TXT on any computer.
+#
+# IT ASSERTS NOTHING AND REPAIRS NOTHING. It reads files and lists processes. The project's
+# existing checks have a habit of starting the thing they are about to check and then passing;
+# this deliberately has no notion of pass or fail, only of what was there.
+#
+# SAFETY. It writes only to the ESP of the disk THIS SYSTEM BOOTED FROM, found by walking from
+# the live mount to its parent disk -- never to an ESP found by label alone, which on a machine
+# mid-install is as likely to be the target disk's. It is live-medium only (the file lives in
+# the live overlay, which 20-clone-rootfs never copies to a target, and is_live is checked
+# anyway), it refuses a medium with less than 512 KB free, it caps the file at 256 KB, and it
+# never touches EFI/. If any of that does not hold it writes to /run and says so.
+set -u
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
+
+RUNFILE=/run/river-evidence.txt
+MNT=/run/river-evidence-esp
+NAME=RIVER-EVIDENCE.TXT
+MAX=262144      # 256 KB: a boot's worth of text, and a rounding error on a 3.9 MB ESP
+MINFREE=524288  # never write to an ESP with under 512 KB spare
+
+log() { echo "river-evidence: $*"; }
+
+# is_live — running from the installer medium (the mount points river-pair-announce's isLive and
+# runink-fw's is_live both use).
+is_live() {
+	awk '$2 ~ /^\/run\/(artix|archiso|miso)\// || $2 == "/bootmnt" || $2 == "/run/initramfs/live" || $2 == "/run/rootfsbase" { f = 1 } END { exit !f }' /proc/mounts 2>/dev/null
+}
+
+# boot_disk — the whole disk this system booted from, reached from the live mount. Not a guess
+# from a label: on a machine being installed, the target disk has an ESP too.
+boot_disk() {
+	dev=$(awk '$2 ~ /^\/run\/(artix|archiso|miso)\// || $2 == "/bootmnt" || $2 == "/run/initramfs/live" || $2 == "/run/rootfsbase" { print $1 }' /proc/mounts 2>/dev/null | grep -m1 '^/dev/')
+	[ -n "${dev:-}" ] || return 1
+	pk=$(lsblk -no PKNAME "$dev" 2>/dev/null | head -1)
+	[ -n "${pk:-}" ] && echo "/dev/$pk" || echo "$dev"
+}
+
+# esp_on DISK — that disk's EFI system partition (GPT type GUID, or the MBR 0xef the ISO uses),
+# falling back to a FAT partition labelled RIVER_EFI *on this disk only*.
+esp_on() {
+	lsblk -lno PATH,PARTTYPE,FSTYPE,LABEL "$1" 2>/dev/null | awk '
+		$2 == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1; exit }
+		$2 == "0xef" { print $1; exit }
+		$3 == "vfat" && $4 == "RIVER_EFI" { print $1; exit }'
+}
+
+collect() {
+	lbl="${1:-boot}"
+	echo "================================================================"
+	echo "RIVER EVIDENCE  $lbl  $(date -u '+%Y-%m-%dT%H:%M:%SZ')  up $(cut -d. -f1 /proc/uptime)s"
+	echo "================================================================"
+	echo "cmdline: $(cat /proc/cmdline 2>/dev/null)"
+	sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null
+
+	echo; echo "-- the web view's own words (/run/river-kiosk/view.log)"
+	# The file that says why the kiosk dies. It existed through every failure and was never read.
+	if [ -e /run/river-kiosk/view.log ]; then
+		tail -c 8192 /run/river-kiosk/view.log
+	else
+		echo "(absent: no web view was ever started on this boot)"
+	fi
+
+	echo; echo "-- did the wizard start by itself"
+	pgrep -a -f 'river-installer|river-kiosk|river-live-fallback|firefox' 2>/dev/null \
+		|| echo "(no installer, kiosk, fallback or browser process)"
+	ss -ltn 2>/dev/null | grep -q 47660 && echo "backend: listening on 47660" \
+		|| echo "backend: nothing listening on 47660"
+
+	echo; echo "-- is there a graphical session"
+	pgrep -a -x sddm plasmashell kwin_wayland Xorg 2>/dev/null || echo "(none of sddm/plasmashell/kwin/Xorg)"
+	ls /run/user/*/wayland-* /tmp/.X11-unix/* 2>/dev/null || echo "(no wayland or X socket)"
+
+	echo; echo "-- who holds the DRM device"
+	for p in /proc/[0-9]*; do
+		for f in "$p"/fd/*; do
+			case "$(readlink "$f" 2>/dev/null)" in /dev/dri/*)
+				echo "pid $(basename "$p") $(tr '\0' ' ' < "$p/cmdline" 2>/dev/null | cut -c1-70)" ;;
+			esac
+		done 2>/dev/null
+	done | sort -u
+	cat /sys/kernel/debug/dri/*/clients 2>/dev/null
+
+	echo; echo "-- graphics hardware and driver"
+	lspci -k 2>/dev/null | grep -A2 -iE 'vga|display|3d controller'
+	ls -l /usr/lib/wpe-webkit-2.0/MiniBrowser 2>/dev/null || echo "MiniBrowser MISSING: the kiosk cannot run"
+
+	echo; echo "-- s6 services up"
+	s6-rc -a list 2>/dev/null | sort | tr '\n' ' '; echo
+
+	echo; echo "-- network"
+	ip -br addr 2>/dev/null
+	lspci -k 2>/dev/null | grep -A3 -iE 'network controller|ethernet controller'
+
+	echo; echo "-- display manager log"
+	tail -c 4096 /var/log/sddm.log 2>/dev/null || echo "(no /var/log/sddm.log)"
+
+	echo; echo "-- kernel errors"
+	dmesg -l err,crit,alert,emerg 2>/dev/null | tail -40
+	echo
+}
+
+publish() {
+	lbl="${1:-boot}"
+	collect "$lbl" >> "$RUNFILE" 2>&1
+	# Trim from the front: the latest boot matters more than the first.
+	if [ "$(wc -c < "$RUNFILE" 2>/dev/null || echo 0)" -gt "$MAX" ]; then
+		tail -c "$MAX" "$RUNFILE" > "$RUNFILE.t" 2>/dev/null && mv -f "$RUNFILE.t" "$RUNFILE"
+	fi
+
+	if ! is_live; then
+		log "not the live medium: evidence stays in $RUNFILE"
+		return 0
+	fi
+	disk=$(boot_disk) || { log "cannot tell which disk this booted from; $RUNFILE only"; return 0; }
+	esp=$(esp_on "$disk")
+	[ -n "${esp:-}" ] || { log "no ESP on the boot disk $disk; $RUNFILE only"; return 0; }
+
+	mkdir -p "$MNT"
+	if ! mount -t vfat -o rw,umask=0077 "$esp" "$MNT" 2>/dev/null; then
+		log "the boot medium's ESP ($esp) will not mount writable (write-protected?); $RUNFILE only"
+		rmdir "$MNT" 2>/dev/null
+		return 0
+	fi
+	free=$(df -B1 --output=avail "$MNT" 2>/dev/null | tail -1 | tr -dc 0-9)
+	if [ "${free:-0}" -lt "$MINFREE" ]; then
+		log "only ${free:-0} bytes free on $esp: leaving the boot medium alone"
+	else
+		cp -f "$RUNFILE" "$MNT/$NAME" 2>/dev/null && log "written to the boot medium: $esp:/$NAME" \
+			|| log "could not write $MNT/$NAME"
+	fi
+	sync
+	umount "$MNT" 2>/dev/null
+	rmdir "$MNT" 2>/dev/null
+}
+
+[ "$(id -u)" -eq 0 ] || { log "run as root (it mounts the boot medium's ESP)"; exit 1; }
+
+case "${1:---once}" in
+	--watch)
+		# Three looks: one while the session is still deciding, one after it should have settled,
+		# one late. A boot that dies at 70s and a boot that never starts the wizard at all leave
+		# different files, and both leave one.
+		for s in 60 90 150; do
+			sleep "$s"
+			publish "t+$(cut -d. -f1 /proc/uptime)s"
+		done
+		# Stay alive so s6 does not restart this and collect forever.
+		while :; do sleep 3600; done
+		;;
+	--once) publish boot ;;
+	*)      publish "$1" ;;
+esac

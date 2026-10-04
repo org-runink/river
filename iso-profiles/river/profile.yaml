@@ -89,6 +89,9 @@ live-session:
     # river-installer: the graphical installer's backend on [::1]:47660 (live medium only;
     # docs/INSTALL.md). The live session opens it in Firefox (etc/xdg/autostart).
     - river-installer
+    # Writes this boot's state to the boot medium's ESP (RIVER-EVIDENCE.TXT): a stick that
+    # fails on hardware we cannot watch comes back and can be read. Live medium only.
+    - river-evidence
   user-services:
     - dbus
     - pipewire

@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# s6 longrun: write this boot's evidence onto the boot medium's ESP, so a medium that fails on
+# hardware we cannot watch can be read afterwards. Live medium only -- on an installed node the
+# clone excludes this service directory and 80-enable-s6 disables it, and it checks anyway.
+#
+# It is a longrun rather than a oneshot because it looks three times (60s, 90s later, 150s later)
+# and a boot that dies between two of those looks is exactly the boot worth having a file from.
+# After the last look it idles, so s6 never restarts it and the collection never loops.
+exec 2>&1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
+if ! grep -qw 'overlay=livefs' /proc/cmdline 2>/dev/null || ! command -v river-evidence >/dev/null 2>&1; then
+	s6-svc -O .
+	exit 0
+fi
+exec river-evidence --watch
