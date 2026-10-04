@@ -84,8 +84,10 @@ func pgrep(name string) bool {
 
 // waitForSession polls until a probe matches or the deadline passes. It returns the probe
 // that matched, or "" when none did.
-func waitForSession(timeout, every time.Duration) string {
-	deadline := time.Now().Add(timeout)
+func waitForSession(timeout, every time.Duration, tick func(time.Duration)) string {
+	start := time.Now()
+	deadline := start.Add(timeout)
+	lastTick := time.Duration(-1)
 	for {
 		for _, p := range probes() {
 			if p.find() {
@@ -95,8 +97,94 @@ func waitForSession(timeout, every time.Duration) string {
 		if !time.Now().Before(deadline) {
 			return ""
 		}
+		// Say something while waiting. A console that sits silent for minutes looks
+		// identical to one that has hung, and the person in front of it has no way to
+		// tell "Plasma is still loading off a USB stick" from "this is never going to
+		// work". Once every 30 s is enough to show progress without filling the screen.
+		if tick != nil {
+			if el := time.Since(start).Truncate(30 * time.Second); el > 0 && el != lastTick {
+				lastTick = el
+				tick(el)
+			}
+		}
 		time.Sleep(every)
 	}
+}
+
+// graphicsReport is the state of the display hardware at the moment the desktop was given up
+// on. Everything here is a plain file read, so it works on a medium with no tools and cannot
+// hang: no lspci, no dmesg binary, no shelling out.
+func graphicsReport() string {
+	var b strings.Builder
+	b.WriteString("  Graphics state (please photograph this if you report the problem):\n")
+
+	// DRM device nodes. None at all means no driver bound and nothing can draw.
+	if ents, err := os.ReadDir("/dev/dri"); err == nil && len(ents) > 0 {
+		var names []string
+		for _, e := range ents {
+			names = append(names, e.Name())
+		}
+		b.WriteString("    /dev/dri        " + strings.Join(names, " ") + "\n")
+	} else {
+		b.WriteString("    /dev/dri        EMPTY or missing - no DRM device, nothing can draw\n")
+	}
+
+	// Which driver claimed each card. simpledrm here means the EFI framebuffer is all we got
+	// and the real GPU driver never bound.
+	if cards, err := filepath.Glob("/sys/class/drm/card*/device/driver"); err == nil {
+		for _, c := range cards {
+			if dst, err := os.Readlink(c); err == nil {
+				card := filepath.Base(filepath.Dir(filepath.Dir(c)))
+				b.WriteString("    " + card + " driver   " + filepath.Base(dst) + "\n")
+			}
+		}
+	}
+
+	// Connector status, so a panel that is present but reported disconnected is visible.
+	if sts, err := filepath.Glob("/sys/class/drm/card*-*/status"); err == nil {
+		for _, st := range sts {
+			if v, err := os.ReadFile(st); err == nil {
+				b.WriteString("    " + filepath.Base(filepath.Dir(st)) + "  " +
+					strings.TrimSpace(string(v)) + "\n")
+			}
+		}
+	}
+
+	// Did the GPU modules load at all?
+	if mods, err := os.ReadFile("/proc/modules"); err == nil {
+		var found []string
+		for _, want := range []string{"i915", "amdgpu", "nouveau", "xe", "simpledrm"} {
+			for _, line := range strings.Split(string(mods), "\n") {
+				if strings.HasPrefix(line, want+" ") {
+					found = append(found, want)
+					break
+				}
+			}
+		}
+		if len(found) == 0 {
+			b.WriteString("    modules         none of i915/amdgpu/nouveau/xe loaded\n")
+		} else {
+			b.WriteString("    modules         " + strings.Join(found, " ") + "\n")
+		}
+	}
+
+	// The display manager's own account. On a live medium /var/log is not writable, so SDDM
+	// writes under /run -- which is exactly why nobody has ever read this file.
+	for _, p := range []string{"/run/log/sddm", "/var/log/sddm.log", "/run/sddm.log"} {
+		if v, err := os.ReadFile(p); err == nil && len(v) > 0 {
+			lines := strings.Split(strings.TrimSpace(string(v)), "\n")
+			if len(lines) > 6 {
+				lines = lines[len(lines)-6:]
+			}
+			b.WriteString("    " + p + " (last " + fmt.Sprint(len(lines)) + "):\n")
+			for _, l := range lines {
+				b.WriteString("      | " + l + "\n")
+			}
+			break
+		}
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // notice is what a person sees on the console when the desktop did not start. It says what
@@ -114,14 +202,31 @@ const notice = `
 `
 
 func main() {
-	timeout := flag.Duration("timeout", 150*time.Second, "how long to wait for a graphical session")
+	// 150 s was not enough and it cost the owner a failed install. This is a CEILING, not a
+	// delay: the loop polls every 3 s and returns the instant a session appears, so raising it
+	// costs exactly nothing on a machine where the desktop comes up normally. What it buys is a
+	// machine where the desktop is merely SLOW -- Plasma starting off a USB stick reads a lot of
+	// small files out of a compressed squashfs, which is an order of magnitude slower than the
+	// SSD-backed ISO a QEMU test reads from. Falling back early does not just give up early, it
+	// TAKES THE CONSOLE AWAY from a desktop that was still coming, and then the kiosk owns a
+	// display the compositor wanted.
+	timeout := flag.Duration("timeout", 6*time.Minute, "how long to wait for a graphical session")
 	every := flag.Duration("poll", 3*time.Second, "how often to look")
 	ttyPath := flag.String("tty", "/dev/tty1", "console to fall back on")
 	check := flag.Bool("check", false, "report and exit; start nothing")
+	// --report: print the graphics state and exit. The same block the fallback puts on the
+	// console, available on demand, so a machine that DID reach a desktop can still be asked
+	// what its display hardware looks like without reproducing a failure first.
+	report := flag.Bool("report", false, "print the graphics state and exit")
 	flag.Parse()
 
+	if *report {
+		fmt.Print(graphicsReport())
+		return
+	}
+
 	if *check {
-		if p := waitForSession(0, *every); p != "" {
+		if p := waitForSession(0, *every, nil); p != "" {
 			fmt.Printf("river-live-fallback: a graphical session is present (%s); nothing to do\n", p)
 			return
 		}
@@ -141,7 +246,20 @@ func main() {
 		return
 	}
 
-	if p := waitForSession(*timeout, *every); p != "" {
+	// Open the console FIRST, so the wait can report progress on it. Opening it changes
+	// nothing for a desktop that does come up: tty1 is a text console sitting behind the
+	// graphical session, and writing to it is harmless.
+	var progress *os.File
+	if f, err := os.OpenFile(*ttyPath, os.O_WRONLY, 0); err == nil {
+		progress = f
+		defer progress.Close()
+	}
+	if p := waitForSession(*timeout, *every, func(el time.Duration) {
+		if progress != nil {
+			fmt.Fprintf(progress, "  Runink River: waiting for the desktop (%s of %s)...\n",
+				el, *timeout)
+		}
+	}); p != "" {
 		fmt.Printf("river-live-fallback: a graphical session appeared (%s); nothing to do\n", p)
 		return
 	}
@@ -157,6 +275,12 @@ func main() {
 	}
 	defer tty.Close()
 	say(tty, notice)
+	// WHY the desktop did not start, on the screen, now. The owner's machine has no serial
+	// port, no network (it reports no interface besides loopback) and no desktop -- so every
+	// previous failure was diagnosed from a photograph of a console that said only THAT it had
+	// failed. One screen with the graphics state on it turns the next report into an answer
+	// instead of another round trip. It is six cheap reads and it cannot fail the boot.
+	say(tty, graphicsReport())
 	activate(*ttyPath)
 
 	// The console kiosk first: it draws the same graphical installer straight through
