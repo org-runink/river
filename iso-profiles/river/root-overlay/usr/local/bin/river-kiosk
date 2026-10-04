@@ -153,7 +153,18 @@ while :; do
 			if [ "$fails" -ge "$MAXFAIL" ]; then
 				log "the web view died $fails times in under ${MINRUN}s each: it cannot run on"
 				log "  this machine. Giving up so the text installer can have the console."
-				log "  Its own output is in $H/view.log."
+				# PRINT THE REASON, do not just name the file. On the owner's hardware,
+				# 2026-10-03, this said "its own output is in $H/view.log" on a machine with
+				# no desktop, no network and no serial console -- so that file was
+				# unreachable, and the only record of WHY the installer's graphical half
+				# failed was a photograph of a line saying where the answer was kept.
+				# A failure that cannot be read is a failure that cannot be fixed.
+				if [ -s "$H/view.log" ]; then
+					log "  what the web view said (last 15 lines of $H/view.log):"
+					sed -e 's/^/    | /' "$H/view.log" | tail -15
+				else
+					log "  $H/view.log is empty: the view died before writing anything."
+				fi
 				exit 1
 			fi
 			log "view exited after ${ran}s (failure $fails of $MAXFAIL); restarting"
