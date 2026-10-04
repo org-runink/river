@@ -7,6 +7,14 @@
 #
 #   build/qemu-gui-test.sh [options] ISO
 #
+# WHAT THIS IS NOT: A GATE. Before it judges anything, this harness overlays repo-built binaries
+# over the ISO's own /usr/local/bin/river-installer and river-kiosk (you can see it on the serial
+# log as "RIVERTEST NOTE overlay ..."), and it starts the wizard itself when the image did not.
+# So a green `gui-desktop` or `gui-install` says the INSTALLER works -- it does NOT say a medium
+# boots to the wizard unaided, which is the thing an owner is actually asked to trust. A check
+# that repairs what it observes cannot fail. For medium behaviour use a run that injects nothing,
+# starts nothing and asserts nothing, and have a human read the frames.
+#
 # The flow is driven through the installer's API with exactly the calls its UI makes
 # (`river-installer drive`, which prints "RIVERGUI SCREEN <name>" as each screen is up); the
 # harness takes a QEMU screendump of the real kiosk (server) or desktop browser (workstation)
@@ -505,17 +513,43 @@ sleep 8
 seen "No bootable option" live && { echo "qemu-gui-test: firmware found no boot option; resetting"; mon system_reset; }
 sleep 70
 [ "$PROFILE" = workstation ] && sleep 110
-if [ "$PROFILE" = workstation ]; then VTKEY=ctrl-alt-f2; else VTKEY=alt-f2; fi
+# Which console to type the kit bootstrap on, per attempt.
+#
+# This used to be a single hardcoded ctrl-alt-f2, and on the workstation medium that is a VT the
+# bootstrap can never reach: after the first switch away from the live Wayland session, tty2 is
+# wedged -- the framebuffer is pure black (grey mean exactly 0, against 0.0026 for an idle text
+# console with a cursor) and keystrokes are dropped. `loginctl` inside a failing guest shows the
+# autologin getty on tty2 alive and the compositor on tty8, so this is not a VT collision; the
+# console is simply dead after the switch. That is river#134, and the "visit VT3 first" hop below
+# did not recover it: reproduced 2/2 against the untouched 20261003 image, including with this
+# harness's own 8 GiB configuration.
+#
+# tty1 has had an autologin getty since river#26 and is the console the live medium is designed
+# to land on. The identical bootstrap typed there ran the kit 2/2, reporting RIVERTEST BEGIN live
+# and OK gui-desktop on an image this harness had been calling broken.
+#
+# So: start on tty1, and rotate rather than hammer one VT four times -- a single hardcoded
+# console is a lottery, and losing it costs the whole run with nothing to show for it.
+if [ "$PROFILE" = workstation ]; then
+	VTKEYS="ctrl-alt-f1 ctrl-alt-f2 ctrl-alt-f3 ctrl-alt-f1"
+else
+	VTKEYS="alt-f2 alt-f2 alt-f2 alt-f2"
+fi
 BOOT="sudo sh -c \"mkdir -p /run/rt; mount -r -L RIVERTEST /run/rt; sh /run/rt/live.sh\""
 tries=0
 until seen "RIVERTEST BEGIN live" live; do
 	tries=$((tries + 1))
-	[ "$tries" -le 4 ] || die "the live system never ran the kit"
-	# Workstation: visit VT3 first. The first Ctrl+Alt+F2 away from the live Plasma session can
-	# leave a black screen with the keys still going to kwin (river#134); a switch to any other
-	# console first always works, and VT2 is reachable from there.
-	[ "$PROFILE" = workstation ] && { mon "sendkey ctrl-alt-f3"; sleep 3; }
-	mon "sendkey $VTKEY"; sleep 2
+	# Photograph the screen before giving up. Without this the failure leaves an EMPTY shots/
+	# and the only artefact is a 350-byte serial log of firmware -- which is why "never ran the
+	# kit" took a full investigation to explain rather than one glance. build/cloud-image.sh:208
+	# has always done this; this one did not.
+	[ "$tries" -le 4 ] || { snap never-ran-try"$tries"; die "the live system never ran the kit (see $WORK/shots)"; }
+	# The VT3 hop that used to be here is gone: it was the switch that wedged tty2, so it
+	# caused the failure it was added to work around.
+	VTKEY=$(echo "$VTKEYS" | cut -d' ' -f"$tries"); [ -n "$VTKEY" ] || VTKEY=ctrl-alt-f1
+	mon "sendkey $VTKEY"; sleep 4
+	# Keep a frame per attempt, so a run that needed three tries can be read afterwards.
+	snap "live-try$tries"
 	type_line runink; sleep 2; type_line runink; sleep 3
 	type_line "$BOOT"
 	sleep 30
