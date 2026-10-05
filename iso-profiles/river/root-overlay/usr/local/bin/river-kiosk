@@ -2,121 +2,63 @@
 # SPDX-FileCopyrightText: 2026 The RIVER Authors
 # SPDX-License-Identifier: MIT
 #
-# river-kiosk — show the graphical installer (or the graphical first boot) full screen on the
-# local display, with nothing else around it.
+# river-kiosk — show the graphical installer on a machine whose desktop did not start.
 #
-#   river-kiosk [--vt N] [--url URL] [--run-dir DIR]
+# IT IS A COMPOSITOR AND A BROWSER. Nothing else. That is the whole design, and it is the
+# design every other live medium uses: CachyOS, Manjaro and Fedora all boot a session and run
+# their installer as an ordinary window in it. Nobody draws their installer onto bare KMS.
 #
-# The web view is WPE WebKit's MiniBrowser (wpewebkit) drawing straight to the display through
-# KMS/DRM: no X server, no Wayland compositor. It runs as the unprivileged `river-kiosk` user
-# (created here, groups video and input), in private mode (no history, cache or cookies on
-# disk), with a content filter that blocks everything but the loopback, so it can show the
-# installer and a first-boot setup page on [::1] and nothing from any network.
+# This script used to. It ran WPE WebKit's MiniBrowser with WPE_DISPLAY=wpe-display-drm --
+# straight to the display through KMS, no compositor at all -- as a dedicated unprivileged
+# user, with its own content-filter rules, its own VT bookkeeping and its own pointer
+# workarounds. It was clever and it did not work: on the owner's XPS 13 9300 it aborted five
+# times in ten seconds with "Failed to connect to display of type wpe-display-drm: No suitable
+# DRM device found", and the install fell through to the text installer on a laptop where three
+# other distributions open their wizard without trouble.
 #
-# The mouse pointer is drawn by the page, not by the display. WPE's DRM backend delivers the
-# mouse (moves, clicks, wheel) but draws no pointer on most real displays: none on the legacy
-# KMS path used here (WPE 2.52: "FIXME: support cursors in legacy mode"), none on a display
-# without a hardware cursor plane (simpledrm, most BMC and virtual VGA) and none without an
-# Xcursor theme, which the image does not carry. So the view opens the UI with the fragment
-# #kiosk, and the UI (app.js, kioskPointer) draws its own pointer at the mouse position and
-# hides the platform one. A compositor (cage) draws one too, but on a display with no GPU
-# renderer (the displays above) WPE under cage painted a black or half-drawn screen (QEMU, 2026-09-27).
-# WPE ignores absolute pointers (a BMC remote console in absolute mode, a tablet): use the
-# console's relative mouse mode.
+# WPE's DRM backend wants a device with a hardware cursor plane and a GPU renderer. A plain EFI
+# framebuffer (simpledrm) has neither, and simpledrm is exactly what you get before -- or
+# instead of -- a real driver binding. So the bespoke path failed precisely on the machines
+# that needed a fallback at all.
 #
-# It keeps the kiosk up: it restarts the view if it dies, when the installer asks
-# (<run-dir>/kiosk.restart, after a keyboard change: <run-dir>/kiosk.env carries the XKB layout),
-# and after the operator comes back from another console. While another virtual terminal is
-# active (Alt+F2 for the recovery console) the view is stopped, so the text console is really
-# on screen; the installer keeps its state, and the view reconnects to it. <run-dir>/kiosk.stop
-# ends it.
+# A compositor solves this because solving it is its job. wlroots drives KMS properly, and
+# falls back to software rendering (WLR_RENDERER=pixman) when there is no GPU to render with.
+# So: cage, which is a Wayland compositor that runs exactly one fullscreen application, and
+# inside it the SAME river-installer-desktop the Plasma session already runs. One browser, one
+# launcher, one definition of what the installer looks like, used by both paths.
 #
-# The kiosk is live-medium only (Packages-Live), except on a server installed with the graphical
-# first boot, which keeps it until that first boot finishes (20-clone-rootfs, 77-firstboot-ui).
-# Without it, this exits 1 and the caller falls back to a text console.
+# What this deletes, and does not miss: the river-kiosk user and its group juggling, the
+# WebKit content-filter JSON, WPE_DISPLAY/WPE_DRM_DISABLE_ATOMIC, the manual "is the operator
+# on another VT" polling and the pause/resume of the view around it. A compositor on a seat
+# does the VT handover itself, through libseat and elogind, which is the thing it is for.
 set -u
-PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin; export PATH
 
-VT=""
-URL="http://[::1]:47660/"
-RUN=/run/river-installer
-MB=/usr/lib/wpe-webkit-2.0/MiniBrowser
-U=river-kiosk
-H=/run/river-kiosk
+VT="" URL_WAIT=120
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--vt) VT="${2:?}"; shift ;;
-		--url) URL="${2:?}"; shift ;;
-		--run-dir) RUN="${2:?}"; shift ;;
-		*) echo "river-kiosk: unknown argument $1" >&2; exit 2 ;;
+		--vt) VT=${2:?}; shift 2 ;;
+		--wait) URL_WAIT=${2:?}; shift 2 ;;
+		*) echo "river-kiosk: unknown argument: $1" >&2; exit 2 ;;
 	esac
-	shift
 done
-# The fragment tells the UI it is in the kiosk (it draws the pointer); the server never sees it.
-BASE="${URL%%#*}"
-case "$URL" in *"#"*) ;; *) URL="$URL#kiosk" ;; esac
-[ "$(id -u)" -eq 0 ] || { echo "river-kiosk: run as root (it drops to $U)" >&2; exit 1; }
-[ -x "$MB" ] || { echo "river-kiosk: no web view ($MB): wpewebkit is not installed" >&2; exit 1; }
-command -v river-installer >/dev/null 2>&1 || { echo "river-kiosk: river-installer not found" >&2; exit 1; }
 
+RUN=/run/river-kiosk
+LAUNCH=/usr/local/bin/river-installer-desktop
+U=${RIVER_KIOSK_USER:-runink}
 log() { echo "river-kiosk: $*"; }
+mkdir -p "$RUN"; rm -f "$RUN/kiosk.stop"
 
-# The kiosk user: no login, no home on disk, allowed to open the display and the input devices.
-if ! id "$U" >/dev/null 2>&1; then
-	useradd -r -M -d "$H" -s /usr/bin/nologin -U "$U" || { log "cannot create $U"; exit 1; }
-fi
-for g in video input render; do
-	getent group "$g" >/dev/null 2>&1 && usermod -aG "$g" "$U" 2>/dev/null
-done
-install -d -m 0700 -o "$U" -g "$U" "$H"
-rm -f "$RUN/kiosk.stop" "$RUN/kiosk.restart"
+command -v cage >/dev/null 2>&1 || { log "cage is not installed: no compositor, no graphical fallback"; exit 1; }
+[ -x "$LAUNCH" ] || { log "$LAUNCH is missing: nothing to show"; exit 1; }
+id "$U" >/dev/null 2>&1 || { log "no user $U to run the session as"; exit 1; }
 
-# Only the loopback: WebKit content-blocker rules, evaluated in order.
-cat > "$H/filter.json" <<'EOF'
-[
-  {"trigger": {"url-filter": ".*"}, "action": {"type": "block"}},
-  {"trigger": {"url-filter": "^http://\\[::1\\](:[0-9]+)?/"}, "action": {"type": "ignore-previous-rules"}},
-  {"trigger": {"url-filter": "^http://127\\.0\\.0\\.1(:[0-9]+)?/"}, "action": {"type": "ignore-previous-rules"}},
-  {"trigger": {"url-filter": "^about:blank"}, "action": {"type": "ignore-previous-rules"}}
-]
-EOF
-chown "$U:$U" "$H/filter.json"
-
-river-installer wait --url "${BASE%/}/api/state" --timeout 120s || log "the installer is not answering yet; starting anyway"
-[ -n "$VT" ] && river-installer vt "$VT"
-
-# WAIT FOR A DISPLAY BEFORE TRYING TO DRAW ON ONE.
-#
-# The web view talks straight to KMS/DRM, so it needs a card with a connected output. Nothing
-# here used to check that: the kiosk waited for the installer's HTTP API -- which is up in
-# seconds, it is just a Go process binding a socket -- and then started the view immediately.
-#
-# On the owner's XPS 13 9300 (Ice Lake) that lost a race it should have won. The view aborted
-# with "Failed to connect to display of type wpe-display-drm: No suitable DRM device found",
-# and because a failed start costs about two seconds (1 s after the exit, 1 s at the foot of the
-# loop) the five allowed failures were spent in roughly TEN SECONDS. The kiosk then gave up for
-# good. A GPU that finishes probing at t+15s -- i915 loading firmware and reading EDID is not
-# instant -- arrives to find the graphical installer already surrendered, with nothing left to
-# retry. The machine is perfectly capable of showing the wizard; it was simply asked too early.
-#
-# So wait, with a bound, and say which of the two things happened. The distinction matters:
-# "no display appeared at all" is a driver problem on this hardware, while "a display appeared
-# and the view still failed" is a WPE problem, and they are fixed in completely different
-# places. Telling them apart in the log is most of the next diagnosis.
-#
-# A card node alone is NOT enough. A machine can expose /dev/dri/card0 whose every connector is
-# disconnected, and WPE refuses that exactly as it refuses no card at all -- so check for a
-# connector that is actually `connected`.
+# WAIT FOR A DISPLAY BEFORE DRAWING ON ONE. Ready means a card node exists AND some connector
+# is not `disconnected` -- deliberately not `= connected`, because a connector reports
+# connected, disconnected or UNKNOWN, and "unknown" is what virtual and some embedded drivers
+# report for a perfectly usable panel. Requiring `connected` would wait the full timeout on
+# exactly the machines where this already works.
 DRMWAIT=${RIVER_KIOSK_DRMWAIT:-60}
-# Ready means: a card node exists AND some connector is not `disconnected`.
-#
-# Deliberately NOT `= connected`. A DRM connector reports connected, disconnected or UNKNOWN,
-# and "unknown" is what virtual and some embedded drivers report for a panel that is perfectly
-# usable -- QEMU's virtio-vga among them. Requiring `connected` would make this wait the full
-# timeout on exactly the machines where the kiosk already works, turning a fix into a delay.
-# Treating only `disconnected` as not-ready keeps the check permissive: its job is to avoid
-# starting into the void, not to adjudicate what WPE will accept. WPE still gets the final say.
-drm_connected() {
+drm_ready() {
 	ls /dev/dri/card* >/dev/null 2>&1 || return 1
 	for st in /sys/class/drm/card*-*/status; do
 		[ -r "$st" ] || continue
@@ -124,125 +66,72 @@ drm_connected() {
 	done
 	return 1
 }
-if drm_connected; then
-	log "display: a connected output is already present"
+if drm_ready; then
+	log "display: a usable output is already present"
 else
-	log "display: waiting up to ${DRMWAIT}s for a connected output (the GPU driver may still be probing)"
+	log "display: waiting up to ${DRMWAIT}s for one (the GPU driver may still be probing)"
 	i=0
-	while [ "$i" -lt "$DRMWAIT" ]; do
-		drm_connected && break
-		sleep 1
-		i=$((i + 1))
-	done
-	if drm_connected; then
-		log "display: a connected output appeared after ${i}s"
-	else
-		# Not fatal: say what was found and let the view try anyway, so its own error is still
-		# the one on the record. Giving up here would replace a precise WPE message with a
-		# guess from this script.
-		log "display: NO connected output after ${DRMWAIT}s. Cards present: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo none)."
-		log "display:   This machine has no usable display driver yet -- the graphical installer"
-		log "display:   will almost certainly fail and the text installer will take over."
-		log "display:   Check: ls -l /dev/dri; lsmod | grep -E 'i915|amdgpu|nouveau'; dmesg | grep -i drm"
-	fi
+	while [ "$i" -lt "$DRMWAIT" ]; do drm_ready && break; sleep 1; i=$((i + 1)); done
+	drm_ready && log "display: appeared after ${i}s" \
+		|| log "display: none after ${DRMWAIT}s (cards: $(ls /dev/dri 2>/dev/null | tr '\n' ' ')) — trying anyway"
 fi
 
-active_vt() { cat /sys/class/tty/tty0/active 2>/dev/null; }
-xkb() { # the XKB_* lines of kiosk.env, nothing else
-	[ -r "$RUN/kiosk.env" ] && grep -E '^XKB_DEFAULT_(LAYOUT|VARIANT)=[A-Za-z0-9_-]*$' "$RUN/kiosk.env"
-}
+river-installer wait --url "http://[::1]:47660/api/state" --timeout "${URL_WAIT}s" \
+	|| log "the installer is not answering yet; starting anyway"
+[ -n "$VT" ] && river-installer vt "$VT"
 
-pid=""
-# A VIEW THAT WILL NOT STAY UP MUST GIVE UP, NOT SPIN.
-#
-# This loop used to restart the web view forever. On the owner's hardware, 2026-10-03, the
-# MiniBrowser aborted the instant it started -- the DRM backend could not take the display --
-# and the kiosk restarted it about once a second, for as long as the machine was on. Two
-# consequences, and the second is the one that mattered:
-#
-#   1. river-live-fallback only moves on when river-kiosk EXITS. A kiosk that loops forever
-#      never fails, so the fallback never reached the text installer on its own.
-#   2. every restart logged to the console the TEXT INSTALLER was drawing on, so its ERASE
-#      prompt and its pool-name dialog were overwritten faster than they could be read. The
-#      installer was running and unusable.
-#
-# So: a view that dies before it has been up for MINRUN seconds counts as a failed start, and
-# MAXFAIL of those in a row is a kiosk that is not going to work on this machine. Say so once
-# and exit non-zero, which is exactly the signal the fallback is waiting for. A view that ran
-# longer than MINRUN resets the count, so an ordinary crash after real use still restarts.
+# A session that will not stay up must give up, not spin: river-live-fallback only moves on to
+# the text installer when this EXITS, and a view restarting once a second overwrites the very
+# console that installer is drawing on. Backoff 2/4/8/16s so the attempts span ~30s rather than
+# a blink -- shorter than that and a slow GPU probe loses a race it only had to wait out.
 MINRUN=${RIVER_KIOSK_MINRUN:-10}
-MAXFAIL=${RIVER_KIOSK_MAXFAIL:-5}
+MAXFAIL=${RIVER_KIOSK_MAXFAIL:-4}
 fails=0
-started_at=0
 
-start() {
-	started_at=$(date +%s)
-	# shellcheck disable=SC2046 # the XKB assignments are single words by the grep above
-	setpriv --reuid="$U" --regid="$U" --init-groups --inh-caps=-all \
-		env -i HOME="$H" XDG_RUNTIME_DIR="$H" LANG=C.UTF-8 PATH=/usr/bin \
-		WPE_DISPLAY=wpe-display-drm WPE_DRM_DISABLE_ATOMIC=1 $(xkb) \
-		"$MB" --fullscreen --private --content-filter="$H/filter.json" --bg-color='#eef3f7' "$URL" \
-		>"$H/view.log" 2>&1 &
-	pid=$!
-	log "view started (pid $pid, layout $(xkb | sed -n 's/^XKB_DEFAULT_LAYOUT=//p'))"
+# Attempts 1..2 use whatever renderer wlroots picks (GL where there is a GPU). From attempt 3 we
+# force the software renderer: that is the simpledrm / no-GPU case, and pixman draws there when
+# GL cannot. Trying GL first keeps a normal machine fast.
+run_once() {
+	renderer=""
+	[ "$fails" -ge 2 ] && renderer="WLR_RENDERER=pixman"
+	[ -n "$renderer" ] && log "attempt $((fails + 1)): forcing the software renderer ($renderer)" \
+		|| log "attempt $((fails + 1)): starting the compositor"
+	started=$(date +%s)
+	# shellcheck disable=SC2086 # renderer is one KEY=VALUE word or empty, by construction
+	setpriv --reuid="$U" --regid="$U" --init-groups \
+		env -i HOME="/home/$U" USER="$U" PATH=/usr/local/bin:/usr/bin:/bin \
+		XDG_RUNTIME_DIR="/run/user/$(id -u "$U")" LANG=C.UTF-8 \
+		XDG_SESSION_TYPE=wayland $renderer \
+		cage -- "$LAUNCH" >"$RUN/session.log" 2>&1
+	rc=$?
+	ran=$(( $(date +%s) - started ))
+	return $rc
 }
-stop() {
-	[ -n "$pid" ] || return 0
-	kill "$pid" 2>/dev/null
-	i=0
-	while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
-	kill -9 "$pid" 2>/dev/null
-	wait "$pid" 2>/dev/null
-	pid=""
-}
-trap 'stop; exit 0' TERM INT
 
 while :; do
-	if [ -e "$RUN/kiosk.stop" ]; then stop; log "stopped"; exit 0; fi
-	if [ -n "$VT" ] && [ "$(active_vt)" != "tty$VT" ]; then
-		# The operator switched to another console: give the display back to it.
-		[ -n "$pid" ] && { log "console $(active_vt) is active; pausing the view"; stop; }
-		sleep 1
-		continue
+	[ -e "$RUN/kiosk.stop" ] && { log "stopped"; exit 0; }
+	run_once || true
+	if [ "${ran:-0}" -ge "$MINRUN" ]; then
+		# It ran long enough to have been used. An ordinary exit after real use is the
+		# operator closing the installer, not a broken machine.
+		log "the session ended after ${ran}s"
+		exit 0
 	fi
-	if [ -e "$RUN/kiosk.restart" ]; then rm -f "$RUN/kiosk.restart"; stop; fi
-	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-		wait "$pid" 2>/dev/null
-		ran=$(( $(date +%s) - started_at ))
-		pid=""
-		if [ "$ran" -lt "$MINRUN" ]; then
-			fails=$((fails + 1))
-			if [ "$fails" -ge "$MAXFAIL" ]; then
-				log "the web view died $fails times in under ${MINRUN}s each: it cannot run on"
-				log "  this machine. Giving up so the text installer can have the console."
-				# PRINT THE REASON, do not just name the file. On the owner's hardware,
-				# 2026-10-03, this said "its own output is in $H/view.log" on a machine with
-				# no desktop, no network and no serial console -- so that file was
-				# unreachable, and the only record of WHY the installer's graphical half
-				# failed was a photograph of a line saying where the answer was kept.
-				# A failure that cannot be read is a failure that cannot be fixed.
-				if [ -s "$H/view.log" ]; then
-					log "  what the web view said (last 15 lines of $H/view.log):"
-					sed -e 's/^/    | /' "$H/view.log" | tail -15
-				else
-					log "  $H/view.log is empty: the view died before writing anything."
-				fi
-				exit 1
-			fi
-			# BACK OFF, so the retries cover a useful span of time instead of a blink.
-			# At a flat 1 s the five allowed failures were gone in about ten seconds, which is
-			# shorter than a GPU driver takes to probe on real hardware -- the kiosk could lose
-			# a race it only had to wait out. Backing off 2, 4, 8, 16 s spreads the same five
-			# attempts across roughly half a minute, on top of the DRM wait above.
-			back=$(( 1 << fails )); [ "$back" -gt 16 ] && back=16
-			log "view exited after ${ran}s (failure $fails of $MAXFAIL); retrying in ${back}s"
-			sleep "$back"
+	fails=$((fails + 1))
+	if [ "$fails" -ge "$MAXFAIL" ]; then
+		log "the session died $fails times in under ${MINRUN}s each: it cannot run on this"
+		log "  machine. Giving up so the text installer can have the console."
+		# PRINT THE REASON. A failure that cannot be read is a failure that cannot be fixed,
+		# and this machine has no serial port, no network and no desktop to read it from.
+		if [ -s "$RUN/session.log" ]; then
+			log "  what the compositor said (last 15 lines of $RUN/session.log):"
+			tail -15 "$RUN/session.log" | sed -e 's/^/    | /'
 		else
-			fails=0
-			log "view exited after ${ran}s; restarting"
-			sleep 1
+			log "  $RUN/session.log is empty: it died before writing anything."
 		fi
+		exit 1
 	fi
-	[ -n "$pid" ] || start
-	sleep 1
+	back=$(( 1 << fails )); [ "$back" -gt 16 ] && back=16
+	log "the session exited after ${ran}s (failure $fails of $MAXFAIL); retrying in ${back}s"
+	sleep "$back"
 done

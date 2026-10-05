@@ -13,18 +13,31 @@
 ## The PKGBUILD header lists, path by path, what artools reads and why each one is there.
 runink-grub-live
 
-## wpewebkit — the web view river-kiosk draws with, straight to the display through KMS/DRM
-## with no X and no Wayland compositor.
+## cage — a Wayland compositor that runs exactly one fullscreen application.
 ##
-## WHY IT IS HERE. river-live-fallback's chain is: a graphical session, else river-kiosk, else
-## the text installer. On the workstation image the kiosk could NEVER run, because wpewebkit was
-## in no package list at all -- so on a machine whose desktop does not start, the one GRAPHICAL
-## path we advertise failed with "no web view (/usr/lib/wpe-webkit-2.0/MiniBrowser): wpewebkit
-## is not installed" and the user was dropped to a text installer. That is what the owner hit on
-## real hardware on 2026-10-03.
+## WHY IT IS HERE, and why it is not wpewebkit any more. river-live-fallback's chain is: a
+## graphical session, else river-kiosk, else the text installer. The kiosk used to be WPE
+## WebKit's MiniBrowser drawn straight onto KMS/DRM with no compositor at all. That wants a
+## hardware cursor plane and a GPU renderer, and a plain EFI framebuffer (simpledrm) has
+## neither -- so it failed on precisely the machines that needed a fallback. On the owner's
+## XPS 13 9300 it aborted five times in ten seconds with "No suitable DRM device found", on a
+## laptop where CachyOS, Manjaro and Fedora all open their installer without trouble.
 ##
-## It is LIVE-ONLY on purpose. An installed workstation has Plasma and a browser, so it has no
-## use for the kiosk; 20-clone-rootfs removes this layer from the installed machine, which keeps
-## the installed system's footprint unchanged. The cost is paid only on the medium that needs a
-## graphical installer without a desktop.
-wpewebkit
+## Those distributions do the boring thing: boot a session, run the installer as an ordinary
+## window in it. So does this now. cage drives KMS through wlroots -- which is a compositor's
+## actual job -- and falls back to software rendering (WLR_RENDERER=pixman) where there is no
+## GPU to render with. Inside it runs the SAME river-installer-desktop the Plasma session runs,
+## so there is one browser, one launcher and one definition of what the installer looks like.
+##
+## firefox is already in Packages-Root, so this swap ADDS a small compositor and REMOVES a
+## whole second browser engine.
+##
+## It is LIVE-ONLY on purpose. An installed workstation has Plasma and a browser and no use for
+## the kiosk; 20-clone-rootfs removes this layer from the installed machine, so the installed
+## footprint is unchanged. The cost is paid only on the medium that needs a graphical installer
+## without a desktop.
+##
+## Downstream images are unaffected: a profile that needs a different kiosk ships its own copy
+## of river-kiosk and its own live package list, because an image with no desktop should not
+## grow one just to show an installer.
+cage

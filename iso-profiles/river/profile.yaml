@@ -287,11 +287,17 @@ livefs:
     # package. The menu itself is iso-profiles/river/grub/, which
     # scripts/patch-artools.go copies over whatever this layer supplied.
     - runink-grub-live
-    # wpewebkit: the web view river-kiosk draws with, straight to KMS/DRM with no X and no
-    # Wayland compositor. river-live-fallback's chain is a graphical session, else the kiosk,
-    # else the text installer -- and on the workstation image the kiosk could NEVER run,
-    # because wpewebkit was in no package list at all. On a machine whose desktop does not
-    # start, the one graphical path we advertise failed with "wpewebkit is not installed" and
-    # the user landed in a text installer (owner, real hardware, 2026-10-03). Live-only: an
+    # cage: a Wayland compositor that runs exactly one fullscreen application. It replaced
+    # wpewebkit on 2026-10-05. river-live-fallback's chain is a graphical session, else
+    # river-kiosk, else the text installer, and the kiosk used to be WPE WebKit's MiniBrowser
+    # drawn straight onto KMS/DRM with no compositor. That wants a hardware cursor plane and a
+    # GPU renderer, which a plain EFI framebuffer does not have -- so it failed on exactly the
+    # machines that needed a fallback, including the owner's XPS 13 9300 (five aborts in ten
+    # seconds, "No suitable DRM device found") on a laptop where CachyOS, Manjaro and Fedora
+    # all open their installer without trouble. Those distributions do the boring thing: boot a
+    # session and run the installer as a window in it. cage drives KMS through wlroots and
+    # falls back to software rendering where there is no GPU, and it runs the SAME
+    # river-installer-desktop the Plasma session runs. firefox is already in Packages-Root, so
+    # this adds a small compositor and drops a whole second browser engine. Live-only: an
     # installed workstation has Plasma and a browser and no use for the kiosk.
-    - wpewebkit
+    - cage
