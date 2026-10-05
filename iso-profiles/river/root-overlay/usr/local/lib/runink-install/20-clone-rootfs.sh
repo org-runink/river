@@ -33,7 +33,17 @@ rsync -aHAXS --numeric-ids --info=progress2 \
   --exclude='/usr/share/river/installer' --exclude='/etc/s6/sv/river-installer' \
   --exclude='/usr/local/bin/river-installer-tty' --exclude='/etc/xdg/autostart/river-installer.desktop' \
   --exclude='/usr/local/bin/river-installer-desktop' --exclude='/var/log/river-installer' \
+  --exclude='/etc/xdg/kscreenlockerrc' --exclude='/etc/xdg/powermanagementprofilesrc' \
+  --exclude='/etc/xdg/weston' \
   / "$TARGET/"
+
+# kscreenlockerrc and powermanagementprofilesrc: the LIVE session must not lock or blank,
+# because somebody is copying a 64-character recovery key off the screen and the autologin user
+# has no password they could use to get back in. An INSTALLED machine must do both. These are
+# live-overlay files and the overlay is part of the running system this clones, so without an
+# explicit exclude they would follow the install and leave every installed workstation unable
+# to lock its screen. /etc/xdg/weston goes with them: the kiosk config has no meaning on a
+# machine that has Plasma.
 
 # Recreate the virtual-fs mountpoints the excludes emptied.
 for d in proc sys dev run tmp mnt media; do mkdir -p "$TARGET/$d"; done

@@ -1,0 +1,43 @@
+# Runink River live medium: the screen stays on while the installer is up.
+#
+# LIVE OVERLAY ONLY, and like kscreenlockerrc beside it that depends on an explicit exclude in
+# 20-clone-rootfs rather than on the overlay being dropped. Remove the exclude and every
+# installed machine inherits a screen that never blanks.
+#
+# kscreenlockerrc stops the LOCK; this stops the BLANK. They are separate subsystems and the
+# boot test caught both -- a lock screen at ~6 min and DPMS off at ~7. Disabling one without
+# the other still leaves somebody staring at a black screen mid-install, wondering whether the
+# machine has hung, with no way to tell that it has not.
+#
+# All three profiles, deliberately. A laptop being installed from a USB stick is very often on
+# battery, and AC-only settings would leave exactly that case broken.
+
+[AC][DPMSControl]
+idleTime=0
+
+[AC][DimDisplay]
+idleTime=0
+
+[AC][SuspendSession]
+idleTime=0
+suspendType=0
+
+[Battery][DPMSControl]
+idleTime=0
+
+[Battery][DimDisplay]
+idleTime=0
+
+[Battery][SuspendSession]
+idleTime=0
+suspendType=0
+
+[LowBattery][DPMSControl]
+idleTime=0
+
+[LowBattery][DimDisplay]
+idleTime=0
+
+[LowBattery][SuspendSession]
+idleTime=0
+suspendType=0
