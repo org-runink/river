@@ -9,6 +9,29 @@
 # longrun; it answers only root and this user.
 set -u
 PATH=/usr/local/bin:/usr/bin:/bin; export PATH
+
+# RUN AS THE LIVE USER, even when started as root.
+#
+# The Plasma session autostarts this as the logged-in user and nothing below needs privilege.
+# The KIOSK path starts it as root, because weston there runs as root -- it is the only way to
+# take the DRM device without a logind session (see river-kiosk). The compositor needs that;
+# a browser emphatically does not, so drop back down here rather than let firefox inherit it.
+#
+# Done in this script rather than a wrapper on purpose: this is the one definition of how the
+# installer is shown, and River is porting shell to Go (`river lint shell-ratchet`), so a new
+# shell file would be the wrong direction as well as a second place to keep in step.
+U=${RIVER_KIOSK_USER:-runink}
+if [ "$(id -u)" = 0 ] && id "$U" >/dev/null 2>&1; then
+	# weston's socket lives in ROOT's runtime dir; let the unprivileged browser reach it.
+	RT=${XDG_RUNTIME_DIR:-/run/river-kiosk}
+	WD=${WAYLAND_DISPLAY:-wayland-0}
+	[ -S "$RT/$WD" ] && chmod 0666 "$RT/$WD" 2>/dev/null
+	exec setpriv --reuid="$U" --regid="$U" --init-groups --inh-caps=-all \
+		env -i HOME="/home/$U" USER="$U" PATH=/usr/local/bin:/usr/bin:/bin \
+		XDG_RUNTIME_DIR="$RT" WAYLAND_DISPLAY="$WD" LANG=C.UTF-8 \
+		XDG_SESSION_TYPE=wayland MOZ_ENABLE_WAYLAND=1 \
+		"$0"
+fi
 URL="http://[::1]:47660/"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 PROFILE="$RUNTIME/river-installer-firefox"

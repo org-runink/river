@@ -105,12 +105,38 @@ run_once() {
 	[ -n "$renderer" ] && log "attempt $((fails + 1)): forcing the software renderer ($renderer)" \
 		|| log "attempt $((fails + 1)): starting the compositor"
 	started=$(date +%s)
+	# WESTON RUNS AS ROOT. This is the fix for the failure on the owner's hardware, and the
+	# reason is specific rather than a shrug at permissions.
+	#
+	# It used to run under `setpriv --reuid ... env -i`, which produces a process with NO logind
+	# session. libseat then asks logind for the DRM device and logind answers, verbatim from the
+	# owner's console:
+	#
+	#   [libseat/backend/seatd.c:64]   Could not connect to socket /run/seatd.sock
+	#   [libseat/libseat.c:73]         Seat opened with backend 'logind'
+	#   [libseat/backend/logind.c:121] Could not take device: No such device
+	#   no drm device found / fatal: failed to create compositor backend
+	#
+	# "No such device" while /dev/dri/card0 is right there -- this script had just logged
+	# "a usable output is already present". logind grants TakeDevice only to a session leader on
+	# a seat; setpriv had thrown that away. SDDM works where it works because PAM makes a real
+	# session. The kiosk never had one and never could, the way it was launched.
+	#
+	# At euid 0 weston skips libseat entirely and uses its direct launcher, so no session is
+	# needed. The missing /run/seatd.sock is a red herring: libseat falls through to logind, and
+	# logind is what refuses. Installing seatd would not conjure a session either.
+	#
+	# Only the COMPOSITOR is privileged. weston.ini launches river-kiosk-app, which drops
+	# straight back to the live user for the browser -- the thing that renders untrusted-ish web
+	# content gets no more rights than the desktop session would have given it.
+	#
+	# XDG_RUNTIME_DIR is set explicitly because root may have no /run/user/0, and --tty pins the
+	# console the fallback handed us instead of letting weston guess.
 	# shellcheck disable=SC2086 # renderer is one flag or empty, by construction
-	setpriv --reuid="$U" --regid="$U" --init-groups \
-		env -i HOME="/home/$U" USER="$U" PATH=/usr/local/bin:/usr/bin:/bin \
-		XDG_RUNTIME_DIR="/run/user/$(id -u "$U")" LANG=C.UTF-8 \
-		XDG_SESSION_TYPE=wayland \
-		weston --continue-without-input $renderer \
+	env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/root LANG=C.UTF-8 \
+		XDG_RUNTIME_DIR="$RUN" XDG_SESSION_TYPE=wayland \
+		RIVER_KIOSK_USER="$U" \
+		weston --continue-without-input ${VT:+--tty="$VT"} $renderer \
 		>"$RUN/session.log" 2>&1
 	rc=$?
 	ran=$(( $(date +%s) - started ))
