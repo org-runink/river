@@ -21,11 +21,15 @@
 # instead of -- a real driver binding. So the bespoke path failed precisely on the machines
 # that needed a fallback at all.
 #
-# A compositor solves this because solving it is its job. wlroots drives KMS properly, and
-# falls back to software rendering (WLR_RENDERER=pixman) when there is no GPU to render with.
-# So: cage, which is a Wayland compositor that runs exactly one fullscreen application, and
-# inside it the SAME river-installer-desktop the Plasma session already runs. One browser, one
+# A compositor solves this because solving it is its job. So: weston -- the REFERENCE Wayland
+# compositor, which is the one most likely to come up on odd hardware -- run with its
+# kiosk-shell, which exists for exactly this: one application, fullscreen, no desktop furniture.
+# Inside it, the SAME river-installer-desktop the Plasma session already runs. One browser, one
 # launcher, one definition of what the installer looks like, used by both paths.
+#
+# The configuration is /etc/xdg/weston/weston.ini in the live overlay, which also names the
+# application to launch. weston renders through pixman when there is no GPU, which is the
+# simpledrm case, and this script forces that from the third attempt.
 #
 # What this deletes, and does not miss: the river-kiosk user and its group juggling, the
 # WebKit content-filter JSON, WPE_DISPLAY/WPE_DRM_DISABLE_ATOMIC, the manual "is the operator
@@ -48,7 +52,7 @@ U=${RIVER_KIOSK_USER:-runink}
 log() { echo "river-kiosk: $*"; }
 mkdir -p "$RUN"; rm -f "$RUN/kiosk.stop"
 
-command -v cage >/dev/null 2>&1 || { log "cage is not installed: no compositor, no graphical fallback"; exit 1; }
+command -v weston >/dev/null 2>&1 || { log "weston is not installed: no compositor, no graphical fallback"; exit 1; }
 [ -x "$LAUNCH" ] || { log "$LAUNCH is missing: nothing to show"; exit 1; }
 id "$U" >/dev/null 2>&1 || { log "no user $U to run the session as"; exit 1; }
 
@@ -88,21 +92,26 @@ MINRUN=${RIVER_KIOSK_MINRUN:-10}
 MAXFAIL=${RIVER_KIOSK_MAXFAIL:-4}
 fails=0
 
-# Attempts 1..2 use whatever renderer wlroots picks (GL where there is a GPU). From attempt 3 we
-# force the software renderer: that is the simpledrm / no-GPU case, and pixman draws there when
-# GL cannot. Trying GL first keeps a normal machine fast.
+# Attempts 1..2 let weston pick its renderer (GL where there is a GPU). From attempt 3 pixman is
+# forced: that is the simpledrm / no-GPU case, where software rendering draws and GL cannot.
+# Trying GL first keeps a normal machine fast.
+#
+# The application is NOT passed on the command line -- weston's kiosk-shell takes it from
+# [autolaunch] in weston.ini, which also sets watch=true so weston exits when the browser does.
+# That exit is what river-live-fallback waits for before reaching the text installer.
 run_once() {
 	renderer=""
-	[ "$fails" -ge 2 ] && renderer="WLR_RENDERER=pixman"
+	[ "$fails" -ge 2 ] && renderer="--renderer=pixman"
 	[ -n "$renderer" ] && log "attempt $((fails + 1)): forcing the software renderer ($renderer)" \
 		|| log "attempt $((fails + 1)): starting the compositor"
 	started=$(date +%s)
-	# shellcheck disable=SC2086 # renderer is one KEY=VALUE word or empty, by construction
+	# shellcheck disable=SC2086 # renderer is one flag or empty, by construction
 	setpriv --reuid="$U" --regid="$U" --init-groups \
 		env -i HOME="/home/$U" USER="$U" PATH=/usr/local/bin:/usr/bin:/bin \
 		XDG_RUNTIME_DIR="/run/user/$(id -u "$U")" LANG=C.UTF-8 \
-		XDG_SESSION_TYPE=wayland $renderer \
-		cage -- "$LAUNCH" >"$RUN/session.log" 2>&1
+		XDG_SESSION_TYPE=wayland \
+		weston --continue-without-input $renderer \
+		>"$RUN/session.log" 2>&1
 	rc=$?
 	ran=$(( $(date +%s) - started ))
 	return $rc
