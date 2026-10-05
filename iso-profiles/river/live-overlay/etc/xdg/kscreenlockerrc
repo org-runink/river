@@ -1,0 +1,23 @@
+# Runink River live medium: the installer session never locks.
+#
+# LIVE OVERLAY ONLY, and that is NOT automatic. 20-clone-rootfs excludes live files one path at
+# a time, by name -- it does not drop the overlay wholesale. This file is listed there
+# explicitly, and it must stay listed: the install clones the RUNNING system, overlay included,
+# so without that line every installed workstation would inherit a session that cannot lock.
+#
+# WHY. The honest boot test on runink-river-20261005 recorded the live session leaving the
+# installer for a lock screen at about six minutes of no input, and the display blanking
+# entirely at seven ("Display output is not active"). On an install medium that is a trap: the
+# recovery-key screen asks the user to write down 64 characters and type three groups back, and
+# people reasonably take minutes over it. They look up to a lock screen asking for a password
+# that does not exist for them -- the live user autologs in and they were never told a
+# credential. The owner's whole complaint about this image was being left at a screen with no
+# way forward.
+#
+# There is nothing to protect here. The session autologs in, the medium is read-only, and the
+# only thing on screen is an installer the person is deliberately running.
+[Daemon]
+Autolock=false
+LockOnResume=false
+LockOnStart=false
+Timeout=0
