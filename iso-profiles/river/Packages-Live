@@ -13,7 +13,7 @@
 ## The PKGBUILD header lists, path by path, what artools reads and why each one is there.
 runink-grub-live
 
-## cage — a Wayland compositor that runs exactly one fullscreen application.
+## weston — the reference Wayland compositor, run with its KIOSK SHELL.
 ##
 ## WHY IT IS HERE, and why it is not wpewebkit any more. river-live-fallback's chain is: a
 ## graphical session, else river-kiosk, else the text installer. The kiosk used to be WPE
@@ -24,10 +24,17 @@ runink-grub-live
 ## laptop where CachyOS, Manjaro and Fedora all open their installer without trouble.
 ##
 ## Those distributions do the boring thing: boot a session, run the installer as an ordinary
-## window in it. So does this now. cage drives KMS through wlroots -- which is a compositor's
-## actual job -- and falls back to software rendering (WLR_RENDERER=pixman) where there is no
-## GPU to render with. Inside it runs the SAME river-installer-desktop the Plasma session runs,
-## so there is one browser, one launcher and one definition of what the installer looks like.
+## window in it. So does this now. weston's kiosk-shell exists for exactly this -- one
+## application, fullscreen, no desktop furniture -- and weston is the REFERENCE compositor, so
+## it is the one most likely to come up on odd hardware. It renders through pixman when there
+## is no GPU, which is the simpledrm case. Inside it runs the SAME river-installer-desktop the
+## Plasma session runs, so there is one browser, one launcher and one definition of what the
+## installer looks like.
+##
+## NOT cage: cage is not in Artix's repos. The ISO installs from system/world/galaxy, and cage
+## is an Arch package. I checked it against an Arch database the build never consults and the
+## root stage died with "target not found: cage" -- the check was true and irrelevant. weston
+## 15.0.1 is in `world`, Artix's main repo. Verify a package against the db the BUILD uses.
 ##
 ## firefox is already in Packages-Root, so this swap ADDS a small compositor and REMOVES a
 ## whole second browser engine.
@@ -40,4 +47,4 @@ runink-grub-live
 ## Downstream images are unaffected: a profile that needs a different kiosk ships its own copy
 ## of river-kiosk and its own live package list, because an image with no desktop should not
 ## grow one just to show an installer.
-cage
+weston

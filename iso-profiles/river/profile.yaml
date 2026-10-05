@@ -287,7 +287,7 @@ livefs:
     # package. The menu itself is iso-profiles/river/grub/, which
     # scripts/patch-artools.go copies over whatever this layer supplied.
     - runink-grub-live
-    # cage: a Wayland compositor that runs exactly one fullscreen application. It replaced
+    # weston: the reference Wayland compositor, run with its kiosk shell. It replaced
     # wpewebkit on 2026-10-05. river-live-fallback's chain is a graphical session, else
     # river-kiosk, else the text installer, and the kiosk used to be WPE WebKit's MiniBrowser
     # drawn straight onto KMS/DRM with no compositor. That wants a hardware cursor plane and a
@@ -295,9 +295,11 @@ livefs:
     # machines that needed a fallback, including the owner's XPS 13 9300 (five aborts in ten
     # seconds, "No suitable DRM device found") on a laptop where CachyOS, Manjaro and Fedora
     # all open their installer without trouble. Those distributions do the boring thing: boot a
-    # session and run the installer as a window in it. cage drives KMS through wlroots and
-    # falls back to software rendering where there is no GPU, and it runs the SAME
-    # river-installer-desktop the Plasma session runs. firefox is already in Packages-Root, so
-    # this adds a small compositor and drops a whole second browser engine. Live-only: an
-    # installed workstation has Plasma and a browser and no use for the kiosk.
-    - cage
+    # session and run the installer as a window in it. weston's kiosk-shell is exactly that --
+    # one application, fullscreen -- and weston renders through pixman where there is no GPU.
+    # It runs the SAME river-installer-desktop the Plasma session runs. firefox is already in
+    # Packages-Root, so this adds a small compositor and drops a whole second browser engine.
+    # NOT cage: cage is an Arch package and is not in Artix's system/world/galaxy, which is
+    # what the ISO installs from. weston 15.0.1 is in `world`. Live-only: an installed
+    # workstation has Plasma and a browser and no use for the kiosk.
+    - weston
