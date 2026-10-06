@@ -43,8 +43,9 @@ live-session:
   # 80-enable-s6 re-asserts them there. s6 refuses a set where an enabled service depends on a
   # disabled one, so every dependency below is in the list too.
   services:
-    # runink-fw: the host firewall (default-deny input, forward default-drop), loaded before
-    # NetworkManager and sshd (their dependencies.d/runink-fw), on the live medium too.
+    # runink-fw: the boot-time network oneshot, before NetworkManager and sshd (their
+    # dependencies.d/runink-fw), on the live medium too: it clears rfkill SOFT blocks and then
+    # loads the host firewall (default-deny input, forward default-drop).
     - runink-fw
     # zfs-mount: `zfs mount -a` at boot. The initramfs mounts only the boot environment; the
     # pool's other datasets (<pool>/home at /home) are its siblings and nothing else mounts
@@ -55,12 +56,6 @@ live-session:
     - zfs-mount
     # river-perms: the shadow-grade modes oneshot (invariant 4).
     - river-perms
-    # river-rfkill: clear rfkill SOFT blocks before NetworkManager (its
-    # dependencies.d/river-rfkill). Nothing else in the image ever touches rfkill, and a radio
-    # the firmware or a previous OS left soft-blocked stays blocked across a reboot: the card
-    # enumerates and iwlwifi binds it, but NM reports the device unavailable and `nmcli device
-    # wifi list` is empty -- which looks exactly like a missing driver.
-    - river-rfkill
     - NetworkManager
     # NO wpa_supplicant SERVICE here, deliberately -- only the package, which Packages-Root
     # installs. NetworkManager does NOT use Artix's wpa_supplicant s6 service; it starts its own
