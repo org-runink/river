@@ -28,7 +28,8 @@ NODE_SERVICES="NetworkManager sshd rc-local"
 [ -d "$TARGET/etc/s6/sv/zfs-mount" ] && NODE_SERVICES="zfs-mount $NODE_SERVICES"
 # river-perms: the shadow-grade drift check, a oneshot (invariant 4).
 [ -d "$TARGET/etc/s6/sv/river-perms" ] && NODE_SERVICES="river-perms $NODE_SERVICES"
-# runink-fw: the host firewall oneshot, before NetworkManager and sshd (invariant 7).
+# runink-fw: the boot-time network oneshot (rfkill unblock + host firewall), before
+# NetworkManager and sshd (invariant 7).
 [ -d "$TARGET/etc/s6/sv/runink-fw" ] && NODE_SERVICES="runink-fw $NODE_SERVICES"
 # chrony: the clock, on BOTH images (chrony-s6's `chrony` bundle = chrony-srv + chrony-log).
 #

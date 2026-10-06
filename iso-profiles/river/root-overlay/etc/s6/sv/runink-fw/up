@@ -1,8 +1,28 @@
 #!/bin/execlineb -P
-# Load the host firewall (inet runink_fw) at boot, on EVERY node, before NetworkManager and
-# sshd start (their dependencies.d/runink-fw): the base default-deny posture on an
-# unenrolled node, the private one once enrollment armed it. Enabled with `s6 set enable`
-# (profile.yaml live-session services; 80-enable-s6 on the target). Never fails the boot
-# (a failure would keep NetworkManager and sshd down): runink-fw logs and this exits 0.
+# The boot-time network preparation oneshot, on EVERY node, before NetworkManager and sshd
+# start (their dependencies.d/runink-fw). Enabled with `s6 set enable` (profile.yaml
+# live-session services; 80-enable-s6 on the target). Never fails the boot (a failure would
+# keep NetworkManager and sshd down): each step logs and this exits 0.
+#
+# 1. Clear every rfkill SOFT block. Nothing else in the image has ever touched rfkill, and a
+#    radio the firmware or a previous OS left soft-blocked stays blocked across a reboot: the
+#    card enumerates, iwlwifi binds it, the firmware loads and `ip link` shows the interface,
+#    but NetworkManager reports the device unavailable and `nmcli device wifi list` returns
+#    nothing. At a console that is indistinguishable from a missing driver, and it is why the
+#    AX201 in the owner's XPS 13 9300 looked dead on a medium whose driver, firmware, root
+#    symlink farm and 8086:34f0 PCI alias were all verified present (2026-10-05).
+#    A HARD block is a physical switch: `rfkill unblock` cannot clear one and does not try.
+#
+#    This lives HERE, rather than in an s6 service of its own, on purpose. A new service needs
+#    a new `up`, every `up` is an execline script, and shell-ratchet counts execline as shell:
+#    a new one must be written in Go as a `river` subcommand (docs/GO-CLI.md), but no `river`
+#    binary ships in the image (only river-guide), so there is nothing to call at boot. This
+#    oneshot already runs at the right moment -- before NetworkManager, on both the live medium
+#    and the installed node -- so the unblock belongs in it rather than in a fourth grandfathered
+#    shell script.
+#
+# 2. Load the host firewall (inet runink_fw): the base default-deny posture on an unenrolled
+#    node, the private one once enrollment armed it.
+foreground { /usr/bin/rfkill unblock all }
 foreground { /usr/local/bin/runink-fw apply }
 exit 0
