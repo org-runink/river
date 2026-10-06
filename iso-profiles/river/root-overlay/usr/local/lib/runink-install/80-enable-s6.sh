@@ -30,6 +30,10 @@ NODE_SERVICES="NetworkManager sshd rc-local"
 [ -d "$TARGET/etc/s6/sv/river-perms" ] && NODE_SERVICES="river-perms $NODE_SERVICES"
 # runink-fw: the host firewall oneshot, before NetworkManager and sshd (invariant 7).
 [ -d "$TARGET/etc/s6/sv/runink-fw" ] && NODE_SERVICES="runink-fw $NODE_SERVICES"
+# river-rfkill: clear rfkill SOFT blocks, before NetworkManager (its dependencies.d).
+# A radio left soft-blocked by the firmware or a previous OS stays blocked across a reboot,
+# and NM then reports the device unavailable on a node whose driver and firmware are fine.
+[ -d "$TARGET/etc/s6/sv/river-rfkill" ] && NODE_SERVICES="river-rfkill $NODE_SERVICES"
 # chrony: the clock, on BOTH images (chrony-s6's `chrony` bundle = chrony-srv + chrony-log).
 #
 # WITHOUT THIS LINE the package is installed and the service never starts. That is not a

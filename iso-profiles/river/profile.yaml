@@ -55,16 +55,28 @@ live-session:
     - zfs-mount
     # river-perms: the shadow-grade modes oneshot (invariant 4).
     - river-perms
+    # river-rfkill: clear rfkill SOFT blocks before NetworkManager (its
+    # dependencies.d/river-rfkill). Nothing else in the image ever touches rfkill, and a radio
+    # the firmware or a previous OS left soft-blocked stays blocked across a reboot: the card
+    # enumerates and iwlwifi binds it, but NM reports the device unavailable and `nmcli device
+    # wifi list` is empty -- which looks exactly like a missing driver.
+    - river-rfkill
     - NetworkManager
-    # wpa_supplicant: NetworkManager's Wi-Fi backend. Without it NM manages wired devices and
-    # cannot associate with ANY wireless network -- `nmcli device wifi connect` fails even when
-    # the card is present and its driver is loaded. The package and its s6 service were both in
-    # the image while this list did not enable it, so the medium looked like it supported Wi-Fi
-    # and did not. On a laptop with no ethernet port (the owner's XPS 13 9300 has only the
-    # AX201) that means no network at all during an install, which also takes the LAN-install
-    # path and any remote help down with it. Owner, 2026-10-03: "no wifi found during the
-    # installation".
-    - wpa_supplicant
+    # NO wpa_supplicant SERVICE here, deliberately -- only the package, which Packages-Root
+    # installs. NetworkManager does NOT use Artix's wpa_supplicant s6 service; it starts its own
+    # supplicant over D-Bus from /usr/share/dbus-1/system-services/fi.w1.wpa_supplicant1.service
+    # ("Exec=/usr/bin/wpa_supplicant -u -s -O /run/wpa_supplicant"), and only a `-u` instance
+    # speaks the control interface NM drives.
+    #
+    # The s6 service was enabled here on 2026-10-03 against the owner's "no wifi found during
+    # the installation". It cannot have helped: its run.user is
+    # `wpa_supplicant -i ${WPA_INTERFACE} -c /etc/wpa_supplicant/wpa_supplicant.conf` with
+    # WPA_INTERFACE defaulting to wlan0 (etc/s6/config/wpa_supplicant.conf), while the medium
+    # sets no net.ifnames=0 -- so the interface is wlp0s20f3 on the owner's XPS 13 9300 -- and
+    # /etc/wpa_supplicant/ ships EMPTY, so the -c file does not exist either. It exits
+    # immediately on both counts and s6 restarts it forever. Verified against the shipped
+    # 20261005 image, 2026-10-05: driver, firmware, root symlink farm and the 8086:34f0 ->
+    # iwlwifi PCI alias are all present and correct, so the radio was never the problem.
     - sshd
     # NO chrony here, deliberately. This list is the LIVE session's, and the live layer
     # (Packages-Live) installs only runink-grub-live — chrony and chrony-s6 are in
