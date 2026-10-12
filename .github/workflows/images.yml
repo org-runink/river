@@ -77,7 +77,7 @@ jobs:
           openssl x509 -in "$KERNEL_OUT/runink_signing.pem" -out "$KERNEL_OUT/cert.pem"
           mv "$KERNEL_OUT/cert.pem" "$KERNEL_OUT/runink_signing.pem"
           build/verify-kernel-zfs.sh "$KERNEL_OUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kernel-zfs
           path: /mnt/cache/river-build/kernel
@@ -103,7 +103,7 @@ jobs:
         with:
           go-version-file: installer/go.mod
           cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kernel-zfs
           path: /mnt/cache/river-build/kernel
@@ -125,7 +125,7 @@ jobs:
           mkdir -p out
           mv "$XDG_CACHE_HOME"/river-build/iso-out/*.iso out/
           ( cd out && sha256sum ./*.iso | tee SHA256SUMS )
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iso-${{ matrix.profile }}
           path: out/
