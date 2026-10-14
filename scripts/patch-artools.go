@@ -221,8 +221,8 @@ func main() {
 	s, mode := read(common)
 	// linux-runink, not linux-lts, since 2026-09-06. Artix's linux-lts reached 6.18.49 and
 	// NO available OpenZFS builds against it: archzfs zfs-dkms is 2.3.3, and its prebuilt
-	// zfs-linux-lts targets 6.12. Both shipped ISOs therefore had no ZFS module at all
-	// (os#70). The repo's own matched pair is the answer: linux-runink (zen-kernel 7.2.x)
+	// zfs-linux-lts targets 6.12. Both shipped ISOs therefore had no ZFS module at all.
+	// The repo's own matched pair is the answer: linux-runink (zen-kernel 7.2.x)
 	// + runink-zfs (OpenZFS 2.4.4 stable, declared range Linux 4.18..7.2).
 	s = reLinux.ReplaceAllString(s, "${1}linux-runink")
 	s = reLinuxHeaders.ReplaceAllString(s, "${1}linux-runink-headers")

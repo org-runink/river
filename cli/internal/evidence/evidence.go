@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package evidence writes the release-evidence document a harness produces: the machine-readable
-// result of one autonomous test run, for a CORE DevEx/DataEx capability to collect, store and
-// publish (the contract agreed with org-runink-30 on 2026-10-03).
+// result of one autonomous test run, for an external evidence collector to store and publish.
+// The document's shape is a contract with that consumer.
 //
 // WHY THIS EXISTS. Every release check used to end in a human reading prose -- a screenshot
 // somebody eyeballs, an ok/FAIL line in a terminal, a hand install the owner performs. An agent
@@ -19,8 +19,7 @@
 // verdict is a pass only when nothing failed AND every declared check actually reported. The
 // consumer recomputes that from the document and refuses any whose verdict or totals disagree,
 // so this package being buggy or lying is caught rather than believed -- the producer is not
-// trusted (org-runink-30's amendment 1, which is better than the first draft's "the producer
-// honours the rule").
+// trusted (stronger than requiring the producer to honour the rule).
 //
 // NOTHING HERE SIGNS. The release key is the owner's and offline. Signing.Signed is always false
 // in an autonomous run and the reason is stated in the document. A harness that could sign would
@@ -133,7 +132,7 @@ func New(harness, harnessVersion string, subj Subject, env Environment, declared
 	return NewWithRunID("", harness, harnessVersion, subj, env, declared, out)
 }
 
-// NewWithRunID starts a run carrying a run id the CALLER was given -- CORE dispatches a job with
+// NewWithRunID starts a run carrying a run id the CALLER was given -- a collector dispatches a job with
 // a run id and refuses a document that comes back with a different one, so an orchestrated run
 // must write that id through unchanged.
 //
@@ -267,7 +266,7 @@ func (r *Run) Finish() Document {
 	return r.doc
 }
 
-// publicField catches what must never reach a published document. CORE enforces this again
+// publicField catches what must never reach a published document. The consumer enforces this again
 // before storing and before publishing; duplicating it here is deliberate -- a producer that
 // relies on someone else's validator to keep host paths out of public evidence is one refactor
 // away from leaking, and a leak cannot be unpublished.
@@ -323,7 +322,7 @@ func Lint(d Document) []string {
 	}
 	// The closed vocabularies. Checking them here means a document the consumer would refuse is
 	// never written in the first place, which is a much easier failure to act on than a
-	// rejection arriving from CORE after a long run.
+	// rejection arriving from the consumer after a long run.
 	if !validArch[d.Environment.Arch] {
 		bad = append(bad, fmt.Sprintf("environment.arch %q is not x86_64 or aarch64 (Go's GOARCH names are not the contract's)", d.Environment.Arch))
 	}
@@ -396,7 +395,7 @@ func WriteFile(path string, d Document) error {
 	return os.Rename(tmp, path)
 }
 
-// goArch maps Go's GOARCH onto the contract's architecture enum. org-runink-30's validator
+// goArch maps Go's GOARCH onto the contract's architecture enum. The consumer's validator
 // accepts {x86_64, aarch64} and REFUSES "amd64", so emitting runtime.GOARCH raw would have every
 // document this produces rejected at the consumer. Mapping here rather than asking them to widen
 // the enum: the published vocabulary should be the platform's, not the Go toolchain's.
@@ -413,7 +412,7 @@ func goArch() string {
 	}
 }
 
-// The contract's closed vocabularies, as org-runink-30's validator enforces them.
+// The contract's closed vocabularies, as the consumer's validator enforces them.
 var (
 	validArch       = map[string]bool{"x86_64": true, "aarch64": true}
 	validSubjectKnd = map[string]bool{"source": true, "pacman-repo": true, "iso": true, "image": true}
@@ -436,8 +435,8 @@ func chooseRunID(given string) string {
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 // newRunID is a ULID: 48 bits of millisecond timestamp then 80 bits from crypto/rand, in 26
-// Crockford base32 characters. The shape is org-runink-30's requirement so their validator and
-// this producer agree without either side loosening (2026-10-03).
+// Crockford base32 characters. The shape is the consumer's requirement, so its validator and
+// this producer agree without either side loosening.
 //
 // Sortable by time is the useful property: evidence lands in an append-only store, and being
 // able to order runs without parsing a timestamp field matters there. The 80 random bits are

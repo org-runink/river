@@ -13,7 +13,7 @@ echo "== assert-golden =="
 if command -v pacman >/dev/null 2>&1; then
 	if pacman -Q linux >/dev/null 2>&1; then bad "mainline 'linux' kernel present (want linux-runink only)"; else ok "no mainline kernel"; fi
 	# linux-runink (zen-kernel 7.2.x stable fork) + its matched runink-zfs since 2026-09 — the repo's
-	# own kernel/ZFS pair, replacing Artix's linux-lts (os#70).
+	# own kernel/ZFS pair, replacing Artix's linux-lts.
 	pacman -Q linux-runink >/dev/null 2>&1 && ok "linux-runink installed" || bad "linux-runink missing"
 	if pacman -Q linux-lts >/dev/null 2>&1; then bad "linux-lts still installed (two kernels)"; else ok "no leftover linux-lts"; fi
 	# The ZFS module must actually exist for the kernel that is installed. This is the

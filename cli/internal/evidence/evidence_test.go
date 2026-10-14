@@ -155,7 +155,7 @@ func TestRunIDIsUniquePerRun(t *testing.T) {
 	}
 }
 
-// The shape is org-runink-30's validator's requirement: a 26-character Crockford base32 ULID,
+// The shape is the consumer's validator's requirement: a 26-character Crockford base32 ULID,
 // sortable by time. Matching it exactly is cheaper than having them loosen the validator.
 func TestRunIDIsAULID(t *testing.T) {
 	id := newRun("a").RunID()
@@ -195,8 +195,8 @@ func TestSigningIsAlwaysFalseAndStated(t *testing.T) {
 	}
 }
 
-// Evidence is PUBLISHED, so the producer lints it too rather than leaning on CORE's backstop.
-// A leak cannot be unpublished -- that happened to this session on 2026-10-03.
+// Evidence is PUBLISHED, so the producer lints it too rather than leaning on the consumer's backstop.
+// A leak cannot be unpublished.
 func TestLintRefusesUnpublishableFields(t *testing.T) {
 	// THE ADDRESS VECTORS ARE ASSEMBLED, NOT WRITTEN AS LITERALS, and that is deliberate.
 	// `river lint public-leak` is absolute about RFC1918 and ULA literals in this repository's
@@ -299,9 +299,9 @@ func TestWriteFileAtomicAndRefusesBadDocuments(t *testing.T) {
 	}
 }
 
-// The contract's closed vocabularies, as org-runink-30's validator enforces them. Checking them
+// The contract's closed vocabularies, as the consumer's validator enforces them. Checking them
 // in the producer means a document the consumer would refuse is never written: a rejection
-// arriving from CORE after a long run is a much worse failure to debug.
+// arriving from the consumer after a long run is a much worse failure to debug.
 func TestLintEnforcesTheContractVocabularies(t *testing.T) {
 	for _, c := range []struct {
 		name string
