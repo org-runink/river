@@ -278,7 +278,7 @@ func Closure(ctx context.Context, manifest, mode string, errw, outw io.Writer) e
 	if closureHas(pkgs, "linux") {
 		report("linux (mainline kernel listed explicitly)")
 	}
-	// linux-runink since 2026-09-06 (os#70). Promoted from a WARN to a real failure: this is
+	// linux-runink since 2026-09-06. Promoted from a WARN to a real failure: this is
 	// the assertion that the image pins EXACTLY ONE kernel, and that it is the one runink-zfs's
 	// prebuilt modules were compiled against. A warning was the wrong severity — the entire
 	// reason for the swap is that a ZFS/kernel mismatch shipped twice while only warning.
