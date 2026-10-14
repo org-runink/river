@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/org-runink/river/bench/analytics/internal/stats"
 )
 
 // ParquetCodec is one DuckDB Parquet writer setting.
@@ -35,11 +36,9 @@ func scanSQL(path string) string {
 	return fmt.Sprintf("SELECT sum(hash(t)) FROM read_parquet(%s) t;\n", sqlString(path))
 }
 
-func median(xs []float64) float64 {
-	c := append([]float64(nil), xs...)
-	sort.Float64s(c)
-	return c[len(c)/2]
-}
+// median is stats.Median, so this package and the kernel-comparison report reduce
+// repetitions the same way (the mean of the two middle values for an even count).
+func median(xs []float64) float64 { return stats.Median(xs) }
 
 // RunParquet writes TPC-H lineitem with every codec and reads it back cold and warm.
 func RunParquet(o Options, r *Report) error {
