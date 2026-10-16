@@ -31,7 +31,7 @@ import (
 // So this runs pacman against the real repository in a throwaway container: refresh the
 // database, install every package it offers, and compare the installed versions with the
 // filenames. No host is modified and nothing needs root on the host -- which is what makes it
-// runnable by a CORE agent with no human present.
+// runnable by an automated agent with no human present.
 //
 // It emits a release-evidence document (internal/evidence) so the result is consumable rather
 // than prose in a terminal.

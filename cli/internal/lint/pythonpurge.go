@@ -38,7 +38,7 @@ import (
 //     requested. A broken mirror, or a `go` package shipping without the compiler, still
 //     fails at build time.
 //   - NOT that patch-artools.go behaves like the .py it replaced. That was established in
-//     os#60 by running both against identical fixtures and diffing; it is not re-checked
+//     the port itself by running both against identical fixtures and diffing; it is not re-checked
 //     here, and this lint would not notice a behavioural regression in it.
 //   - NOT that python is absent from the whole repo, though it is closer than it was.
 //     Check 4 covers INLINE python in every tracked shell script, which is the gap check 1

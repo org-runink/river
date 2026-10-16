@@ -398,3 +398,45 @@ func TestReadmeCatalogueInSync(t *testing.T) {
 		t.Error("bench/analytics/README.md metric catalogue is stale: paste the output of `riverbench catalogue`")
 	}
 }
+
+// The package's repetition median must agree with stats.Median, which averages the two middle
+// values for an even count (it once returned the upper one).
+func TestMedianEvenCount(t *testing.T) {
+	for _, c := range []struct {
+		in   []float64
+		want float64
+	}{
+		{[]float64{7}, 7},
+		{[]float64{3, 1, 2}, 2},
+		{[]float64{4, 1, 3, 2}, 2.5},
+		{[]float64{10, 30}, 20},
+	} {
+		if got := median(c.in); got != c.want {
+			t.Errorf("median(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestMedianFileSize(t *testing.T) {
+	shape := func(sizes ...int) Shape {
+		var s Shape
+		for _, n := range sizes {
+			s.Files = append(s.Files, File{Data: make([]byte, n)})
+		}
+		return s
+	}
+	for _, c := range []struct {
+		sizes []int
+		want  int
+	}{
+		{nil, 0},
+		{[]int{4096}, 4096},
+		{[]int{300, 100, 200}, 200},
+		{[]int{8192, 1024, 4096, 2048}, 3072}, // mean of 2048 and 4096, not the upper 4096
+		{[]int{1, 2}, 1},                      // an odd sum rounds down to a whole byte
+	} {
+		if got := medianFileSize(shape(c.sizes...)); got != c.want {
+			t.Errorf("medianFileSize(%v) = %d, want %d", c.sizes, got, c.want)
+		}
+	}
+}

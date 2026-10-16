@@ -42,6 +42,17 @@ None.
   line say which and why; a workstation plans none
   ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
 
+### Fixed
+
+- **`riverbench`: one median, and a fio p99 that is a p99.** The compression suite's
+  repetition median (Parquet, file-access and THP timings) and its median file size returned
+  the upper middle value for an even count; both now average the two middle values, as the
+  kernel-comparison report always did. The fio random-read `p99` metric was the largest of
+  the per-process p99s, an upper bound only; fio now runs with `--group_reporting` and the
+  metric is the p99 of the merged latency histogram. A `p99` from an earlier run is not
+  comparable with a new one: `riverbench compare` across that boundary shows an improvement
+  that is not one.
+
 ## [runink-os-2026.10] - 2026-10-02
 
 ### Security

@@ -257,7 +257,7 @@ rootfs:
     - linux-firmware-amdgpu
     - linux-firmware-intel
     # ── ZFS root ──────────────────────────────────────────────────────────────────────
-    # The kernel swap (2026-09-06, os#70/#71/#72). The kernel is
+    # The kernel swap (2026-09-06). The kernel is
     # linux-runink (zen-kernel 7.2.x stable fork, 7.2.7-zen1), installed via scripts/patch-artools.go's
     # common.yaml rewrite, because NO available OpenZFS package built against Artix's
     # linux-lts 6.18.49 — zfs-dkms 2.3.3 fails to compile and archzfs's prebuilt module

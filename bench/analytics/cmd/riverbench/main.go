@@ -318,7 +318,8 @@ func suiteFio(res *report.Results, f runFlags) error {
 				res.Add(report.Metric{Suite: "fio", Name: name, Unit: "MiB/s", HigherIsBetter: true, Samples: bw, Notes: note})
 			} else {
 				res.Add(report.Metric{Suite: "fio", Name: name, Unit: "IOPS", HigherIsBetter: true, Samples: iops, Notes: note})
-				res.Add(report.Metric{Suite: "fio", Name: name + " p99", Unit: "us", HigherIsBetter: false, Samples: p99, Notes: note})
+				res.Add(report.Metric{Suite: "fio", Name: name + " p99", Unit: "us", HigherIsBetter: false, Samples: p99,
+					Notes: note + "; completion-latency p99 of all numjobs processes together (fio --group_reporting)"})
 			}
 		}
 		fio.Cleanup(dir)

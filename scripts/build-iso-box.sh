@@ -221,7 +221,7 @@ fi
 # The DKMS check above is now a LEGACY GUARD and cannot fire: since the linux-runink swap
 # the profiles ship the PREBUILT runink-zfs, so no `dkms install` line is ever emitted. It
 # is kept only to catch an accidental reintroduction of zfs-dkms. On its own it would be a
-# check that cannot fail — precisely the defect os#70 existed to remove — so the assertion
+# check that cannot fail — precisely the defect the kernel swap existed to remove — so the assertion
 # below is the one that actually holds now.
 #
 # Assert the ZFS module is IN THE BUILT ROOTFS. buildiso leaves its work tree behind, so
