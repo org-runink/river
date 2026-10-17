@@ -31,6 +31,7 @@ import (
 	"github.com/org-runink/river/guide/bundle"
 	"github.com/org-runink/river/guide/github"
 	"github.com/org-runink/river/guide/redact"
+	"github.com/org-runink/runi/throttle"
 )
 
 // Label marks install-tracking issues.
@@ -139,23 +140,39 @@ func (s *Session) init() {
 
 func (s *Session) now() time.Time { return s.Now() }
 
+// retryCeiling is the longest this channel ever waits between polls. A tag the
+// operator left is only as useful as how soon it is read.
+const retryCeiling = 5 * time.Minute
+
 // Run polls until ctx ends. Poll errors are reported on the console and retried with
 // backoff; they never end the install.
 func (s *Session) Run(ctx context.Context) {
 	s.init()
-	backoff := s.Interval
+	// runi's throttle, with the one mode that draws no randomness:
+	// min(ceiling, interval·2ⁿ), the same capped doubling this loop has always
+	// done by hand. NoJitter exists for callers like this one — an install is
+	// watched by a person reading a console, and a delay that varies run to run
+	// makes "is it stuck?" unanswerable. It is also why the source may be nil:
+	// no jitter, nothing to draw from.
+	b, err := throttle.NewBackoff(throttle.NoJitter, s.Interval, retryCeiling, nil)
+	if err != nil {
+		// Interval is validated by init(); a refusal here means a future edit
+		// broke that, and silently polling flat-out would hide it.
+		s.Console("remote: backoff misconfigured (%v); polling at %s", err, s.Interval)
+	}
+	wait := s.Interval
 	for {
-		err := s.PollOnce(ctx)
-		if err != nil {
-			s.Console("remote: poll failed: %v (retrying in %s)", err, backoff)
-			backoff = min(backoff*2, 5*time.Minute)
+		if pollErr := s.PollOnce(ctx); pollErr != nil {
+			wait = b.Next()
+			s.Console("remote: poll failed: %v (retrying in %s)", pollErr, wait)
 		} else {
-			backoff = s.Interval
+			b.Reset()
+			wait = s.Interval
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(backoff):
+		case <-time.After(wait):
 		}
 	}
 }
