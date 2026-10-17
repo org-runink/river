@@ -8,9 +8,14 @@
 // their panels. The rest of the package still falls back to Breeze.
 loadTemplate("org.kde.plasma.desktop.defaultPanel")
 
+// The desk (usr/share/plasma/wallpapers/org.runink.river.desk): the picture stands on a
+// surface in a frame instead of being the surface. A new user gets the Runink River desk
+// with the River wallpaper already in the frame; the material and the picture are theirs
+// to change in the wallpaper settings, and org.kde.image is still installed for anyone who
+// wants a plain picture back.
 var desktopsArray = desktopsForActivity(currentActivity());
 for (var j = 0; j < desktopsArray.length; j++) {
-    desktopsArray[j].wallpaperPlugin = 'org.kde.image';
+    desktopsArray[j].wallpaperPlugin = 'org.runink.river.desk';
 }
 
 var allPanels = panels();
