@@ -140,12 +140,12 @@ func (s *Session) init() {
 
 func (s *Session) now() time.Time { return s.Now() }
 
-// Run polls until ctx ends. Poll errors are reported on the console and retried with
-// backoff; they never end the install.
 // retryCeiling is the longest this channel ever waits between polls. A tag the
 // operator left is only as useful as how soon it is read.
 const retryCeiling = 5 * time.Minute
 
+// Run polls until ctx ends. Poll errors are reported on the console and retried with
+// backoff; they never end the install.
 func (s *Session) Run(ctx context.Context) {
 	s.init()
 	// runi's throttle, with the one mode that draws no randomness:
