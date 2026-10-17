@@ -20,6 +20,95 @@ disk. It takes about ten minutes.
 are described below.
 {{< /callout >}}
 
+## Get the image and write a USB stick
+
+Runink River is a **whole operating system**, not an application and not a container image.
+It replaces what is on a machine's disk. You cannot "install it into" Linux, macOS, WSL or a
+Docker container — you write the image to a USB stick, boot that stick, and the installer
+runs there. The one exception is a virtual machine, below, which is the way to look at it
+without a spare computer.
+
+Whatever you do it from, the image is the same file and you should verify it. The release
+carries three files: `runink-river-<date>-x86_64.iso`, `SHA256SUMS`, and the detached
+signature `SHA256SUMS.asc`.
+
+### On Linux
+
+The one-line installer downloads the release, checks the signature against the key
+fingerprint pinned in [`KEYS`](https://github.com/org-runink/river/blob/main/KEYS), checks
+the ISO's sha256, and (with `--write`) writes the stick after you confirm its serial:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/org-runink/river/main/install.sh | sh -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/org-runink/river/main/install.sh | sh -s -- --write /dev/sdX
+```
+
+It never escalates privileges: a step needing root prints the exact command instead of
+running it. Verification **fails closed** — no signature, a wrong fingerprint or a bad
+checksum means no image.
+
+To do it by hand, find the stick with `lsblk` (match the size and the `MODEL` column, and
+note the device is the whole disk such as `/dev/sdb`, never a partition like `/dev/sdb1`):
+
+```sh
+gpg --fetch-keys https://runink.org/.well-known/gpg-key.txt
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS
+sudo dd if=runink-river-<date>-x86_64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+### On macOS
+
+`install.sh` does not write sticks on macOS; do it by hand. Install GnuPG
+(`brew install gnupg`) for the signature check:
+
+```sh
+gpg --fetch-keys https://runink.org/.well-known/gpg-key.txt
+gpg --verify SHA256SUMS.asc SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing
+
+diskutil list                      # find the stick: match its SIZE, e.g. /dev/disk4
+diskutil unmountDisk /dev/disk4    # unmount, do NOT eject
+sudo dd if=runink-river-<date>-x86_64.iso of=/dev/rdisk4 bs=4m status=progress
+diskutil eject /dev/disk4
+```
+
+Two macOS specifics worth not guessing at: use `/dev/rdiskN` (the raw device) rather than
+`/dev/diskN` or the write takes many times longer, and `diskutil list` numbers disks in the
+order they were attached, so re-check the number every time you plug the stick in.
+
+### On Windows
+
+Use a Windows tool, not WSL. **WSL2 has no access to raw USB devices by default** — the
+stick does not appear as a block device inside it, and while `usbipd-win` can attach one,
+writing a boot medium through that path is slower and has more ways to go wrong than the
+native tools. There is nothing River-specific about this; it is how WSL works.
+
+1. Verify the download in PowerShell, and compare the result with the line for the ISO in
+   `SHA256SUMS`:
+   ```powershell
+   Get-FileHash .\runink-river-<date>-x86_64.iso -Algorithm SHA256
+   ```
+   For the OpenPGP signature as well, install [Gpg4win](https://gpg4win.org/) and run the
+   same `gpg --verify SHA256SUMS.asc SHA256SUMS` as above.
+2. Write the stick with [Rufus](https://rufus.ie/) (choose **DD Image** mode when it asks,
+   not ISO mode) or [balenaEtcher](https://etcher.balena.io/).
+
+### Without a USB stick: a virtual machine
+
+A VM is enough to see the live desktop and click through the installer; it is not a test of
+whether River boots your hardware, because the firmware, GPU and disk controller are all
+emulated.
+
+```sh
+qemu-system-x86_64 -enable-kvm -m 8G -smp 4 \
+  -bios /usr/share/OVMF/OVMF_CODE.fd \
+  -drive file=disk.qcow2,if=virtio -cdrom runink-river-<date>-x86_64.iso
+```
+
+UEFI firmware is required — River does not boot in legacy BIOS mode. On macOS use UTM, and
+on Windows use Hyper-V (**Generation 2**) or VirtualBox with **EFI enabled**.
+
 ## Before you start
 
 - **Back up** anything on the disks you will install to. The disks you confirm are erased
