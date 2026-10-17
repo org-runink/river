@@ -255,13 +255,23 @@ func zfsRecords(s Shape, recordsize int) [][]byte {
 	return recs
 }
 
+// medianFileSize is the median file size of a shape in bytes, defined as stats.Median is:
+// for an even count, the mean of the two middle sizes, rounded down to a whole byte (it is
+// used as a block size). It is 0 for a shape with no files.
 func medianFileSize(s Shape) int {
+	if len(s.Files) == 0 {
+		return 0
+	}
 	sz := make([]int, len(s.Files))
 	for i, f := range s.Files {
 		sz[i] = len(f.Data)
 	}
 	sort.Ints(sz)
-	return sz[len(sz)/2]
+	m := len(sz) / 2
+	if len(sz)%2 == 1 {
+		return sz[m]
+	}
+	return sz[m-1] + (sz[m]-sz[m-1])/2 // the mean, without overflowing a+b
 }
 
 // RunZFS measures every ZFS setting on every shape at every recordsize.

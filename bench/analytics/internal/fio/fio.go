@@ -48,9 +48,13 @@ type Options struct {
 
 // Result is what the report keeps from one job.
 type Result struct {
-	BandwidthBytes float64 // bytes/s, summed over jobs
-	IOPS           float64
-	P99LatUsec     float64 // completion latency p99, max over jobs
+	BandwidthBytes float64 // bytes/s, all of the job's processes together
+	IOPS           float64 // all of the job's processes together
+	// P99LatUsec is the 99th percentile of completion latency over every I/O of every
+	// process of the job: fio merges the processes' latency histograms (--group_reporting)
+	// before it computes the percentile. It is not the largest per-process p99, which is
+	// only an upper bound of it.
+	P99LatUsec float64
 }
 
 type fioOut struct {
@@ -66,7 +70,9 @@ type fioOut struct {
 	} `json:"jobs"`
 }
 
-// Parse extracts a Result from fio's --output-format=json output.
+// Parse extracts a Result from fio's --output-format=json output of one job run with
+// --group_reporting, which fio reports as a single entry. Per-process entries are refused:
+// their percentiles cannot be merged into the job's percentile after the fact.
 func Parse(b []byte) (Result, error) {
 	var out fioOut
 	if err := json.Unmarshal(b, &out); err != nil {
@@ -75,26 +81,37 @@ func Parse(b []byte) (Result, error) {
 	if len(out.Jobs) == 0 {
 		return Result{}, fmt.Errorf("fio: no jobs in output")
 	}
-	var r Result
-	for _, j := range out.Jobs {
-		if j.Error != 0 {
-			return Result{}, fmt.Errorf("fio: job error %d", j.Error)
-		}
-		r.BandwidthBytes += j.Read.BWBytes
-		r.IOPS += j.Read.IOPS
-		if p, ok := j.Read.ClatNS.Percentile["99.000000"]; ok && p/1000 > r.P99LatUsec {
-			r.P99LatUsec = p / 1000
-		}
+	if len(out.Jobs) > 1 {
+		return Result{}, fmt.Errorf("fio: %d job entries; run with --group_reporting so fio merges them", len(out.Jobs))
 	}
-	if r.BandwidthBytes <= 0 {
+	j := out.Jobs[0]
+	if j.Error != 0 {
+		return Result{}, fmt.Errorf("fio: job error %d", j.Error)
+	}
+	if j.Read.BWBytes <= 0 {
 		return Result{}, fmt.Errorf("fio: zero read bandwidth (did the job read anything?)")
 	}
-	return r, nil
+	p, ok := j.Read.ClatNS.Percentile["99.000000"]
+	if !ok {
+		return Result{}, fmt.Errorf("fio: no completion-latency p99 in output")
+	}
+	return Result{BandwidthBytes: j.Read.BWBytes, IOPS: j.Read.IOPS, P99LatUsec: p / 1000}, nil
 }
 
 // Run executes one job and parses it. The job's data file is kept in Dir between reps so
 // layout (the write) is paid once; Cleanup removes it.
 func Run(o Options, j Job) (Result, error) {
+	cmd := exec.Command(o.Binary, Args(o, j)...)
+	cmd.Stderr = os.Stderr
+	b, err := cmd.Output()
+	if err != nil {
+		return Result{}, fmt.Errorf("fio %s in %s: %w", j.Name, o.Dir, err)
+	}
+	return Parse(b)
+}
+
+// Args is fio's command line for one job.
+func Args(o Options, j Job) []string {
 	args := []string{
 		"--name=" + j.Name,
 		"--directory=" + o.Dir,
@@ -106,20 +123,14 @@ func Run(o Options, j Job) (Result, error) {
 		"--numjobs=" + strconv.Itoa(j.NumJobs),
 		"--ioengine=" + o.IOEngine,
 		"--time_based", "--runtime=" + strconv.Itoa(o.Runtime),
-		"--group_reporting=0",
+		"--group_reporting", // one merged entry per job: summed bandwidth, merged latency histogram
 		"--invalidate=1",
 		"--output-format=json",
 	}
 	if o.Direct {
 		args = append(args, "--direct=1")
 	}
-	cmd := exec.Command(o.Binary, args...)
-	cmd.Stderr = os.Stderr
-	b, err := cmd.Output()
-	if err != nil {
-		return Result{}, fmt.Errorf("fio %s in %s: %w", j.Name, o.Dir, err)
-	}
-	return Parse(b)
+	return args
 }
 
 // Cleanup removes the data files Run created in dir.
