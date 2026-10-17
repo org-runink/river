@@ -33,6 +33,29 @@ None.
 
 ### Added
 
+- **The desktop is a desk.** A new default wallpaper, *Runink River Desk*
+  (`org.runink.river.desk`): your picture stands on a surface in a frame — mat, bevel, glass
+  and a shadow cast away from a single desk lamp — instead of being the surface. Six
+  materials ship: Runink River (the default, and the only one that is brand artwork), Walnut,
+  Brass and leather, Neon, Dreamcore and Retro 80s/90s; the picture, the material, the frame
+  size and the lamp are all in the wallpaper settings. Everything is drawn rather than
+  textured, so the whole wallpaper is a few kilobytes of QML and stays sharp at any
+  resolution. `org.kde.image` is still installed for a plain picture.
+
+  The desk metaphor is borrowed, with thanks, from [DEsk](https://github.com/fyzugx/DEsk)
+  (MIT) — "here the desktop is a desk". **Nothing is forked and no code is taken**: this is a
+  Plasma wallpaper plugin written here, because DEsk is a wlroots compositor that integrates
+  with systemd and this image is s6-only. The idea is theirs; the implementation, the framed
+  photograph and the palette are ours.
+
+- **The SDDM greeter runs on Wayland.** `DisplayServer=wayland` with
+  `CompositorCommand=kwin_wayland`, which is the key the October attempt was missing: SDDM's
+  Wayland greeter draws nothing itself, it starts a compositor and runs the greeter inside
+  it, and with none configured there was no surface to draw on — "no compositor, no socket
+  and no log", and a black screen to the QEMU harness. `kwin` is already on the medium for
+  the session, so the greeter costs no new package. The live medium is unchanged: it
+  autologins and shows no greeter.
+
 - **The installer plan decides an image-build reserve.** A server node that builds images
   shares its RAM with inference, and inference wins: after the model tiers are placed at full
   context, a build (about 30 GiB plus a 28 GiB work dir) gets a standing reserve only out of
