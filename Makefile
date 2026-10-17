@@ -52,18 +52,22 @@ iso: ## buildiso -p river  (Artix + artools; use `make iso-in-builder` off-Artix
 
 .PHONY: iso-in-builder
 iso-in-builder: builder ## Build the ISO inside the Artix builder container (any podman host)
-	# --userns=keep-id: the container's `builder` user must map to the SAME uid as the
-	# host caller, or every write into the bind-mounted $(CURDIR) (build/artifacts/,
-	# localrepo/) fails with "Permission denied" — rootless podman does not do this by
-	# default even with --privileged (that only grants capabilities within the
-	# container's own user namespace, it doesn't change the mapping).
+	# --userns=keep-id:uid=1000,gid=1000: the container's `builder` user must map to the
+	# SAME uid as the host caller, or every write into the bind-mounted $(CURDIR)
+	# (build/artifacts/, localrepo/) fails with "Permission denied" — rootless podman does
+	# not do this by default even with --privileged (that only grants capabilities within
+	# the container's own user namespace, it doesn't change the mapping).
+	# The uid is NAMED rather than left to chance: builder/Containerfile pins builder to
+	# 1000, and plain keep-id maps the caller to its own uid, which only satisfies the
+	# sentence above when the caller is already 1000. A GitHub runner is 1001, and that
+	# mismatch is what broke the public image build ("no write permission for $$BUILDDIR").
 	# PROFILE MUST BE PASSED EXPLICITLY. The inner `make` re-reads this Makefile inside
 	# the container, where `PROFILE := river` applies again — so an outer
 	# `make iso-in-builder PROFILE=<other>` once built the default profile and said nothing.
 	# A command-line assignment overrides a `:=` default, which is why it is repeated here
 	# rather than exported.
 	# A downstream payload (RIVER_PAYLOAD_DIR) is bind-mounted at /payload when set.
-	@podman run --rm --privileged --userns=keep-id -v $(CURDIR):/os:Z -w /os \
+	@podman run --rm --privileged --userns=keep-id:uid=1000,gid=1000 -v $(CURDIR):/os:Z -w /os \
 		$(if $(RIVER_PAYLOAD_DIR),-v $(RIVER_PAYLOAD_DIR):/payload:Z -e RIVER_PAYLOAD_DIR=/payload) \
 		runink-os-builder \
 		bash -c 'make components && make localrepo && make iso PROFILE=$(PROFILE)'

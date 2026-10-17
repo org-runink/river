@@ -55,7 +55,19 @@ RUN if [ "$BUILD_FLUTTER" = "1" ]; then \
 ENV PATH="/opt/flutter/bin:${PATH}"
 
 # A non-root build user (makepkg refuses to run as root).
-RUN useradd -m -G wheel builder && \
+#
+# THE UID IS PINNED, and it is half of a pair. build/build-kernel-zfs.sh bind-mounts the
+# caller's work directory and runs this user against it, so the two uids must agree or
+# makepkg cannot write to its own $BUILDDIR. Without -u this took the first free uid --
+# 1000 on Arch, which matches a dev host's first user by luck and does NOT match a
+# GitHub-hosted runner, where the user is `runner` at 1001. That is exactly why the public
+# image build failed in CI while the same command worked on a workstation:
+#
+#   ==> ERROR: You do not have write permission for the directory $BUILDDIR
+#
+# Pinned here, mapped to there (--userns=keep-id:uid=1000,gid=1000), so the pair is stated
+# in both files instead of inferred from whoever happens to run the build.
+RUN useradd -m -u 1000 -U -G wheel builder && \
     printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/builder
 USER builder
 WORKDIR /os

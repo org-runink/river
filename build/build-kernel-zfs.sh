@@ -16,8 +16,13 @@
 # packages, SHA256SUMS and the signing key (0600) into $KERNEL_OUT/.
 #
 # The kernel build is long (about an hour at -j8 on a 16-thread host) and runs under
-# `nice -n 19`. Nothing here needs root on the host: the container runs with
-# --userns=keep-id as the builder user, whose uid is the caller's.
+# `nice -n 19`. Nothing here needs root on the host: the container runs as the builder
+# user with the CALLER mapped onto builder's uid (--userns=keep-id:uid=1000,gid=1000,
+# builder/Containerfile pins 1000), so the bind-mounted work directory is writable
+# whatever uid the caller has. Plain --userns=keep-id maps the caller to its OWN uid,
+# which is only writable by builder when the two happen to match -- true on a dev host
+# at 1000, false on a GitHub runner at 1001, and the reason the public image build died
+# with "You do not have write permission for the directory $BUILDDIR".
 #
 # Usage: build/build-kernel-zfs.sh [--verify-only]
 # Environment:
@@ -75,7 +80,7 @@ fi
 
 log "building in $WORK (make -j$KERNEL_JOBS, nice 19); log: $KERNEL_OUT/build.log"
 start=$(date +%s)
-podman run --rm --userns=keep-id --user builder \
+podman run --rm --userns=keep-id:uid=1000,gid=1000 --user builder \
 	-v "$WORK:/w" -v "$SRC_MOUNT:/srcdest" \
 	-e TMPDIR=/w/tmp -e SRCDEST=/srcdest -e MAKEFLAGS="-j$KERNEL_JOBS" \
 	-w /w/pkgbuilds "$KBUILDER_IMAGE" bash -euo pipefail -c '
