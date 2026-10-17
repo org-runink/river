@@ -262,7 +262,11 @@ else
 fi
 [ "$LOCK" = "$REPO/models.lock" ] || set -- "$@" -e MODELS_LOCK=/os/build/artifacts/models.lock
 # A worktree keeps its git metadata outside the checkout; the build does not need git.
-podman run --rm --userns=keep-id --user builder "$@" "$BUILDER_IMAGE" build/build-all.sh
+# The caller is mapped onto builder's pinned uid (1000, builder/Containerfile) rather than
+# onto its own, so every bind mount below is writable whatever uid the caller has. See
+# build/build-kernel-zfs.sh: plain --userns=keep-id works only where the caller is already
+# 1000, which is a dev host and not a GitHub runner.
+podman run --rm --userns=keep-id:uid=1000,gid=1000 --user builder "$@" "$BUILDER_IMAGE" build/build-all.sh
 
 # The live guide: a profile that ships river-guide (its lock was checked above) gets the model
 # build-all.sh just staged under build/artifacts/river-guide/model.
