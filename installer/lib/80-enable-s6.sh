@@ -52,6 +52,18 @@ done
 # boot-database check below fail should it ever arrive with one.
 LIVE_ONLY_SERVICES="river-guide-model river-installer artix-live"
 
+# The getty on the VT the display manager takes. SDDM puts its greeter on VT 1 and ignores
+# MinimumVT in Wayland mode; Artix's default bundle also runs an agetty there. Both claim the
+# same VT, sddm-helper loses the TTY, and SDDM logs
+#   Greeter stopped. SDDM::Auth::HELPER_TTY_ERROR  /  Jumping to VT 1
+# then respawns -- forever. Measured on a VM install of the 2026-10-18 ISO: 48,060 log lines
+# and 133 crashes in 30 s, the screen black, the node reachable only on a text console. That
+# is exactly the "boots to a console, no GUI" report. Disabling tty1 alongside sddm ends it:
+# 0 crashes, "Greeter session started successfully", the greeter connects and stays up.
+# tty2-tty6 keep their gettys, so a text console is still one Ctrl-Alt-F2 away.
+DM_VT1_CONFLICT=""
+case " $NODE_SERVICES " in *" sddm "*) DM_VT1_CONFLICT="tty1" ;; esac
+
 mounted=""
 cleanup() { for fs in $mounted; do umount -R "$TARGET/$fs" 2>/dev/null || true; done; }
 trap cleanup EXIT
@@ -68,6 +80,13 @@ chroot_run "s6 repository sync"
 for svc in $LIVE_ONLY_SERVICES; do
 	if chroot_run "s6 set status" | grep -q "^$svc/"; then
 		echo "s6: disabling live-only service $svc"
+		chroot_run "s6 set disable $svc"
+	fi
+done
+
+for svc in $DM_VT1_CONFLICT; do
+	if chroot_run "s6 set status" | grep -q "^$svc/"; then
+		echo "s6: disabling $svc -- sddm takes VT 1 and a getty there starves its greeter"
 		chroot_run "s6 set disable $svc"
 	fi
 done
@@ -89,6 +108,13 @@ done
 for svc in $LIVE_ONLY_SERVICES; do
 	if printf '%s\n' "$db" | grep -q "^$svc"; then
 		echo "s6: live-only $svc is still in the boot database" >&2
+		exit 1
+	fi
+done
+# The conflicting getty must be gone, or the node boots to the crash loop described above.
+for svc in $DM_VT1_CONFLICT; do
+	if printf '%s\n' "$db" | grep -qx "$svc"; then
+		echo "s6: $svc is still in the boot database; it would starve the sddm greeter on VT 1" >&2
 		exit 1
 	fi
 done

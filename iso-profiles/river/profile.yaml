@@ -95,6 +95,24 @@ live-session:
     - cupsd
     # river-installer: the graphical installer's backend on [::1]:47660 (live medium only;
     # docs/INSTALL.md). The live session opens it in Firefox (etc/xdg/autostart).
+    # rc-local runs /etc/s6/rc.local, which on the LIVE medium starts river-live-fallback:
+    # it waits for a desktop and, failing one, opens the weston kiosk and then the text
+    # installer on tty1.
+    #
+    # Declared here for intent. It is ALREADY in the live boot database by way of Artix's
+    # default bundle -- verified on the shipped 2026-10-18 ISO, where `s6-rc -a list` has
+    # rc-local in the active set. An earlier reading of this file claimed rc.local had
+    # never run on a live boot; that was wrong, and so was the inference behind it. Listing
+    # a compiled s6 database by its `servicedirs/` directory shows LONGRUNS ONLY, so every
+    # oneshot River supplies (rc-local, runink-fw, zfs-mount, river-perms) looks absent
+    # there on a perfectly good image. `s6-rc-db ... type` on the booted ISO says oneshot
+    # for all four. Check membership with `s6-rc -a list` or `s6-rc-db contents default`,
+    # never by listing servicedirs.
+    #
+    # What actually kept the fallback from being seen was the autologin getty on VT 1: it
+    # held the terminal the fallback writes to, while starving SDDM into a crash loop (see
+    # live-overlay/etc/s6/config/tty1.conf).
+    - rc-local
     - river-installer
   user-services:
     - dbus
@@ -256,6 +274,13 @@ rootfs:
     # will not initialise without its firmware split.
     - linux-firmware-amdgpu
     - linux-firmware-intel
+    # network firmware for non-Intel hardware -- see Packages-Root for why
+    - linux-firmware-realtek
+    - linux-firmware-broadcom
+    - linux-firmware-atheros
+    - linux-firmware-mediatek
+    - linux-firmware-qcom
+    - linux-firmware-marvell
     # ── ZFS root ──────────────────────────────────────────────────────────────────────
     # The kernel swap (2026-09-06). The kernel is
     # linux-runink (zen-kernel 7.2.x stable fork, 7.2.7-zen1), installed via scripts/patch-artools.go's
