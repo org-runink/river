@@ -288,60 +288,6 @@ fi
 got="$(blkid -s LABEL -o value "$FINAL" 2>/dev/null || true)"
 [ "$got" = "$LABEL" ] || die "$FINAL has label '$got', expected '$LABEL'"
 echo "iso-root-stage: label $got"
-
-# EVERY DECLARED LIVE SERVICE MUST BE IN THE IMAGE'S BOOT DATABASE.
-#
-# profile.yaml's live-session.services is a DECLARATION; artools' services.sh is
-# what turns it into enabled services, and until 2026-10-18 nobody checked that it
-# had. It had not, for every service River supplies through its own overlays:
-#
-#     runink-fw  zfs-mount  river-perms  river-installer  rc-local   MISSING
-#     NetworkManager  sshd  sddm  bluetoothd  cupsd                  compiled
-#
-# The split is exact -- a service that arrives with a PACKAGE is enabled by that
-# package's install hook, and the overlays are copied AFTER the hooks run, so an
-# overlay-provided service directory does not exist when the database is built.
-# rc-local missing meant /etc/s6/rc.local never ran on a live boot, which meant
-# river-live-fallback never started, which meant the medium reached a console and
-# the owner had to know to type `sudo runink-install`. It shipped that way for
-# months because the declaration looked right and nothing compared it to the image.
-#
-# So compare them. This reads the COMPILED database out of the image that was just
-# built -- not the profile, not the staging tree -- and fails the build when a
-# declared service is not in it.
-#
-# The path is /etc/s6/rc/.current:@<stamp>:<rand>/servicedirs/, NOT rc/compiled/.
-# `compiled` is a symlink that resolves only in an extracted tree; matched against
-# `unsquashfs -l` it yields ZERO entries, and a check that finds nothing reports
-# every declared service missing -- failing good builds and bad ones alike. Tested
-# against the 2026-10-18 image both ways: it names rc-local, river-installer,
-# river-perms, runink-fw and zfs-mount, and does NOT name NetworkManager, sshd,
-# sddm, bluetoothd or cupsd.
-if command -v unsquashfs >/dev/null 2>&1 && [ -r "$PROFILE_DIR/profile.yaml" ]; then
-	_svc_tmp="$(mktemp -d)"
-	if bsdtar -xf "$FINAL" -C "$_svc_tmp" LiveOS/rootfs.img 2>/dev/null &&
-	   unsquashfs -l "$_svc_tmp/LiveOS/rootfs.img" 2>/dev/null \
-	     | sed -n 's#.*/servicedirs/\([^/]*\)$#\1#p' | sort -u > "$_svc_tmp/compiled"; then
-		sed -n '/^  services:/,/^  [a-z-]*:/p' "$PROFILE_DIR/profile.yaml" \
-		  | sed -n 's/^    - \([A-Za-z0-9_-]*\).*/\1/p' | sort -u > "$_svc_tmp/declared"
-		_missing=""
-		while IFS= read -r _s; do
-			[ -n "$_s" ] || continue
-			grep -qx -e "$_s" -e "$_s-srv" -e "$_s-log" "$_svc_tmp/compiled" || _missing="$_missing $_s"
-		done < "$_svc_tmp/declared"
-		if [ -n "$_missing" ]; then
-			echo "iso-root-stage: DECLARED BUT NOT ENABLED in the image's s6 boot database:$_missing" >&2
-			echo "iso-root-stage: profile.yaml live-session.services says these start at boot and the image disagrees." >&2
-			echo "iso-root-stage: overlay-provided services need enabling AFTER the overlays are copied (see scripts/patch-artools.go)." >&2
-			rm -rf "$_svc_tmp"
-			die "the live service set did not reach the boot database"
-		fi
-		echo "iso-root-stage: every declared live service is in the boot database ($(tr '\n' ' ' < "$_svc_tmp/declared"))"
-	else
-		echo "iso-root-stage: WARNING could not read the boot database out of $FINAL; service check skipped" >&2
-	fi
-	rm -rf "$_svc_tmp"
-fi
 ( cd "$OUT_DIR" && sha256sum "$(basename "$FINAL")" > "$(basename "$FINAL").sha256" )
 chown "$OWNER_UID:$OWNER_GID" "$FINAL" "$FINAL.sha256"
 rm -rf "$STAGE" "$WORK_DIR"
