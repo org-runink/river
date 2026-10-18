@@ -57,7 +57,6 @@ func mediumUnaidedCmd(v *viper.Viper) *cobra.Command {
 		Long: `Boot ISO under QEMU with nothing injected, started or overlaid, and ask the running
 system six questions:
 
-  medium-vt-free    no getty holds the VT the display manager wants
   medium-dm-started the display manager got far enough to write a log at all
   medium-dm-tty     zero HELPER_TTY_ERROR in it
   medium-dm-stable  the supervisor PID is unchanged AND positive across 12s
@@ -113,6 +112,33 @@ echo "RV_PLASMAA=${PA:-}"
 echo "RV_PLASMAB=${PB:-}"
 echo "RV_INST=$(ps -eo comm | grep -c '^river-installer$')"
 echo "RV_GETTY=$(sudo s6-rc -a list 2>/dev/null | grep -cx tty1)"
+
+# --- connectivity ------------------------------------------------------------------
+# WIRED is real: QEMU gives the guest an emulated NIC, so this exercises a driver
+# binding and NetworkManager actually managing it.
+echo "RV_ETH=$(ls /sys/class/net 2>/dev/null | grep -vc '^lo$')"
+echo "RV_NMSTATE=$(nmcli -t -f STATE general 2>/dev/null | head -1)"
+echo "RV_ETHMANAGED=$(nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | grep -c ':ethernet:connected')"
+
+# WIFI and BLUETOOTH are SIMULATED. There is no wifi or Bluetooth hardware in QEMU, so
+# these load the kernel's own simulators and test that the STACK is present and wired
+# up: drivers, rfkill, NetworkManager's wifi plugin, bluetoothd's controller handling.
+# They CANNOT say a particular card is recognised — that needs the real machine.
+sudo modprobe mac80211_hwsim radios=1 2>/dev/null
+sleep 3
+echo "RV_WIFIDEV=$(ls /sys/class/net 2>/dev/null | grep -c '^wlan')"
+echo "RV_WIFINM=$(nmcli -t -f DEVICE,TYPE device 2>/dev/null | grep -c ':wifi')"
+echo "RV_WIFIBLOCK=$(rfkill list wifi 2>/dev/null | grep -c 'Soft blocked: yes')"
+sudo modprobe bluetooth 2>/dev/null
+sudo modprobe hci_vhci 2>/dev/null
+sleep 3
+# /dev/vhci appearing proves the Bluetooth core + hci_vhci driver loaded. It does NOT
+# create a controller: that needs btvirt, which the image deliberately does not ship.
+echo "RV_BTVHCI=$([ -e /dev/vhci ] && echo 1 || echo 0)"
+echo "RV_BTSUBSYS=$([ -d /sys/class/bluetooth ] && echo 1 || echo 0)"
+echo "RV_BTUSB=$(find /usr/lib/modules -name 'btusb.ko*' 2>/dev/null | head -1 | grep -c .)"
+echo "RV_BTD=$(ps -eo comm | grep -c '^bluetoothd$')"
+echo "RV_BTBLOCK=$(rfkill list bluetooth 2>/dev/null | grep -c 'Soft blocked: yes')"
 echo RV_DONE
 `
 
@@ -153,7 +179,11 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 		"-drive", "if=pflash,format=raw,file="+vars,
 		"-drive", "file="+scratch+",if=virtio,format=qcow2",
 		"-cdrom", iso,
+		// Two NICs on purpose: virtio-net (the paravirtual path) and an emulated e1000
+		// (a real PCI device with a real in-tree driver), so medium-net-iface and
+		// medium-net-managed exercise an actual driver bind, not just virtio.
 		"-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
+		"-netdev", "user,id=n1", "-device", "e1000,netdev=n1",
 		"-device", "virtio-vga", "-display", "none",
 		"-chardev", "socket,id=s0,path="+sock+",logfile="+logPath,
 		"-serial", "chardev:s0")
@@ -194,7 +224,8 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 	}
 
 	fmt.Fprintf(outw, "--- medium-unaided: %s ---\n", filepath.Base(iso))
-	for _, key := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY"} {
+	for _, key := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
+		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK"} {
 		fmt.Fprintf(outw, "  RV_%s=%s\n", key, vals[key])
 	}
 	return report(vals, outw, errw)
@@ -216,7 +247,8 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 		n, err := strconv.Atoi(strings.TrimSpace(vals[k]))
 		return n, err == nil
 	}
-	for _, k := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY"} {
+	for _, k := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
+		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK"} {
 		if _, ok := num(k); !ok {
 			say("medium-probe", false, fmt.Sprintf("value RV_%s did not parse (broken harness, not a verdict)", k))
 		}
@@ -233,7 +265,23 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	inst, _ := num("INST")
 	getty, _ := num("GETTY")
 
-	say("medium-vt-free", getty == 0, "a tty1 getty is active; it starves the display manager's greeter")
+	// A getty on VT 1 is reported, NOT failed. It was a hard check until 2026-10-18 and that
+	// was wrong: it asserts the CAUSE I diagnosed instead of the outcome the owner needs.
+	//
+	// Measured on an ISO built from 527387b, which has SPAWN="yes" and therefore a live getty
+	// on tty1: RV_GETTY=1, and yet RV_TTYERR=0, sddm pid 785 unchanged across 12s, Plasma in
+	// both samples, installer running. The medium reached the wizard perfectly well. The
+	// reason is that SDDM's autologin takes effect there, so it never starts a GREETER — and
+	// the greeter is the thing that fought the getty. Two configurations are valid: autologin
+	// (no greeter, a getty is harmless) and a greeter (a getty starves it). Failing on the
+	// getty alone would have blocked a working release.
+	//
+	// The outcome checks below already catch the real fault: a starved greeter shows up as
+	// HELPER_TTY_ERROR, an unstable supervisor PID, and no sustained Plasma.
+	if getty != 0 {
+		fmt.Fprintln(outw, "RIVERTEST NOTE medium-vt-free   a tty1 getty is active; harmless under "+
+			"autologin, fatal if a greeter runs — see medium-dm-tty and medium-dm-stable")
+	}
 	// "No log" is not "no errors": it means sddm never got far enough to write one.
 	say("medium-dm-started", dmlog == 1, "no /var/log/sddm.log after 3m: the display manager never started")
 	say("medium-dm-tty", ttyerr == 0, fmt.Sprintf("%d HELPER_TTY_ERROR in sddm.log: the greeter is losing the TTY", ttyerr))
@@ -244,6 +292,52 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	say("medium-desktop", plasmaA >= 1 && plasmaB >= 1,
 		fmt.Sprintf("no sustained Plasma session (samples: %d, %d)", plasmaA, plasmaB))
 	say("medium-installer", inst >= 1, "river-installer is not running")
+
+	// --- connectivity --------------------------------------------------------------------
+	//
+	// WIRED is a real test: QEMU gives the guest an emulated NIC, so a driver really binds
+	// and NetworkManager really manages it.
+	eth, _ := num("ETH")
+	ethManaged, _ := num("ETHMANAGED")
+	say("medium-net-iface", eth >= 1, "no network interface besides lo")
+	say("medium-net-managed", ethManaged >= 1,
+		"NetworkManager has no connected ethernet device (nmcli device shows none :ethernet:connected)")
+
+	// WIFI and BLUETOOTH are SIMULATED — mac80211_hwsim and hci_vhci, the kernel's own
+	// simulators. There is no such hardware in QEMU. These prove the STACK is present and
+	// wired up: the drivers are in the image, rfkill is not soft-blocking, NetworkManager's
+	// wifi plugin enumerates a wlan, and bluetoothd picks up a controller.
+	//
+	// They CANNOT say a particular card is recognised. That needs the real machine, and the
+	// owner's "does not recognize any network card" report is NOT answered by a green run
+	// here. Firmware presence was separately ruled out: both the 2026-10-18 ISOs carry the
+	// full linux-firmware (rtw88, rtw89, brcm, ath10k/11k, mediatek, qca), so that was never
+	// the gap.
+	wifiDev, _ := num("WIFIDEV")
+	wifiNM, _ := num("WIFINM")
+	wifiBlock, _ := num("WIFIBLOCK")
+	say("medium-wifi-stack", wifiDev >= 1, "mac80211_hwsim loaded but no wlan interface appeared: the wifi driver stack is not in the image")
+	say("medium-wifi-nm", wifiNM >= 1, "NetworkManager does not enumerate the simulated wlan: its wifi plugin is missing or disabled")
+	say("medium-wifi-unblocked", wifiBlock == 0, "wifi is SOFT-BLOCKED by rfkill on a fresh boot: runink-fw should clear it")
+
+	btVhci, _ := num("BTVHCI")
+	btSubsys, _ := num("BTSUBSYS")
+	btUsb, _ := num("BTUSB")
+	btd, _ := num("BTD")
+	btBlock, _ := num("BTBLOCK")
+	// Asserting an instantiated hci controller was WRONG and failed a good image: hci_vhci
+	// creates /dev/vhci, it does not create a controller. That needs btvirt, which the image
+	// deliberately does not ship (it is a bluez test tool). What IS provable in a VM: the
+	// Bluetooth core and the vhci driver load, the subsystem exists, the USB adapter driver
+	// that real hardware needs is present, bluetoothd runs, and rfkill is not blocking.
+	say("medium-bt-stack", btVhci == 1 && btSubsys == 1,
+		"the Bluetooth core/hci_vhci drivers did not load (/dev/vhci or /sys/class/bluetooth absent)")
+	say("medium-bt-driver", btUsb >= 1, "btusb.ko is not in the image: no USB Bluetooth adapter could bind")
+	say("medium-bt-daemon", btd >= 1, "bluetoothd is not running")
+	say("medium-bt-unblocked", btBlock == 0, "Bluetooth is SOFT-BLOCKED by rfkill on a fresh boot: runink-fw should clear it")
+
+	fmt.Fprintln(outw, "RIVERTEST NOTE connectivity      wired is real (emulated NIC); wifi and Bluetooth are "+
+		"SIMULATED (mac80211_hwsim, hci_vhci) and prove the stack only, never that a given card is recognised")
 
 	if failed > 0 {
 		return fmt.Errorf("medium-unaided: %d check(s) failed: the medium does not reach the graphical installer unaided", failed)
