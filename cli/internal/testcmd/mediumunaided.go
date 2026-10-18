@@ -4,7 +4,6 @@
 package testcmd
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -168,10 +168,18 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 	}
 	defer conn.Close()
 
+	// Drain the serial socket CONTINUOUSLY from here on. If nothing reads it, the socket
+	// buffer fills, QEMU blocks writing to it, and the guest's console stalls -- the boot
+	// then looks like it never reached a prompt. (It does not: the first Go port of this
+	// waited on the logfile without draining and reported "no prompt within 6m" on an image
+	// that boots fine.)
+	ser := &serialTap{}
+	go ser.drain(conn)
+
 	// Wait for ANY prompt. A console shell IS the failure mode, so waiting only for a
 	// success marker would hang a broken medium until the deadline and report nothing.
 	fmt.Fprintln(outw, "medium-unaided: booting", filepath.Base(iso))
-	if !waitForPrompt(ctx, logPath, 6*time.Minute) {
+	if !ser.waitForPrompt(ctx, 6*time.Minute) {
 		return fmt.Errorf("medium-unaided: no prompt within 6m; the medium did not reach a usable state")
 	}
 	time.Sleep(45 * time.Second)
@@ -180,7 +188,7 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 	if _, err := fmt.Fprintf(conn, "echo %s | base64 -d > /tmp/rvprobe.sh; sh /tmp/rvprobe.sh\n", enc); err != nil {
 		return fmt.Errorf("medium-unaided: writing probe: %w", err)
 	}
-	vals, err := readProbe(ctx, conn, 4*time.Minute)
+	vals, err := ser.readProbe(ctx, 4*time.Minute)
 	if err != nil {
 		return fmt.Errorf("medium-unaided: %w", err)
 	}
@@ -244,41 +252,72 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	return nil
 }
 
-func waitForPrompt(ctx context.Context, logPath string, within time.Duration) bool {
+// serialTap accumulates everything the guest writes to its serial console, so the console
+// never blocks on a full socket buffer and so both the prompt wait and the probe read work
+// off the same stream.
+type serialTap struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *serialTap) drain(r io.Reader) {
+	b := make([]byte, 8192)
+	for {
+		n, err := r.Read(b)
+		if n > 0 {
+			t.mu.Lock()
+			t.buf = append(t.buf, b[:n]...)
+			t.mu.Unlock()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (t *serialTap) text() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return ansiRe.ReplaceAllString(string(t.buf), "")
+}
+
+func (t *serialTap) waitForPrompt(ctx context.Context, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return false
 		}
-		if b, err := os.ReadFile(logPath); err == nil {
-			s := string(b)
-			if strings.Contains(s, "login:") || strings.Contains(s, "$ ") || strings.Contains(s, "# ") {
-				return true
-			}
+		s := t.text()
+		// A console shell IS the failure mode, so we must not wait only for a success
+		// marker: a broken medium would then hang here and report nothing useful.
+		if strings.Contains(s, "login:") || strings.Contains(s, "$ ") || strings.Contains(s, "# ") {
+			return true
 		}
 		time.Sleep(5 * time.Second)
 	}
 	return false
 }
 
-// readProbe reads KEY=VALUE lines until RV_DONE. Returning without RV_DONE is an error, never
-// a partial verdict.
-func readProbe(ctx context.Context, conn net.Conn, within time.Duration) (map[string]string, error) {
-	_ = conn.SetReadDeadline(time.Now().Add(within))
-	vals := map[string]string{}
-	sc := bufio.NewScanner(conn)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(ansiRe.ReplaceAllString(sc.Text(), ""))
-		if line == "RV_DONE" {
-			return vals, nil
-		}
-		if k, v, ok := strings.Cut(line, "="); ok && strings.HasPrefix(k, "RV_") {
-			vals[strings.TrimPrefix(k, "RV_")] = strings.TrimSpace(v)
-		}
+// readProbe waits for RV_DONE and returns the KEY=VALUE pairs. Returning without RV_DONE is an
+// error, never a partial verdict.
+func (t *serialTap) readProbe(ctx context.Context, within time.Duration) (map[string]string, error) {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			break
 		}
+		s := t.text()
+		if strings.Contains(s, "RV_DONE") {
+			vals := map[string]string{}
+			for _, line := range strings.Split(s, "\n") {
+				line = strings.TrimSpace(line)
+				if k, v, ok := strings.Cut(line, "="); ok && strings.HasPrefix(k, "RV_") {
+					vals[strings.TrimPrefix(k, "RV_")] = strings.TrimSpace(v)
+				}
+			}
+			return vals, nil
+		}
+		time.Sleep(5 * time.Second)
 	}
 	return nil, fmt.Errorf("the probe did not complete (no RV_DONE); no verdict")
 }
