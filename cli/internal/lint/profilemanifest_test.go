@@ -170,3 +170,42 @@ func TestProfileKind(t *testing.T) {
 		t.Fatalf("valid server profile: %q %v", k, ok)
 	}
 }
+
+// TestProfileManifestSDDMTTY1 is a mutation proof, not a presence check: the same fixture must
+// FAIL with SPAWN="yes" on tty1 and PASS with SPAWN="no". A getty there starves the SDDM
+// greeter on VT 1 (HELPER_TTY_ERROR, endless respawn), which is how the 2026-10-18 ISO booted
+// to a text console instead of the desktop.
+func TestProfileManifestSDDMTTY1(t *testing.T) {
+	fixture := func(spawn string) string {
+		dir := pmFixture(t, false)
+		lbWrite(t, dir, "iso-profiles/river/profile.yaml", `rootfs:
+  packages:
+    - base
+    - linux-runink
+  packages-init:
+    s6:
+      - openssh-s6
+livefs:
+  packages:
+    - river-live
+live-session:
+  services:
+    - sddm
+`)
+		lbWrite(t, dir, "iso-profiles/river/live-overlay/etc/s6/config/tty1.conf",
+			"# live tty1\nSPAWN=\""+spawn+"\"\nGETTY=\"agetty\"\n")
+		return dir
+	}
+
+	out, err := pmRun(t, fixture("yes"))
+	if err == nil {
+		t.Fatalf("SPAWN=\"yes\" alongside sddm must fail the lint, but it passed:\n%s", out)
+	}
+	if !strings.Contains(out, "starves the SDDM greeter") {
+		t.Fatalf("failure does not name the cause:\n%s", out)
+	}
+
+	if out, err := pmRun(t, fixture("no")); err != nil {
+		t.Fatalf("SPAWN=\"no\" is the fixed state and must pass: %v\n%s", err, out)
+	}
+}

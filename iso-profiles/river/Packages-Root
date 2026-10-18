@@ -23,6 +23,29 @@ efibootmgr
 # boots either.
 linux-firmware-amdgpu
 linux-firmware-intel
+# NETWORK FIRMWARE FOR HARDWARE THAT IS NOT INTEL. Added 2026-10-18 after the
+# owner booted the medium on real hardware and it recognised NO NIC and no
+# wifi card. linux-firmware-intel carries iwlwifi, so an Intel machine was
+# fine and the gap was invisible on the reference hardware; linux-firmware-
+# amdgpu is a GPU split and carries no network firmware at all. Anything with
+# a Realtek, Broadcom, MediaTek, Atheros or Qualcomm radio or NIC had nothing
+# to load, so the kernel found no device and the installer's first screen --
+# which is the network step -- had nothing to offer.
+#
+# These are the NETWORK splits only, not the whole linux-firmware. An
+# INSTALLER medium has to come up on hardware nobody chose in advance, and a
+# machine that cannot reach the network cannot be installed; a machine with an
+# unaccelerated GPU still installs (the nomodeset entry exists for that). That
+# asymmetry is why the GPU splits stay vendor-scoped and these do not.
+#
+# All six verified present in Artix [system] at PIN_DATE 2026-07-01 before
+# being listed, so this cannot fail the build three hours in on a typo.
+linux-firmware-realtek
+linux-firmware-broadcom
+linux-firmware-atheros
+linux-firmware-mediatek
+linux-firmware-qcom
+linux-firmware-marvell
 
 # ── ZFS root ───────────────────────────────────────────────────────────────────────────
 # Encrypted ZFS root (invariant 3); the datasets are created with compression=zstd by the
