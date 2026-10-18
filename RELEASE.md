@@ -40,8 +40,18 @@ A tag is cut only when all of these hold on the commit being tagged:
    check ([docs/governance/CI.md](docs/governance/CI.md)).
 2. `make lint` passes locally, including the closure lint that CI cannot run.
 3. The ISO builds from that commit (`build/local-iso.sh` and its root stage, or `images.yml`),
-   and passes the unattended graphical install and boot (`build/qemu-gui-test.sh`, every
-   `RIVERTEST` check OK). The Tier 2 CI job replaces this manual step once its runner exists.
+   and **both** of these pass, because they answer different questions:
+   - `build/verify-medium-unaided.sh ISO` — the MEDIUM boots to the graphical installer on
+     its own. Nothing is injected, started or overlaid. Every `RIVERTEST` check OK.
+   - `build/qemu-gui-test.sh` — the INSTALLER works, all eight screens. Every `RIVERTEST`
+     check OK.
+
+   The second does not imply the first, and must not be read as if it did: that harness
+   overlays repo-built binaries over the image's own `river-installer` and `river-kiosk` and
+   starts the wizard when the image did not, as its own header says. A check that repairs
+   what it observes cannot fail. The 2026-10-18 ISO booted to a text console — SDDM lost
+   VT 1 to an autologin getty and crash-looped silently, 194 times — and passed everything
+   that existed at the time. The Tier 2 CI job replaces this manual step once its runner exists.
 4. **Dependency check.** Every pinned upstream is checked against its advisories: the
    kernel (kernel.org stable and the zen patch), OpenZFS, k0s, the mistral.rs build pinned
    in `guide/model.lock`, the distribution mirror snapshot, and the Go
