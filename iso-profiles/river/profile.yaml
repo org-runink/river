@@ -95,6 +95,16 @@ live-session:
     - cupsd
     # river-installer: the graphical installer's backend on [::1]:47660 (live medium only;
     # docs/INSTALL.md). The live session opens it in Firefox (etc/xdg/autostart).
+    # rc-local runs /etc/s6/rc.local, and on the LIVE medium that is the ONLY thing that
+    # starts river-live-fallback -- which waits for a desktop and, failing one, opens the
+    # weston kiosk and then the text installer on tty1. It was enabled for the INSTALLED
+    # node only (80-enable-s6.sh's NODE_SERVICES) and never here, so rc.local has never
+    # run on a live boot.
+    #
+    # Found 2026-10-18 by booting the shipped ISO under QEMU with nothing injected: the
+    # medium reaches `[runink@runink-live ~]$` on tty1 and the serial log has no mention
+    # of rc.local, river-live-fallback, weston or the kiosk.
+    - rc-local
     - river-installer
   user-services:
     - dbus
@@ -256,6 +266,13 @@ rootfs:
     # will not initialise without its firmware split.
     - linux-firmware-amdgpu
     - linux-firmware-intel
+    # network firmware for non-Intel hardware -- see Packages-Root for why
+    - linux-firmware-realtek
+    - linux-firmware-broadcom
+    - linux-firmware-atheros
+    - linux-firmware-mediatek
+    - linux-firmware-qcom
+    - linux-firmware-marvell
     # ── ZFS root ──────────────────────────────────────────────────────────────────────
     # The kernel swap (2026-09-06). The kernel is
     # linux-runink (zen-kernel 7.2.x stable fork, 7.2.7-zen1), installed via scripts/patch-artools.go's
