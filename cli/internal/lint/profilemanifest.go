@@ -69,6 +69,8 @@ var (
 	pmCommentRe = regexp.MustCompile(`[[:space:]]+#.*$`)
 	pmKeyRe     = regexp.MustCompile(`^[A-Za-z0-9_.-]+:`)
 	pmArtixRe   = regexp.MustCompile(`^artix-live(-[a-z0-9]+)?$`)
+	// an uncommented SPAWN="yes" in an Artix s6 getty config.
+	pmSpawnYesRe = regexp.MustCompile(`(?m)^[ \t]*SPAWN="?yes"?`)
 )
 
 // pmYAMLLists reads the block lists of an artools profile file (block lists of scalars,
@@ -220,6 +222,20 @@ func ProfileManifest(_ context.Context, repo string, dirs []string, errw, outw i
 		if st, err := os.Stat(filepath.Join(d, "live-overlay")); err == nil && st.IsDir() &&
 			!regexp.MustCompile(`(?m)^livefs:`).Match(pyb) {
 			r.fail("%s: has live-overlay/ but profile.yaml has no livefs: key, so artools never copies it", p)
+		}
+		// A display manager and a getty cannot share VT 1. SDDM puts the live session there and
+		// ignores MinimumVT in Wayland mode; an autologin getty on tty1 takes the TTY from
+		// sddm-helper, which logs "SDDM::Auth::HELPER_TTY_ERROR / Jumping to VT 1" and respawns
+		// forever. On the 2026-10-18 ISO that was 194 crashes and a black screen, so the medium
+		// always fell through to the text console -- the "it gets into the console" report. The
+		// live medium needs no getty there: river-live-fallback opens /dev/tty1 itself when no
+		// desktop appears. This fails the build rather than shipping that loop again.
+		if slices.Contains(pmListOf(prof, "live-session/services"), "sddm") {
+			ttyConf := filepath.Join(d, "live-overlay", "etc", "s6", "config", "tty1.conf")
+			if b, err := os.ReadFile(ttyConf); err == nil && pmSpawnYesRe.Match(b) {
+				r.fail("%s: live-session enables sddm and live-overlay tty1.conf has SPAWN=\"yes\"; "+
+					"the getty on VT 1 starves the SDDM greeter (set SPAWN=\"no\")", p)
+			}
 		}
 		livefs := pmListOf(prof, "livefs/packages")
 		if lb, err := os.ReadFile(filepath.Join(d, "Packages-Live")); err == nil {

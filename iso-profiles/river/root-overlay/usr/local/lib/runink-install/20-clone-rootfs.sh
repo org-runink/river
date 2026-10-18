@@ -32,7 +32,6 @@ rsync -aHAXS --numeric-ids --info=progress2 \
   --exclude='/usr/local/lib/river-pair' --exclude='/var/log/river-pair' \
   --exclude='/usr/share/river/installer' --exclude='/etc/s6/sv/river-installer' \
   --exclude='/usr/local/bin/river-installer-tty' --exclude='/etc/xdg/autostart/river-installer.desktop' \
-  --exclude='/etc/profile.d/99-river-live-installer.sh' \
   --exclude='/usr/local/bin/river-installer-desktop' --exclude='/var/log/river-installer' \
   --exclude='/etc/xdg/kscreenlockerrc' --exclude='/etc/xdg/powermanagementprofilesrc' \
   --exclude='/etc/xdg/weston' \
