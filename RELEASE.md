@@ -41,7 +41,7 @@ A tag is cut only when all of these hold on the commit being tagged:
 2. `make lint` passes locally, including the closure lint that CI cannot run.
 3. The ISO builds from that commit (`build/local-iso.sh` and its root stage, or `images.yml`),
    and **both** of these pass, because they answer different questions:
-   - `build/verify-medium-unaided.sh ISO` — the MEDIUM boots to the graphical installer on
+   - `river test medium-unaided ISO` — the MEDIUM boots to the graphical installer on
      its own. Nothing is injected, started or overlaid. Every `RIVERTEST` check OK.
    - `build/qemu-gui-test.sh` — the INSTALLER works, all eight screens. Every `RIVERTEST`
      check OK.

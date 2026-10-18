@@ -44,6 +44,7 @@ func init() {
 			simpleCmd(v, "models-required", "the model payload step's required mode (72-models-payload), with fake zfs", ModelsRequired),
 			simpleCmd(v, "models-fetch", "build/models-fetch.sh: MODELS_ONLY and HF_TOKEN_FILE, against a local upstream", ModelsFetch),
 			sddmThemeCmd(v),
+			mediumUnaidedCmd(v),
 		)
 		return c
 	})
