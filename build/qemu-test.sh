@@ -255,6 +255,10 @@ qemu-img create -q -f qcow2 "$WORK/target.qcow2" "$DISK_SIZE"
 cp "$OVMF_VARS" "$WORK/vars.fd"
 mkdir -p "$WORK/kit"
 cat > "$WORK/kit/config" <<EOF
+# RT_PROFILE gates the checks that assert a posture only one profile has. Without it the
+# firewall block defaults to "server" and runs everywhere, which is how a server-only check
+# came to fail on a workstation.
+RT_PROFILE=$PROFILE
 LAB=$LAB
 EXPECT_LABEL=$LABEL
 TARGET_SERIAL=$SERIAL_ID
@@ -338,7 +342,14 @@ if command -v river-netsetup >/dev/null 2>&1; then
 	# gateway is this host, and rt-far (an arbitrary destination, 198.51.100.2 / 2001:db8:2::2)
 	# behind it. With runink_fw loaded, peer -> far must fail for both families; with the table
 	# removed it must work (so the drop is the firewall's, not a broken test rig).
-	if [ -x /usr/local/bin/runink-fw ]; then
+	# SERVER ONLY. fw-base requires "tcp dport 22 accept" in the input chain — an open SSH
+	# port, which is the SERVER posture. The workstation deliberately closes SSH
+	# (default-deny input, no fixed port; `river lint firewall` enforces it), so this check
+	# fails there CORRECTLY and means nothing. It ran anyway and emitted a spurious
+	# RIVERTEST FAIL that only the $want allow-list was hiding.
+	if [ "${RT_PROFILE:-server}" != server ]; then
+		echo "fw: skipped — fw-base asserts the server posture (SSH open); this is ${RT_PROFILE:-unset}"
+	elif [ -x /usr/local/bin/runink-fw ]; then
 		/usr/local/bin/runink-fw apply
 		if nft list chain inet runink_fw input 2>/dev/null | grep -q 'tcp dport 22 accept' \
 			&& nft list chain inet runink_fw forward 2>/dev/null | grep -q 'policy drop'; then ok fw-base
@@ -827,6 +838,25 @@ for c in $want; do
 	else echo "  FAIL  $c $(grep "RIVERTEST FAIL $c" "$WORK/results.txt" | head -1 | sed 's/^RIVERTEST FAIL [^ ]*//')"; fail=1; fi
 done
 echo "  screenshots: $(cd "$WORK" && ls ./*.png 2>/dev/null | tr '\n' ' ')"
+
+# EVERY failure counts, not only the ones in $want.
+#
+# $want is an allow-list and the loop above only ever reads names in it, so a check that RAN
+# and FAILED was invisible to the verdict. Found 2026-10-18 on a workstation run that printed
+# "qemu-test: PASS" while its own serial log held
+#     RIVERTEST FAIL fw-base (table inet runink_fw { set open_tcp { type inet_service )
+# because fw-base is only in the server $want. That one was spurious (see the profile guard in
+# live.sh), but the mechanism is indifferent: a genuine failure outside $want is hidden the
+# same way and the summary still says PASS.
+unexpected="$(sed -n 's/^RIVERTEST FAIL \([^ ]*\).*/\1/p' "$WORK/results.txt" 2>/dev/null | sort -u \
+	| while read -r c; do case " $want " in *" $c "*) ;; *) printf '%s ' "$c" ;; esac; done)"
+if [ -n "$unexpected" ]; then
+	echo "  FAIL  (not in this profile's expected set) $unexpected"
+	echo "qemu-test: a check that is not in \$want FAILED — either it should not run on this" >&2
+	echo "qemu-test: profile, or it belongs in \$want. Silence here is how a real fault hides." >&2
+	fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
 	echo "qemu-test: PASS"
 	[ "$KEEP" -eq 1 ] || rm -f "$WORK/target.qcow2"

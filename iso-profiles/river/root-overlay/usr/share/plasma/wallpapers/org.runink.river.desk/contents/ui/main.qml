@@ -29,28 +29,47 @@
 // of QML (the image in the frame is the only file), keeps it sharp at any resolution, and
 // means a new material is a row in Styles.qml rather than a new asset to render and sync.
 //
-// Imports are QtQuick only, the same restriction the SDDM theme keeps: no Plasma import,
-// no Effects module, nothing that is not already on the medium for the session itself.
-// `wallpaper.configuration` is the one thing Plasma hands a wallpaper plugin.
+// Imports are QtQuick plus the one Plasma module a wallpaper plugin MUST have. Everything
+// drawn below is still QtQuick only: no Effects module, nothing that is not already on the
+// medium for the session itself.
+//
+// THE ROOT MUST BE WallpaperItem, NOT Rectangle. This file was written against the Plasma 5
+// contract, where `wallpaper` was a global context property and any Item could be the root.
+// Plasma 6 hands the configuration to a WallpaperItem root and provides no `wallpaper`
+// global, so the previous version failed at load with
+//
+//   kf.plasma.quick: Root item of wallpaper "org.runink.river.desk" not a WallpaperItem
+//                    instance, instead is QQuickRectangle_QML_127
+//   main.qml:46: ReferenceError: wallpaper is not defined
+//   main.qml:48,55,56,65,128,139: TypeError: Cannot read property 'deskB'/'deskA'/'grain'/
+//                    'frame'/'mat' of undefined
+//
+// and every shape below it drew nothing: the desktop was a bare black rectangle. It had
+// never rendered. `org.kde.image` on the same medium shows the shape to copy — QtQuick,
+// org.kde.plasma.plasmoid, `WallpaperItem {`.
+//
+// WallpaperItem is not a Rectangle, so the desk colour moves to the surface child below.
 
 import QtQuick
+import org.kde.plasma.plasmoid
 
-Rectangle {
+WallpaperItem {
     id: desk
 
     readonly property var styles: Styles {}
-    readonly property var m: styles.get(wallpaper.configuration.Style)
+    readonly property var m: styles.get(desk.configuration.Style)
     // The frame's share of the shorter screen edge. Clamped so a stored value from a
     // future version, or a hand-edited config, cannot put the frame off the desk.
     readonly property real frameScale: Math.max(0.2, Math.min(0.9,
-        (wallpaper.configuration.FrameScale || 58) / 100))
-
-    color: m.deskB
+        (desk.configuration.FrameScale || 58) / 100))
 
     // ---- the desk surface -------------------------------------------------------
-    // Two colours down the screen: the far edge is darker, as a lit surface is.
+    // Two colours down the screen: the far edge is darker, as a lit surface is. This also
+    // carries the base colour that `color:` held while the root was a Rectangle —
+    // WallpaperItem has no such property.
     Rectangle {
         anchors.fill: parent
+        color: desk.m.deskB
         gradient: Gradient {
             GradientStop { position: 0.0; color: desk.m.deskA }
             GradientStop { position: 1.0; color: desk.m.deskB }
@@ -94,7 +113,7 @@ Rectangle {
     // shadow below is cast away from it, so the two agree.
     Rectangle {
         anchors.fill: parent
-        visible: wallpaper.configuration.Lamp
+        visible: desk.configuration.Lamp
         gradient: Gradient {
             orientation: Gradient.Vertical
             GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.10) }
@@ -119,7 +138,7 @@ Rectangle {
             y: 14
             radius: 3
             color: Qt.rgba(0, 0, 0, 0.45)
-            visible: wallpaper.configuration.Lamp
+            visible: desk.configuration.Lamp
         }
 
         // The frame itself.
@@ -142,7 +161,7 @@ Rectangle {
                     id: photo
                     anchors.fill: parent
                     anchors.margins: Math.max(6, mat.width * 0.018)
-                    source: wallpaper.configuration.Image
+                    source: desk.configuration.Image
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true

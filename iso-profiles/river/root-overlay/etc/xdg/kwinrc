@@ -1,0 +1,90 @@
+# Runink River — the desk, in motion.
+#
+# Until 2026-10-18 this file did not exist and the session ran stock Plasma defaults. The
+# login leg of the journey was animated (the SDDM greeter and the Plasma splash both run
+# RiverLockup) and then the desktop itself had no character at all. Worse, the desk wallpaper
+# underneath had never rendered, so there was nothing for an animation to happen ON.
+#
+# THE METAPHOR DECIDES THE EFFECTS. The desktop is a desk: objects sit ON a surface, lit by
+# one lamp. Every effect enabled below serves that and nothing is enabled because it looks
+# busy. The idea is DEsk's (https://github.com/fyzugx/DEsk, MIT); DEsk is a wlroots
+# compositor that draws a whole room, and this image is Plasma on Wayland, so what is
+# borrowed is the restraint, not an implementation.
+#
+#   diminactive   One light. The window you are using is lit; the rest of the desk is not.
+#                 This is the single most on-metaphor effect Plasma has.
+#   magiclamp     Minimise draws the window down into the dock — into the drawer.
+#   wobblywindows A dragged window has weight and settles, like a sheet pushed across a desk.
+#   glide         Windows are set down on the surface and lifted off it, not popped.
+#   dialogparent  A dialog dims its parent: attention is a light, not a border.
+#   blur          Depth behind translucent surfaces, so things sit above the desk.
+#   slide         Desks slide aside; they do not cross-fade.
+#
+# NOT enabled, deliberately: overview, windowview, tileseditor, thumbnailaside, mouseclick,
+# mousemark, trackmouse. They are useful, they are not the desk, and several are presentation
+# or accessibility tools that cost GPU on every frame.
+#
+# SOFTWARE RENDERING. Our own QEMU harness runs llvmpipe, and blur plus wobblywindows are the
+# two most expensive things here. kwin drops effects it cannot afford rather than stuttering,
+# so a VM degrades to a plainer desk instead of breaking — but that also means a screenshot
+# taken in QEMU is NOT evidence that these render on real hardware, and the reverse. Judge
+# this on metal.
+
+[Plugins]
+# Built-in (C++) effects — keys are <id>Enabled.
+diminactiveEnabled=true
+magiclampEnabled=true
+wobblywindowsEnabled=true
+glideEnabled=true
+blurEnabled=true
+slideEnabled=true
+overviewEnabled=false
+windowviewEnabled=false
+tileseditorEnabled=false
+thumbnailasideEnabled=false
+mouseclickEnabled=false
+mousemarkEnabled=false
+trackmouseEnabled=false
+# Scripted (QML) effects — same key form, ids from usr/share/kwin/effects/<id>/metadata.json.
+dialogparentEnabled=true
+fadeEnabled=true
+fadingpopupsEnabled=true
+squashEnabled=true
+maximizeEnabled=true
+translucencyEnabled=false
+windowapertureEnabled=false
+eyeonscreenEnabled=false
+
+[Effect-diminactive]
+# The lamp is on the focused window. Enough to read the room, not enough to hide the rest.
+DimPanels=false
+DimDesktop=false
+DimKeepAbove=false
+Strength=15
+
+[Effect-wobblywindows]
+# Weight, not jelly. Stock Plasma wobbles far past what a sheet of paper would do.
+Stiffness=12
+Drag=92
+MoveFactor=12
+MoveWobble=true
+ResizeWobble=false
+
+[Effect-glide]
+# Set down and lifted, a short distance, from slightly above the desk.
+Duration=180
+InScale=0.95
+OutScale=0.95
+InRotationAngle=8
+OutRotationAngle=8
+
+[Effect-blur]
+NoiseStrength=4
+BlurStrength=9
+
+[Compositing]
+# Keep the compositor honest on weak hardware: never tear, and let kwin fall back rather
+# than stutter. OpenGLIsUnsafe is NOT set here — kwin manages that itself after a crash.
+AnimationSpeed=3
+LatencyPolicy=Low
+WindowsBlockCompositing=true
