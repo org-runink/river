@@ -259,7 +259,7 @@ type fakeStick struct {
 	mounts   int
 	umounts  int
 	umountFn func(n int) error
-	free     int64
+	free     uint64
 	dir      string // where the "partition" is mounted (a real temp dir)
 }
 
@@ -292,7 +292,7 @@ func newFakeStick(t *testing.T, withLabel bool) *fakeStick {
 			}
 			return nil
 		},
-		freeBytes: func(string) (int64, error) { return fs.free, nil },
+		freeBytes: func(string) (uint64, error) { return fs.free, nil },
 		pause:     func(time.Duration) {},
 	}
 	return fs
@@ -302,14 +302,21 @@ func TestSaveWritesAndUnmounts(t *testing.T) {
 	fs := newFakeStick(t, true)
 	// capture the mount dir's content before MkdirTemp is cleaned up
 	var got []byte
+	var mode os.FileMode
 	orig := fs.s.umount
 	fs.s.umount = func(dst string) error {
 		got, _ = os.ReadFile(filepath.Join(dst, "river-report.txt"))
+		if st, err := os.Stat(filepath.Join(dst, "river-report.txt")); err == nil {
+			mode = st.Mode().Perm()
+		}
 		return orig(dst)
 	}
 	where, err := fs.s.save("river-report.txt", []byte("hello"))
 	if err != nil || where != "RIVER_EFI:/river-report.txt" {
 		t.Fatalf("where=%q err=%v", where, err)
+	}
+	if mode != 0o600 {
+		t.Errorf("report file mode %o, want 600 (gosec G302)", mode)
 	}
 	if string(got) != "hello" || fs.mounts != 1 || fs.umounts != 1 {
 		t.Errorf("content=%q mounts=%d umounts=%d", got, fs.mounts, fs.umounts)

@@ -383,7 +383,9 @@ func filterKmsg(lines []string, max int) []string {
 		hdr, msg := strings.Split(ln[:semi], ","), ln[semi+1:]
 		prio := 6
 		if len(hdr) > 0 {
-			fmt.Sscanf(hdr[0], "%d", &prio)
+			if _, err := fmt.Sscanf(hdr[0], "%d", &prio); err != nil {
+				prio = 6 // unparseable: treat as informational, as the default above does
+			}
 		}
 		prio &= 7
 		low := strings.ToLower(msg)
@@ -400,8 +402,9 @@ func filterKmsg(lines []string, max int) []string {
 		ts := ""
 		if len(hdr) > 2 {
 			var us int64
-			fmt.Sscanf(hdr[2], "%d", &us)
-			ts = fmt.Sprintf("[%7.2f] ", float64(us)/1e6)
+			if _, err := fmt.Sscanf(hdr[2], "%d", &us); err == nil {
+				ts = fmt.Sprintf("[%7.2f] ", float64(us)/1e6)
+			}
 		}
 		keep = append(keep, ts+msg)
 	}

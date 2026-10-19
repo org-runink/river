@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,7 +40,7 @@ type stick struct {
 	byLabel   string
 	mount     func(src, dst, fstype string, flags uintptr, data string) error
 	umount    func(dst string) error
-	freeBytes func(dir string) (int64, error)
+	freeBytes func(dir string) (uint64, error)
 	pause     func(time.Duration) // between unmount retries
 }
 
@@ -50,12 +51,19 @@ func realStick() stick {
 			return syscall.Mount(src, dst, fstype, flags, data)
 		},
 		umount: func(dst string) error { return syscall.Unmount(dst, 0) },
-		freeBytes: func(dir string) (int64, error) {
+		freeBytes: func(dir string) (uint64, error) {
 			var s syscall.Statfs_t
 			if err := syscall.Statfs(dir, &s); err != nil {
 				return 0, err
 			}
-			return int64(s.Bavail) * int64(s.Bsize), nil
+			if s.Bsize <= 0 {
+				return 0, fmt.Errorf("statfs reports a block size of %d", s.Bsize)
+			}
+			bs := uint64(s.Bsize)
+			if s.Bavail > math.MaxUint64/bs { // cannot happen on a 4 MB partition; never wrap if it did
+				return math.MaxUint64, nil
+			}
+			return s.Bavail * bs, nil
 		},
 		pause: time.Sleep,
 	}
@@ -104,19 +112,20 @@ func (s stick) write(dir, name string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot tell how much room %s has: %w", espLabel, err)
 	}
-	if free < int64(len(data))+espHeadroom {
-		return "", fmt.Errorf("only %d bytes free on %s, need %d", free, espLabel, int64(len(data))+espHeadroom)
+	need := uint64(len(data)) + espHeadroom
+	if free < need {
+		return "", fmt.Errorf("only %d bytes free on %s, need %d", free, espLabel, need)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // vfat ignores the mode; the mount options decide
 	if err != nil {
 		return "", err
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close() // the write error is the one worth reporting
 		return "", err
 	}
 	if err := f.Sync(); err != nil { // the stick is pulled soon after; make sure it is on the stick
-		f.Close()
+		_ = f.Close() // the write error is the one worth reporting
 		return "", err
 	}
 	if err := f.Close(); err != nil {
