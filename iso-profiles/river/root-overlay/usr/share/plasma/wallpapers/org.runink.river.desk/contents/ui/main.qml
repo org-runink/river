@@ -13,10 +13,10 @@
 //
 // NOTHING IS FORKED AND NO CODE IS TAKEN. This is a Plasma wallpaper plugin written here,
 // in QML, and it borrows one idea rather than an implementation. Two reasons it could not
-// be otherwise even if we wanted it to be: DEsk is a wlroots compositor that integrates
-// with systemd, and invariant 1 of this image is s6, never systemd; and Runink River is
-// KDE Plasma on Wayland (AGENTS.md §1), so replacing the compositor is a different product,
-// not a wallpaper. Keeping it in-house also keeps the medium's closure unchanged -- this
+// be otherwise even if we wanted it to be: DEsk is a wlroots (>= 0.18) compositor, a whole
+// session with its own shell, and Runink River is KDE Plasma on Wayland (AGENTS.md §1), so
+// replacing the compositor is a different product, not a wallpaper. (DEsk's systemd use is
+// optional libsystemd for a few widgets, not a requirement; it is not the reason.) Keeping it in-house also keeps the medium's closure unchanged -- this
 // file adds no package and no dependency.
 //
 // What is borrowed is the metaphor and the restraint behind it: one surface, one light,

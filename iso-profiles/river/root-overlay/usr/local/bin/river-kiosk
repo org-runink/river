@@ -46,8 +46,12 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-RUN=/run/river-kiosk
-LAUNCH=/usr/local/bin/river-installer-desktop
+RUN=${RIVER_KIOSK_RUN:-/run/river-kiosk}
+LAUNCH=${RIVER_KIOSK_LAUNCH:-/usr/local/bin/river-installer-desktop}
+# The compositor is started with a MINIMAL environment (env -i). RIVER_KIOSK_PATH is its PATH; the
+# default is the image's own. The three RIVER_KIOSK_{RUN,LAUNCH,PATH} knobs exist so a test can
+# point the script at a scratch directory and stub tools; on the medium none of them is set.
+KPATH=${RIVER_KIOSK_PATH:-/usr/local/bin:/usr/bin:/bin}
 U=${RIVER_KIOSK_USER:-runink}
 log() { echo "river-kiosk: $*"; }
 mkdir -p "$RUN"; rm -f "$RUN/kiosk.stop"
@@ -105,26 +109,30 @@ run_once() {
 	[ -n "$renderer" ] && log "attempt $((fails + 1)): forcing the software renderer ($renderer)" \
 		|| log "attempt $((fails + 1)): starting the compositor"
 	started=$(date +%s)
-	# WESTON RUNS AS ROOT. This is the fix for the failure on the owner's hardware, and the
-	# reason is specific rather than a shrug at permissions.
+	# WESTON RUNS AS ROOT, UNDER ITS OWN seatd. Both halves are needed, and the comment that used
+	# to be here got the second one wrong.
 	#
-	# It used to run under `setpriv --reuid ... env -i`, which produces a process with NO logind
-	# session. libseat then asks logind for the DRM device and logind answers, verbatim from the
-	# owner's console:
+	# weston 15 opens the display through libseat and nothing else. libseat tries a seatd daemon on
+	# /run/seatd.sock, then logind, then a built-in backend if one was compiled in. On this medium
+	# no seatd is running -- the image ships seatd and seatd-launch but nothing starts them -- and
+	# logind has no session for this process, because it is not a login session, root or not.
+	# From a photograph of the owner's console on 2026-10-19, and again under QEMU, verbatim,
+	# with this script starting weston as root:
 	#
-	#   [libseat/backend/seatd.c:64]   Could not connect to socket /run/seatd.sock
-	#   [libseat/libseat.c:73]         Seat opened with backend 'logind'
-	#   [libseat/backend/logind.c:121] Could not take device: No such device
-	#   no drm device found / fatal: failed to create compositor backend
+	#   [libseat/backend/seatd.c:64]   Could not connect to socket /run/seatd.sock: No such file...
+	#   [libseat/backend/logind.c:638] Could not get primary session for user: No data available
+	#   [libseat/libseat.c:79]         No backend was able to open a seat
+	#   fatal: your system should either provide the logind D-Bus API, or use seatd.
 	#
-	# "No such device" while /dev/dri/card0 is right there -- this script had just logged
-	# "a usable output is already present". logind grants TakeDevice only to a session leader on
-	# a seat; setpriv had thrown that away. SDDM works where it works because PAM makes a real
-	# session. The kiosk never had one and never could, the way it was launched.
+	# The earlier comment said that at euid 0 weston "skips libseat entirely" and that "installing
+	# seatd would not conjure a session either". Neither is so: the log above is weston 15 running
+	# as root and failing in libseat, and seatd needs no logind session -- it IS the seat. That
+	# comment justified a fix (setting euid 0) that changed nothing, and the failure shipped.
 	#
-	# At euid 0 weston skips libseat entirely and uses its direct launcher, so no session is
-	# needed. The missing /run/seatd.sock is a red herring: libseat falls through to logind, and
-	# logind is what refuses. Installing seatd would not conjure a session either.
+	# seatd-launch starts a private seatd on /run/seatd.sock for the life of this one process.
+	# Checked in the image's own root filesystem: before, /run/seatd.sock does not exist; inside
+	# seatd-launch it does ("Created VT-bound seat seat0 ... seatd started"). It is used only
+	# when present, so a medium without it fails exactly as before rather than differently.
 	#
 	# Only the COMPOSITOR is privileged. weston.ini launches river-kiosk-app, which drops
 	# straight back to the live user for the browser -- the thing that renders untrusted-ish web
@@ -132,11 +140,18 @@ run_once() {
 	#
 	# XDG_RUNTIME_DIR is set explicitly because root may have no /run/user/0, and --tty pins the
 	# console the fallback handed us instead of letting weston guess.
-	# shellcheck disable=SC2086 # renderer is one flag or empty, by construction
-	env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/root LANG=C.UTF-8 \
+	seat=""
+	if command -v seatd-launch >/dev/null 2>&1; then
+		seat="seatd-launch --"
+		log "seat: a private seatd for weston (seatd-launch)"
+	else
+		log "seat: seatd-launch is not installed; weston will try logind and probably fail"
+	fi
+	# shellcheck disable=SC2086 # seat and renderer are fixed words or empty, by construction
+	env -i PATH="$KPATH" HOME=/root LANG=C.UTF-8 \
 		XDG_RUNTIME_DIR="$RUN" XDG_SESSION_TYPE=wayland \
 		RIVER_KIOSK_USER="$U" \
-		weston --continue-without-input ${VT:+--tty="$VT"} $renderer \
+		$seat weston --continue-without-input ${VT:+--tty="$VT"} $renderer \
 		>"$RUN/session.log" 2>&1
 	rc=$?
 	ran=$(( $(date +%s) - started ))
