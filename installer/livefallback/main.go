@@ -111,82 +111,6 @@ func waitForSession(timeout, every time.Duration, tick func(time.Duration)) stri
 	}
 }
 
-// graphicsReport is the state of the display hardware at the moment the desktop was given up
-// on. Everything here is a plain file read, so it works on a medium with no tools and cannot
-// hang: no lspci, no dmesg binary, no shelling out.
-func graphicsReport() string {
-	var b strings.Builder
-	b.WriteString("  Graphics state (please photograph this if you report the problem):\n")
-
-	// DRM device nodes. None at all means no driver bound and nothing can draw.
-	if ents, err := os.ReadDir("/dev/dri"); err == nil && len(ents) > 0 {
-		var names []string
-		for _, e := range ents {
-			names = append(names, e.Name())
-		}
-		b.WriteString("    /dev/dri        " + strings.Join(names, " ") + "\n")
-	} else {
-		b.WriteString("    /dev/dri        EMPTY or missing - no DRM device, nothing can draw\n")
-	}
-
-	// Which driver claimed each card. simpledrm here means the EFI framebuffer is all we got
-	// and the real GPU driver never bound.
-	if cards, err := filepath.Glob("/sys/class/drm/card*/device/driver"); err == nil {
-		for _, c := range cards {
-			if dst, err := os.Readlink(c); err == nil {
-				card := filepath.Base(filepath.Dir(filepath.Dir(c)))
-				b.WriteString("    " + card + " driver   " + filepath.Base(dst) + "\n")
-			}
-		}
-	}
-
-	// Connector status, so a panel that is present but reported disconnected is visible.
-	if sts, err := filepath.Glob("/sys/class/drm/card*-*/status"); err == nil {
-		for _, st := range sts {
-			if v, err := os.ReadFile(st); err == nil {
-				b.WriteString("    " + filepath.Base(filepath.Dir(st)) + "  " +
-					strings.TrimSpace(string(v)) + "\n")
-			}
-		}
-	}
-
-	// Did the GPU modules load at all?
-	if mods, err := os.ReadFile("/proc/modules"); err == nil {
-		var found []string
-		for _, want := range []string{"i915", "amdgpu", "nouveau", "xe", "simpledrm"} {
-			for _, line := range strings.Split(string(mods), "\n") {
-				if strings.HasPrefix(line, want+" ") {
-					found = append(found, want)
-					break
-				}
-			}
-		}
-		if len(found) == 0 {
-			b.WriteString("    modules         none of i915/amdgpu/nouveau/xe loaded\n")
-		} else {
-			b.WriteString("    modules         " + strings.Join(found, " ") + "\n")
-		}
-	}
-
-	// The display manager's own account. On a live medium /var/log is not writable, so SDDM
-	// writes under /run -- which is exactly why nobody has ever read this file.
-	for _, p := range []string{"/run/log/sddm", "/var/log/sddm.log", "/run/sddm.log"} {
-		if v, err := os.ReadFile(p); err == nil && len(v) > 0 {
-			lines := strings.Split(strings.TrimSpace(string(v)), "\n")
-			if len(lines) > 6 {
-				lines = lines[len(lines)-6:]
-			}
-			b.WriteString("    " + p + " (last " + fmt.Sprint(len(lines)) + "):\n")
-			for _, l := range lines {
-				b.WriteString("      | " + l + "\n")
-			}
-			break
-		}
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
 // notice is what a person sees on the console when the desktop did not start. It says what
 // happened, that this is the same installer, and that nothing is wrong with their machine
 // beyond the graphics.
@@ -217,11 +141,13 @@ func main() {
 	// --report: print the graphics state and exit. The same block the fallback puts on the
 	// console, available on demand, so a machine that DID reach a desktop can still be asked
 	// what its display hardware looks like without reproducing a failure first.
-	report := flag.Bool("report", false, "print the graphics state and exit")
+	report := flag.Bool("report", false, "print the full hardware report and exit")
+	pause := flag.Duration("report-pause", 30*time.Second,
+		"how long to hold the hardware summary on screen before the installer starts (0: do not hold)")
 	flag.Parse()
 
 	if *report {
-		fmt.Print(graphicsReport())
+		fmt.Print(hardwareReport("/", readKmsg("/dev/kmsg", 200), true))
 		return
 	}
 
@@ -254,10 +180,19 @@ func main() {
 		progress = f
 		defer progress.Close()
 	}
+	early := false
 	if p := waitForSession(*timeout, *every, func(el time.Duration) {
 		if progress != nil {
 			fmt.Fprintf(progress, "  Runink River: waiting for the desktop (%s of %s)...\n",
 				el, *timeout)
+		}
+		// Save a first report while the desktop is still not up. Waiting out the full timeout
+		// to learn anything would lose the data from a person who gives up and pulls the
+		// stick at two minutes -- which is exactly what someone looking at a countdown does.
+		// In the background: mounting a stick must never delay the wait.
+		if !early && el >= reportEarlyAt {
+			early = true
+			go saveReport("river-report-early.txt", hardwareReport("/", readKmsg("/dev/kmsg", 200), true))
 		}
 	}); p != "" {
 		fmt.Printf("river-live-fallback: a graphical session appeared (%s); nothing to do\n", p)
@@ -275,12 +210,19 @@ func main() {
 	}
 	defer tty.Close()
 	say(tty, notice)
-	// WHY the desktop did not start, on the screen, now. The owner's machine has no serial
-	// port, no network (it reports no interface besides loopback) and no desktop -- so every
-	// previous failure was diagnosed from a photograph of a console that said only THAT it had
-	// failed. One screen with the graphics state on it turns the next report into an answer
-	// instead of another round trip. It is six cheap reads and it cannot fail the boot.
-	say(tty, graphicsReport())
+	// WHAT this computer is and WHY the desktop did not start, now, on one screen, and the same
+	// facts in full on the stick. The owner's machine has no serial port, no network (it reports
+	// no interface besides loopback) and no desktop, so every previous failure was diagnosed
+	// from a photograph of a console that said only THAT it had failed. The block that used to
+	// be printed here scrolled off the screen under the installer's own output before anyone
+	// could photograph it; this one is held on screen. Plain file reads: it cannot fail the boot.
+	kmsg := readKmsg("/dev/kmsg", 200)
+	say(tty, hardwareReport("/", kmsg, false))
+	say(tty, "  "+saveReport("river-report.txt", hardwareReport("/", kmsg, true))+"\n")
+	if *pause > 0 {
+		say(tty, fmt.Sprintf("\n  The installer starts in %s. Photograph this screen now if you will report the problem.\n\n", *pause))
+		time.Sleep(*pause)
+	}
 	activate(*ttyPath)
 
 	// The console kiosk first: it draws the same graphical installer straight through
@@ -304,6 +246,9 @@ const (
 	kioskBin = "river-kiosk"
 	textBin  = "runink-install"
 )
+
+// reportEarlyAt is how long into the wait the first report is saved to the stick.
+const reportEarlyAt = 90 * time.Second
 
 // binDirs are searched BEFORE $PATH. This program is started by /etc/s6/rc.local, by absolute
 // path, in the init context -- which has a minimal environment and, on this image, no

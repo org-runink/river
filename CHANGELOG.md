@@ -44,8 +44,8 @@ None.
 
   The desk metaphor is borrowed, with thanks, from [DEsk](https://github.com/fyzugx/DEsk)
   (MIT) — "here the desktop is a desk". **Nothing is forked and no code is taken**: this is a
-  Plasma wallpaper plugin written here, because DEsk is a wlroots compositor that integrates
-  with systemd and this image is s6-only. The idea is theirs; the implementation, the framed
+  Plasma wallpaper plugin written here, because DEsk is a wlroots compositor, a whole session
+  of its own, and this image's session is Plasma. The idea is theirs; the implementation, the framed
   photograph and the palette are ours.
 
 - **The SDDM greeter runs on Wayland.** `DisplayServer=wayland` with
@@ -66,6 +66,20 @@ None.
   ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
 
 ### Fixed
+
+- **A stick that cannot start the desktop now says what the machine is, on screen and on the
+  stick.** The fallback screen holds a one-screen hardware summary (GPU and its udev seat
+  tags, `seat0 CanGraphical`, every network device and rfkill state, PCI devices with no
+  driver, the kernel messages that matter, SDDM's log) for 30 s before the installer starts,
+  and writes the full report to `river-report.txt` on the stick's `RIVER_EFI` partition
+  (`river-report-early.txt` after 90 s of waiting), so the stick carries the answer to
+  another computer. `river-live-fallback --report` prints the full report.
+- **The console-kiosk fallback had no seat.** weston 15 opens its seat only through libseat
+  and nothing on the medium ran seatd, so `river-kiosk` failed with `could not open seat`
+  on hardware that did reach it. It now runs `weston` under `seatd-launch`, which ships in
+  the image. (The earlier comment saying weston skips libseat at euid 0 was wrong.)
+- **The Wi-Fi menu tells "no adapter" from "adapter, no networks".** `river-netsetup` now
+  says which, and a missing wired or wireless interface lists what NetworkManager does see.
 
 - **`riverbench`: one median, and a fio p99 that is a p99.** The compression suite's
   repetition median (Parquet, file-access and THP timings) and its median file size returned

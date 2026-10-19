@@ -164,6 +164,16 @@ devices() { # TYPE -> "device state" lines
 	nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | awk -F: -v t="$1" '$2 == t { print $1, $3 }'
 }
 
+nm_sees() { # one line: every network device NetworkManager knows, except loopback
+	nmcli -t -f DEVICE,TYPE device status 2>/dev/null \
+		| awk -F: '$2 != "loopback" && $1 != "" { printf "%s%s (%s)", sep, $1, $2; sep = ", " }'
+}
+
+no_iface() { # KIND -> say so, and say what NetworkManager DOES see
+	_seen="$(nm_sees)"
+	say "river-netsetup: no $1 interface; NetworkManager sees: ${_seen:-no network devices at all}"
+}
+
 pick_iface() { # TYPE -> device name on stdout
 	[ -n "$NET_IFACE" ] && { printf '%s' "$NET_IFACE"; return 0; }
 	_list="$(devices "$1")"
@@ -190,7 +200,7 @@ con_up() { # CONNECTION [passwd-file FILE]
 }
 
 apply_dhcp() {
-	_if="$(pick_iface ethernet)" || { say "river-netsetup: no wired interface"; return 1; }
+	_if="$(pick_iface ethernet)" || { no_iface wired; return 1; }
 	_c="river-$_if"
 	nmcli connection delete "$_c" >/dev/null 2>&1 || true
 	_v4="$(v4_method)"
@@ -203,7 +213,7 @@ apply_dhcp() {
 }
 
 apply_static() {
-	_if="$(pick_iface ethernet)" || { say "river-netsetup: no wired interface"; return 1; }
+	_if="$(pick_iface ethernet)" || { no_iface wired; return 1; }
 	_c="river-$_if"
 	nmcli connection delete "$_c" >/dev/null 2>&1 || true
 	set -- type ethernet ifname "$_if" con-name "$_c" autoconnect yes
@@ -328,6 +338,20 @@ result() { sed -n 's/^RESULT: //p' "$REPORT" | head -1; }
 # --- interactive -------------------------------------------------------------------------
 choose_wifi() {
 	nmcli radio wifi on >/dev/null 2>&1 || true
+	# NO ADAPTER IS NOT "NOTHING IN RANGE". This used to go straight to the scan, so a machine
+	# with no Wi-Fi device at all showed the same menu as one in a radio-quiet room: a single
+	# line, "Another (hidden) network", and nothing to say the list was empty because there was
+	# nothing to scan WITH. Seen on real hardware on 2026-10-19, where it read as "Wi-Fi is
+	# broken" when the question was whether NetworkManager had been given an adapter at all.
+	if ! _wi="$(pick_iface wifi)"; then
+		_seen="$(nm_sees)"
+		ui_msg "No Wi-Fi adapter was found.
+
+NetworkManager sees: ${_seen:-no network devices at all}
+
+Either this computer has no Wi-Fi adapter, its driver did not load, or the radio is switched off (look for a hardware Wi-Fi switch or an Fn-key toggle)."
+		return 1
+	fi
 	_scan="$(mktemp "${TMPDIR:-/tmp}/river-wifi.XXXXXX")"
 	# -e yes escapes ':' and '\' inside SSIDs; decode them after splitting on ':'.
 	nmcli -t -e yes -f SSID,SIGNAL,SECURITY device wifi list --rescan yes 2>/dev/null \
@@ -340,6 +364,9 @@ choose_wifi() {
 		_n=$((_n + 1))
 		set -- "$@" "$_n" "$_ssid  (${_sig}%, ${_sec:-open})"
 	done < "$_scan"
+	[ "$_n" -gt 0 ] || ui_msg "Wi-Fi adapter $_wi is present, but it sees no networks.
+
+The radio may be off or no access point is in range. You can still enter a hidden network."
 	set -- "$@" other "Another (hidden) network"
 	_pick="$(ui_menu "Wi-Fi" "Networks in range (strongest first):" "$@")" || { rm -f "$_scan"; return 1; }
 	if [ "$_pick" = other ]; then
