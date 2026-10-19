@@ -26,6 +26,76 @@ log() { echo "rc.local: $*"; }
 # medium a failed SDDM left the splash over the console: a blank screen and no way in.)
 /usr/local/bin/runink-plymouth-quit
 
+# 0a. GPU seat watcher -------------------------------------------------------
+# WHY. On a slow boot SDDM starts, asks elogind whether seat0 can do graphics, is told "no",
+# and waits for ever. Measured 2026-10-19 booting this ISO from an emulated USB stick at
+# 15 MB/s, with the real machine's symptom ("waiting for the desktop (30s of 6m0s)") on screen:
+#
+#   sddm.log        "Logind interface found" ... and then NOTHING, until river-live-fallback
+#                   SIGTERMed it six minutes later. No display, no greeter, no session.
+#   loginctl        seat0: CanGraphical=no
+#   /sys/class/drm  card1 + renderD128 present since ~30s, driver bound
+#   udevadm info    card1 had 6 E: lines and NO TAGS — no `seat`, no `master-of-seat` — so
+#                   elogind never counted it as graphics
+#
+# One `udevadm trigger --action=add --subsystem-match=drm` + settle changed that to 13 E:
+# lines, TAGS=:seat:uaccess:master-of-seat:, and CanGraphical=yes. The coldplug oneshot
+# (`udevadm`) had run, and still the GPU ended up unclassified: elogind depends only on dbus,
+# so it comes up alongside coldplug, and the DRM card registers whenever its driver finishes
+# loading — much later when the firmware has to be read off a slow stick.
+#
+# WHAT. A background watcher: once a DRM card exists and seat0 is still not graphical, ask
+# udev to re-classify the DRM devices (at most five times). If the seat turned graphical that
+# way and no compositor has appeared 15s later, restart sddm-srv once — SDDM may already have
+# given up on the seat. It never blocks boot, does nothing on a machine that comes up
+# graphical on its own, and records what it did in /run/river-gpu-seat.log.
+#
+# It is NOT a fix for a machine with no usable GPU driver: if the only card is the EFI
+# framebuffer (simpledrm) there is no render node and kwin cannot start; the live medium's
+# fallback (river-live-fallback) takes over after its timeout, as before.
+gpu_seat_watch() {
+	set +e +u
+	log_f=/run/river-gpu-seat.log
+	command -v loginctl >/dev/null 2>&1 || { echo "no loginctl: nothing to watch" >"$log_f"; return 0; }
+	can() { loginctl show-seat seat0 -p CanGraphical 2>/dev/null | sed -n 's/^CanGraphical=//p'; }
+	native_card() { # a DRM card bound to a real driver, not the EFI framebuffer's simpledrm
+		for c in /sys/class/drm/card[0-9]*; do
+			case "$c" in *-*) continue ;; esac
+			[ -e "$c/device/driver" ] || continue
+			d=$(basename "$(readlink -f "$c/device/driver")")
+			case "$d" in simple-framebuffer | simpledrm) ;; *) return 0 ;; esac
+		done
+		return 1
+	}
+	any_card() { for c in /sys/class/drm/card[0-9]*; do case "$c" in *-*) continue ;; esac; [ -e "$c" ] && return 0; done; return 1; }
+	n=0 tries=0 last=-10
+	: >"$log_f"
+	while [ "$n" -lt 150 ]; do
+		[ "$(can)" = yes ] && break
+		# A native driver is the signal; with only simpledrm, wait a minute before acting.
+		if { native_card || { [ "$n" -ge 30 ] && any_card; }; } && [ "$tries" -lt 5 ] && [ $((n - last)) -ge 5 ]; then
+			echo "t=$((n * 2))s seat0 CanGraphical=$(can) with a DRM card present: re-triggering udev for drm (try $((tries + 1)))" >>"$log_f"
+			udevadm trigger --action=add --subsystem-match=drm
+			udevadm settle -t 20
+			tries=$((tries + 1)) last=$n
+			sleep 1
+			[ "$(can)" = yes ] && break
+		fi
+		sleep 2
+		n=$((n + 1))
+	done
+	echo "t=$((n * 2))s seat0 CanGraphical=$(can) after $tries re-trigger(s)" >>"$log_f"
+	[ "$tries" -gt 0 ] && [ "$(can)" = yes ] || return 0
+	sleep 15
+	if ! pgrep -x kwin_wayland >/dev/null 2>&1 && ! pgrep -x Xorg >/dev/null 2>&1; then
+		echo "no compositor 15s after the seat turned graphical: restarting sddm-srv" >>"$log_f"
+		s6-svc -r /run/service/sddm-srv
+	else
+		echo "a compositor is up: sddm did not need a restart" >>"$log_f"
+	fi
+}
+( gpu_seat_watch ) >/dev/null 2>&1 &
+
 # 0b. Live-installer guard ---------------------------------------------------
 # Booted from the ISO the kernel cmdline carries `overlay=livefs`: that is the INSTALLER
 # environment, not an installed machine. Without this guard the live session does tuning work
