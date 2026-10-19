@@ -139,6 +139,22 @@ echo "RV_BTSUBSYS=$([ -d /sys/class/bluetooth ] && echo 1 || echo 0)"
 echo "RV_BTUSB=$(find /usr/lib/modules -name 'btusb.ko*' 2>/dev/null | head -1 | grep -c .)"
 echo "RV_BTD=$(ps -eo comm | grep -c '^bluetoothd$')"
 echo "RV_BTBLOCK=$(rfkill list bluetooth 2>/dev/null | grep -c 'Soft blocked: yes')"
+
+# --- the desk, in motion ------------------------------------------------------------
+# /etc/xdg/kwinrc enables a deliberate set of effects. Shipping that file proves nothing:
+# an effect kwin cannot load is silently absent, which is exactly how the desk wallpaper
+# itself sat unrendered through every build. Ask kwin what it ACTUALLY loaded.
+KW=$(pgrep -u runink -x kwin_wayland | head -1)
+EFF=""
+if [ -n "$KW" ]; then
+	DBA=$(sudo sh -c "tr '\0' '\n' < /proc/$KW/environ" 2>/dev/null | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')
+	export DBUS_SESSION_BUS_ADDRESS="$DBA" XDG_RUNTIME_DIR=/run/user/1000
+	EFF=$(qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadedEffects 2>/dev/null \
+		|| qdbus org.kde.KWin /Effects org.kde.kwin.Effects.loadedEffects 2>/dev/null)
+fi
+echo "RV_KWINRC=$([ -r /etc/xdg/kwinrc ] && echo 1 || echo 0)"
+echo "RV_KWINEFF=$(printf '%s\n' "$EFF" | grep -c .)"
+echo "RV_KWINDESK=$(printf '%s\n' "$EFF" | grep -cE '^(diminactive|magiclamp|wobblywindows|glide|blur|slide)$')"
 echo RV_DONE
 `
 
@@ -225,7 +241,8 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 
 	fmt.Fprintf(outw, "--- medium-unaided: %s ---\n", filepath.Base(iso))
 	for _, key := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
-		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK"} {
+		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK",
+		"KWINRC", "KWINEFF", "KWINDESK"} {
 		fmt.Fprintf(outw, "  RV_%s=%s\n", key, vals[key])
 	}
 	return report(vals, outw, errw)
@@ -248,7 +265,8 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 		return n, err == nil
 	}
 	for _, k := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
-		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK"} {
+		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK",
+		"KWINRC", "KWINEFF", "KWINDESK"} {
 		if _, ok := num(k); !ok {
 			say("medium-probe", false, fmt.Sprintf("value RV_%s did not parse (broken harness, not a verdict)", k))
 		}
@@ -336,6 +354,17 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	say("medium-bt-daemon", btd >= 1, "bluetoothd is not running")
 	say("medium-bt-unblocked", btBlock == 0, "Bluetooth is SOFT-BLOCKED by rfkill on a fresh boot: runink-fw should clear it")
 
+	// The desk must actually move. kwinrc shipping is not the same as kwin loading it.
+	kwinrc, _ := num("KWINRC")
+	kwinEff, _ := num("KWINEFF")
+	kwinDesk, _ := num("KWINDESK")
+	say("medium-kwinrc", kwinrc == 1, "/etc/xdg/kwinrc is not on the medium: the session runs stock Plasma defaults")
+	say("medium-kwin-effects", kwinEff >= 1, "kwin loaded NO effects at all — the config did not take, or kwin is not running")
+	say("medium-desk-motion", kwinDesk >= 1,
+		fmt.Sprintf("none of the desk effects (diminactive, magiclamp, wobblywindows, glide, blur, slide) loaded; kwin has %d up", kwinEff))
+
+	fmt.Fprintln(outw, "RIVERTEST NOTE desk-motion      effect COUNT is advisory under llvmpipe: kwin drops what it "+
+		"cannot afford, so a thin set in QEMU is not a packaging fault — zero is")
 	fmt.Fprintln(outw, "RIVERTEST NOTE connectivity      wired is real (emulated NIC); wifi and Bluetooth are "+
 		"SIMULATED (mac80211_hwsim, hci_vhci) and prove the stack only, never that a given card is recognised")
 
