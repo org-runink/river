@@ -13,6 +13,12 @@ verified ([Download & verify]({{< relref "download" >}})).
 
 ## With install.sh (Linux)
 
+{{< callout type="warning" >}}
+`install.sh` downloads **the latest published release**. Until the first River release is
+tagged and published, there is nothing for it to fetch and this path cannot work — use
+**By hand** below with a locally built image. See [Releases](../releases/) for what exists.
+{{< /callout >}}
+
 `install.sh` downloads and verifies the image first, then writes it:
 
 ```bash
@@ -48,6 +54,24 @@ sync
 ```
 
 `/dev/sdX` is the whole device (`/dev/sdb`), never a partition (`/dev/sdb1`).
+
+### Check the stick afterwards
+
+`dd` reporting success is not the same as the stick holding the image. A failing or
+counterfeit stick accepts every write and returns different bytes on the next read, and
+`conv=fsync` cannot detect that. Read it back and compare:
+
+```bash
+sudo cmp -n $(stat -c %s runink-river-<YYYYMMDD>-x86_64.iso) \
+     runink-river-<YYYYMMDD>-x86_64.iso /dev/sdX && echo "the stick matches the image"
+```
+
+`cmp` prints nothing and exits 0 when every byte matches; it names the first differing byte
+otherwise. The `-n` limit stops it at the image's length, because the stick is larger than
+the image and everything past the end is expected to differ.
+
+A stick that writes without error and fails this is the one that boots to a GRUB rescue
+prompt or a kernel panic much later, when the cause is no longer obvious.
 
 ## From Windows or macOS
 
