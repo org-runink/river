@@ -59,6 +59,13 @@ mkdir -p "$RUN"; rm -f "$RUN/kiosk.stop"
 command -v weston >/dev/null 2>&1 || { log "weston is not installed: no compositor, no graphical fallback"; exit 1; }
 [ -x "$LAUNCH" ] || { log "$LAUNCH is missing: nothing to show"; exit 1; }
 id "$U" >/dev/null 2>&1 || { log "no user $U to run the session as"; exit 1; }
+# The browser runs as $U (river-installer-desktop drops to it with setpriv and gives it XDG_RUNTIME_DIR=$RUN)
+# and keeps its profile and dconf there. Created by root, $RUN was root-owned and Firefox could not
+# write: "Your Firefox profile cannot be loaded" on the real ISO (2026-10-21), with "unable to create
+# directory '$RUN/dconf': Permission denied" in the log. weston stays root and can use any directory.
+if [ "$(id -u)" = 0 ]; then
+	chown "$U" "$RUN" && chmod 0700 "$RUN" || { log "cannot hand $RUN to $U"; exit 1; }
+fi
 
 # WAIT FOR A DISPLAY BEFORE DRAWING ON ONE. Ready means a card node exists AND some connector
 # is not `disconnected` -- deliberately not `= connected`, because a connector reports
@@ -138,8 +145,9 @@ run_once() {
 	# straight back to the live user for the browser -- the thing that renders untrusted-ish web
 	# content gets no more rights than the desktop session would have given it.
 	#
-	# XDG_RUNTIME_DIR is set explicitly because root may have no /run/user/0, and --tty pins the
-	# console the fallback handed us instead of letting weston guess.
+	# XDG_RUNTIME_DIR is set explicitly because root may have no /run/user/0. No --tty: weston 15 under
+	# libseat rejects it ("fatal: unhandled option: --tty=1", seen booting the built ISO). The console
+	# is chosen above by `river-installer vt`, and seatd binds the seat to the active VT.
 	seat=""
 	if command -v seatd-launch >/dev/null 2>&1; then
 		seat="seatd-launch --"
@@ -151,7 +159,7 @@ run_once() {
 	env -i PATH="$KPATH" HOME=/root LANG=C.UTF-8 \
 		XDG_RUNTIME_DIR="$RUN" XDG_SESSION_TYPE=wayland \
 		RIVER_KIOSK_USER="$U" \
-		$seat weston --continue-without-input ${VT:+--tty="$VT"} $renderer \
+		$seat weston --continue-without-input $renderer \
 		>"$RUN/session.log" 2>&1
 	rc=$?
 	ran=$(( $(date +%s) - started ))
