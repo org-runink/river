@@ -22,7 +22,6 @@ package main
 // whole answer; FULL goes to a file on the stick (see stick.go) and is much longer.
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -350,19 +349,31 @@ var kmsgKeywords = []string{
 	"bluetooth", "btusb", "simpledrm", "efifb", "seat", "sddm",
 }
 
-// readKmsg returns the kernel messages worth showing, oldest first, at most max of them. It
-// opens /dev/kmsg non-blocking, so on a quiet log it returns instead of waiting for more.
+// readKmsg returns the kernel messages worth showing, oldest first, at most max of them.
+//
+// It reads with raw syscalls on purpose. /dev/kmsg is pollable, and an os.File on a pollable
+// descriptor does not hand EAGAIN back: the runtime parks the goroutine until there is more to
+// read, which on a quiet log is never. As root on the live medium that blocked the whole fallback
+// before it printed or saved anything (2026-10-21, found only by booting the built ISO; a
+// workstation user cannot open /dev/kmsg, so the hang never showed there). Here EAGAIN means "no
+// more records right now" and ends the read.
 func readKmsg(path string, max int) []string {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	defer syscall.Close(fd)
 	var lines []string
-	for sc.Scan() { // EAGAIN ends the scan: that is "no more records right now", not a failure
-		lines = append(lines, sc.Text())
+	buf := make([]byte, 8192) // one /dev/kmsg record per read, at most 8 KiB
+	for reads := 0; reads < 100000; reads++ {
+		n, err := syscall.Read(fd, buf)
+		switch {
+		case err == syscall.EINTR, err == syscall.EPIPE: // EPIPE: records were overwritten; the next read continues
+			continue
+		case err != nil || n == 0: // EAGAIN: nothing more right now; 0: end of a plain file
+			return filterKmsg(lines, max)
+		}
+		lines = append(lines, strings.Split(strings.TrimRight(string(buf[:n]), "\n"), "\n")...)
 	}
 	return filterKmsg(lines, max)
 }

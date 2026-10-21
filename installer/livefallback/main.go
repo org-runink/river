@@ -192,7 +192,8 @@ func main() {
 		// In the background: mounting a stick must never delay the wait.
 		if !early && el >= reportEarlyAt {
 			early = true
-			go saveReport("river-report-early.txt", hardwareReport("/", readKmsg("/dev/kmsg", 200), true))
+			saveEarly(func() []string { return readKmsg("/dev/kmsg", 200) },
+				func(name, content string) { saveReport(name, content) })
 		}
 	}); p != "" {
 		fmt.Printf("river-live-fallback: a graphical session appeared (%s); nothing to do\n", p)
@@ -216,9 +217,16 @@ func main() {
 	// from a photograph of a console that said only THAT it had failed. The block that used to
 	// be printed here scrolled off the screen under the installer's own output before anyone
 	// could photograph it; this one is held on screen. Plain file reads: it cannot fail the boot.
-	kmsg := readKmsg("/dev/kmsg", 200)
-	say(tty, hardwareReport("/", kmsg, false))
-	say(tty, "  "+saveReport("river-report.txt", hardwareReport("/", kmsg, true))+"\n")
+	//
+	// Bounded: the report is a convenience and the installer is the product, so a step that gets
+	// stuck (the kernel-log read once did, as root) costs reportBudget at most and never the kiosk.
+	if !bounded(reportBudget, func() {
+		kmsg := readKmsg("/dev/kmsg", 200)
+		say(tty, hardwareReport("/", kmsg, false))
+		say(tty, "  "+saveReport("river-report.txt", hardwareReport("/", kmsg, true))+"\n")
+	}) {
+		say(tty, fmt.Sprintf("\n  The hardware report did not finish within %s and was skipped. The installer starts anyway.\n", reportBudget))
+	}
 	if *pause > 0 {
 		say(tty, fmt.Sprintf("\n  The installer starts in %s. Photograph this screen now if you will report the problem.\n\n", *pause))
 		time.Sleep(*pause)

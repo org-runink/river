@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -410,5 +411,38 @@ func TestCutNeverSplitsACharacter(t *testing.T) {
 	}
 	if cut("short", 10) != "short" {
 		t.Error("a short line must pass through")
+	}
+}
+
+// /dev/kmsg is a pollable character device. Opened non-blocking and read by Go's os.File, an EMPTY
+// read does not return EAGAIN to the caller: the runtime parks the goroutine on the poller until
+// there is more to read, which on a quiet log is never. As root (the live medium) that hung the whole
+// fallback before it printed or saved anything; as a user the open fails first, which is why it was not
+// seen on a workstation. A FIFO that is open for writing but empty behaves the same way.
+func emptyPollableFile(t *testing.T) (path string, closeWriter func()) {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "kmsg")
+	if err := syscall.Mkfifo(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := os.OpenFile(p, os.O_RDWR, 0) // a writer that stays open keeps the read from seeing EOF
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p, func() { _ = w.Close() }
+}
+
+func TestReadKmsgReturnsWhenThereIsNothingMoreToRead(t *testing.T) {
+	p, closeW := emptyPollableFile(t)
+	defer closeW()
+	done := make(chan []string, 1)
+	go func() { done <- readKmsg(p, 10) }()
+	select {
+	case got := <-done:
+		if len(got) != 0 {
+			t.Errorf("an empty log read as %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readKmsg waits for more data on an empty non-blocking file: as root on /dev/kmsg it never returns")
 	}
 }
