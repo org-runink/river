@@ -11,4 +11,4 @@ module github.com/org-runink/river/guide
 // A third-party retry library would have failed the same test on its dependency tree alone.
 go 1.24
 
-require github.com/org-runink/runi v1.0.0
+require github.com/org-runink/runi v1.1.1
