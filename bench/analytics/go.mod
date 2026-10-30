@@ -16,4 +16,4 @@ module github.com/org-runink/river/bench/analytics
 // the published figures are unchanged and there is now one definition to disagree with.
 go 1.24
 
-require github.com/org-runink/runi v1.0.0
+require github.com/org-runink/runi v1.1.1
