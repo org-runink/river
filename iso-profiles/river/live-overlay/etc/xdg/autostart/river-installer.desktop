@@ -1,5 +1,6 @@
-# Runink River live medium: when the live Plasma session starts, the graphical
-# installer opens full screen (river-installer-desktop: Firefox in kiosk mode on the installer's
+# Runink River live medium: when a live DEsk session starts (after the installer's own kiosk
+# session has closed), the graphical installer opens full screen again (river-installer-desktop:
+# Firefox in kiosk mode on the installer's
 # loopback address). It also puts "Install Runink River" on the desktop, to open it again.
 # The installer's first screen after the welcome sets up the network. Live overlay only:
 # 20-clone-rootfs excludes this file, so an installed machine does not open it.
@@ -11,5 +12,4 @@ Exec=/usr/local/bin/river-installer-desktop
 Icon=system-software-install
 Terminal=false
 NoDisplay=true
-OnlyShowIn=KDE;
-X-KDE-autostart-phase=2
+OnlyShowIn=DEsk;

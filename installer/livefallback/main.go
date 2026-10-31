@@ -50,8 +50,10 @@ func probes() []sessionProbe {
 		// An X server publishes its socket here. Runink River is Wayland, but a
 		// downstream profile may not be.
 		{"X socket", func() bool { return globAny("/tmp/.X11-unix/X*") }},
-		// The desktop shell itself, in case the sockets live somewhere unusual.
-		{"plasmashell", func() bool { return pgrep("plasmashell") }},
+		// The compositor itself, in case the sockets live somewhere unusual: the live
+		// medium's installer session is weston (etc/greetd/live.toml), a desktop is DEsk.
+		{"weston", func() bool { return pgrep("weston") }},
+		{"desk", func() bool { return pgrep("desk") }},
 	}
 }
 

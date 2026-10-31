@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# greetd on Runink River: the login screen is gtkgreet, full screen in cage (a one-window
+# Wayland compositor), on VT 1. Whoever logs in gets DEsk (desk-session). The live medium uses
+# /etc/greetd/live.toml instead (the greetd service, runink-greetd-s6).
+[terminal]
+vt = 1
+
+[default_session]
+command = "cage -s -- gtkgreet -c desk-session"
+user = "greeter"

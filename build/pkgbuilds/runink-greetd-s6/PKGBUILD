@@ -1,0 +1,37 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-greetd-s6 — the s6 service for greetd, the display manager (login screen) of Runink
+# River's desktop. Artix ships greetd with openrc, runit and dinit services but no s6 one, so
+# this is the -s6 package it lacks, built the way Artix's are: an s6-rc longrun in /etc/s6/sv.
+#
+# The service, `greetd`, starts after zfs-mount (/home), plymouth-quit (the splash off the
+# screen) and elogind (seats and sessions, through greetd's PAM stack). It runs greetd with
+# /etc/greetd/config.toml (the login screen: gtkgreet in cage, then DEsk), or with
+# /etc/greetd/live.toml where that exists: the live medium's, which runs the installer first
+# (iso-profiles/river/live-overlay; 20-clone-rootfs deletes it on install).
+pkgname=runink-greetd-s6
+pkgver=2026.10
+pkgrel=1
+pkgdesc="s6 service for greetd, the Runink River login screen"
+arch=('any')
+url="https://github.com/org-runink/river"
+license=('MIT')
+depends=('greetd' 's6' 'execline' 'elogind-s6')
+provides=('greetd-s6')
+conflicts=('greetd-s6')
+
+package() {
+	local sv="$pkgdir/etc/s6/sv/greetd"
+	install -d "$sv/dependencies.d"
+	printf 'longrun\n' > "$sv/type"
+	local d
+	for d in zfs-mount plymouth-quit elogind; do
+		: > "$sv/dependencies.d/$d"
+	done
+	cat > "$sv/run" <<'RUN'
+#!/bin/execlineb -P
+fdmove -c 2 1
+ifelse { /usr/bin/test -f /etc/greetd/live.toml } { /usr/bin/greetd --config /etc/greetd/live.toml }
+/usr/bin/greetd --config /etc/greetd/config.toml
+RUN
+	chmod 0755 "$sv/run"
+}

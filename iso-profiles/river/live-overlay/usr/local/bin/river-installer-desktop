@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 The RIVER Authors
 # SPDX-License-Identifier: MIT
 #
-# river-installer-desktop — open the graphical installer in the live Plasma session (Runink
+# river-installer-desktop — open the graphical installer on the live medium (Runink
 # River Workstation), full screen: Firefox in kiosk mode on http://[::1]:47660/, with a
 # throwaway profile. Runs as the live user, from the session's autostart and from the
 # "Install Runink River" desktop icon (which it creates). The backend is the river-installer s6
@@ -12,7 +12,7 @@ PATH=/usr/local/bin:/usr/bin:/bin; export PATH
 
 # RUN AS THE LIVE USER, even when started as root.
 #
-# The Plasma session autostarts this as the logged-in user and nothing below needs privilege.
+# greetd's live session (weston, as this user) autolaunches it, and nothing below needs privilege.
 # The KIOSK path starts it as root, because weston there runs as root -- it is the only way to
 # take the DRM device without a logind session (see river-kiosk). The compositor needs that;
 # a browser emphatically does not, so drop back down here rather than let firefox inherit it.

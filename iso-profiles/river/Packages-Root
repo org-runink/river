@@ -1,4 +1,4 @@
-# Packages-Root — the allow-list for Runink River, the developer workstation (KDE Plasma on
+# Packages-Root — the allow-list for Runink River, the developer workstation (DEsk on
 # Wayland, s6, encrypted ZFS root, one pinned kernel).
 #
 # artools installs profile.yaml's rootfs lists on top of its own desktop common.yaml; every
@@ -77,7 +77,7 @@ dosfstools
 # ── s6 init ────────────────────────────────────────────────────────────────────────────
 # s6, NOT systemd. This is a hard invariant of the image and it constrains the desktop:
 # every service below must have an s6 counterpart, which is why the -s6 packages are named
-# explicitly rather than relying on a plasma meta-package to drag in systemd units.
+# explicitly rather than relying on a desktop meta-package to drag in systemd units.
 s6
 s6-rc
 s6-linux-init
@@ -109,119 +109,62 @@ openssh
 iptables
 nftables
 
-# ── desktop: KDE Plasma on Wayland ─────────────────────────────────────────────────────
-# EXPLICIT list, not plasma-meta (owner decision 2026-09-24: minimal tech, no telemetry,
-# no app store). This is plasma-meta 6.7.5's dependency list MINUS:
-#   discover, flatpak-kcm  - app store + Flatpak; the workstation updates by pacman.
-#                            flatpak, discover, flatpak-kcm and packagekit are on
-#                            forbidden.closure so they cannot come back transitively.
-#   plasma-welcome         - first-run wizard (also hard-depends on kuserfeedback)
-#   krdp                   - RDP server (freerdp); nothing here should listen for desktops
-#   plasma-vault           - gocryptfs/FUSE vaults; the ZFS pool is already encrypted
-#   plasma-firewall        - ufw/firewalld KCM; neither backend ships (nftables is used)
-#   oxygen, oxygen-sounds  - legacy theme; Breeze is the theme
-#   kdeplasma-addons       - REMOVED 2026-10-01. Extra plasmoids (timer, comic, fuzzy clock,
-#                            fifteen puzzle, weather, media frame, ...), a few KRunner
-#                            plugins (unit converter, dictionary, characters) and the
-#                            picture-of-the-day wallpaper plugin. The default desktop here
-#                            loads none of them: the River look-and-feel layout
-#                            (root-overlay/usr/share/plasma/look-and-feel/
-#                            org.runink.river.desktop) uses only
-#                            org.kde.plasma.desktop.defaultPanel and
-#                            org.kde.plasma.kickoff, both from plasma-desktop/
-#                            plasma-workspace. Its only reverse dependency is plasma-meta,
-#                            which this image does not install, so it is a leaf — and it is
-#                            the ONLY reason qt6-quick3d, openxr (a VR runtime loader),
-#                            qt6-quicktimeline and jsoncpp were in the closure at all.
-#                            Measured with pactree: 51.7 MiB over 5 packages. What a user
-#                            loses: those widgets, in "Add Widgets". KDE's own KRunner
-#                            calculator (in krunner/plasma-workspace) stays.
-# PLUS sddm-kcm (login-screen settings). konsole and spectacle are listed below.
-# kuserfeedback CANNOT be dropped: plasma-workspace, dolphin and kate hard-depend on it
-# (pacman -Si, Artix 2026-09-24). It is KDE's opt-in feedback library, off by default
-# (nothing is sent unless a user enables it in System Settings), so it stays, and is
-# deliberately NOT on forbidden.closure.
-aurorae
-bluedevil
-breeze
-breeze-gtk
-kactivitymanagerd
-kde-cli-tools
-kde-gtk-config
-kdecoration
-kglobalacceld
-kinfocenter
-kmenuedit
-knighttime
-kpipewire
-kscreen
-kscreenlocker
-ksshaskpass
-ksystemstats
-kwallet-pam
-kwayland
-kwin
-kwrited
-layer-shell-qt
-libkscreen
-libksysguard
-libplasma
-milou
-ocean-sound-theme
-plasma-activities
-plasma-activities-stats
-plasma-browser-integration
-plasma-desktop
-plasma-disks
-plasma-integration
-plasma-keyboard
-plasma-nm
-plasma-pa
-plasma-systemmonitor
-plasma-thunderbolt
-plasma-workspace
-polkit-kde-agent
-powerdevil
-print-manager
-systemsettings
-xdg-desktop-portal-kde
-sddm-kcm
-sddm
-sddm-s6
-konsole
-dolphin
-kate
+# ── desktop: DEsk on Wayland ───────────────────────────────────────────────────────────
+# DEsk (owner decision 2026-10-30; docs/DESKTOP-DESK-PLAN.md) replaced KDE Plasma: one
+# wlroots compositor that is the whole desktop — windows as paper on a desk, the drawer, the
+# bookcase, the post box (notifications), the tray and the front-door lock — built in
+# [runink] from DEsk's release plus the Runink fork's patches. Plasma, KWin, SDDM, Breeze, Qt
+# and KDE Frameworks left the image with it (forbidden.closure keeps them out).
+runink-desk
+runink-wlroots0.18
+# The login screen: greetd, running gtkgreet fullscreen in cage, as an s6 service from
+# runink-greetd-s6 (Artix has greetd but no greetd-s6). greetd itself comes from Artix's
+# repositories for now (debt).
+greetd
+runink-greetd-s6
+runink-cage
+runink-gtkgreet
+# sd-bus for DEsk's post box, tray and logind power (elogind's library, not systemd's).
+libelogind
+# What DEsk's session helper starts (its autostart entries) and what it opens. Each is a
+# small GTK or C program; none is Python, which the image does not carry: so no udiskie
+# (automounting), blueman (Bluetooth: bluetoothctl), system-config-printer (CUPS's own page
+# on localhost:631) or ibus (152 MiB, Python setup).
+mate-polkit
+network-manager-applet
+nm-connection-editor
+gnome-keyring
+xdg-desktop-portal
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+xorg-xwayland
+xdg-user-dirs
+xdg-utils
+wdisplays
+# Print and Alt+Print (desk-screenshot): grim, the clipboard, and the letter saying where.
+grim
+wl-clipboard
+libnotify
+# DEsk's own typefaces (URW base 35).
+gsfonts
 
-# ── KDE applications (daily desktop) ─────────────────────────────────────────────────
-# Video is `dragon` (KDE's own ffmpeg-based
-# player): haruna is NOT in the Artix repos (only Arch [extra]), and this builder is
-# Artix-only. okular pulls phonon-qt6 -> phonon-qt6-vlc (the only Phonon backend in
-# Artix), which accounts for the vlc-plugin-* entries in the closure.
-# partitionmanager (+ kpmcore) adds nothing forbidden; measured 2026-09-24.
-dragon
-elisa
-gwenview
-okular
-ark
-spectacle
-kcalc
-partitionmanager
+# ── applications (daily desktop) ───────────────────────────────────────────────────────
+# DEsk's standard set: the classic GTK programs, which leave their frame to the desk and lie
+# on it as paper. foot is the terminal (Wayland-native, under 1 MiB).
+foot
+thunar
+tumbler
+gvfs
+udisks2
+mousepad
+ristretto
+atril
+engrampa
+parole
 
 # Browser. Its telemetry, studies and default-browser nag are switched off system-wide by
 # root-overlay/etc/firefox/policies/policies.json (Mozilla enterprise policies).
 firefox
-
-# NOT plasma-workspace-wallpapers — KDE's official wallpaper collection, REMOVED 2026-10-01.
-# 255.1 MiB for exactly one package, and this image already ships its own: the default is
-# RIVER (branding/wallpapers/River, set by look-and-feel org.runink.river.desktop's
-# `Image=River`), the login screen is the `runink-river` SDDM theme
-# (root-overlay/etc/sddm.conf.d/10-river.conf), and the fourteen CachyOS Emerald JPEGs are
-# vendored under branding/wallpapers/emerald and shipped by branding/render.sh. Nothing in
-# the resolved closure depends on it (pactree -r: nothing) and nothing in this repository
-# names a wallpaper from it. What a user loses: KDE's stock wallpapers in the picker.
-# TO BOOT-TEST: Plasma's compiled-in fallback wallpaper is "Next", which lived in this
-# package — confirm the desktop, the lock screen and SDDM all show the River artwork and not
-# a flat colour.
 
 # ── boot splash: Plymouth (workstation ONLY) ──────────────────────────────────────────
 # The RIVER `river` script theme (root-overlay/usr/share/plymouth/themes/river). Artix
@@ -244,8 +187,8 @@ libva-mesa-driver
 mesa-utils
 
 # ── multimedia: codecs + hardware video ──────────────────────────────────────────────
-# GStreamer (what Plasma/KDE apps and Firefox's WebRTC use) plus ffmpeg (dragon, Qt
-# Multimedia). intel-media-driver is the Meteor Lake (iHD) VA-API driver; the AMD
+# GStreamer (what Parole and Firefox's WebRTC use) plus ffmpeg. intel-media-driver is the
+# Meteor Lake (iHD) VA-API driver; the AMD
 # reference machine decodes through libva-mesa-driver above. libva-utils gives vainfo.
 gst-plugins-base
 gst-plugins-good
@@ -262,19 +205,18 @@ pipewire-pulse
 pipewire-alsa
 wireplumber
 # JACK clients through PipeWire (pro-audio apps without a separate jack2 server). The
-# volume UI is plasma-pa, in the Plasma list above, so pavucontrol-qt is not added.
+# volume is DEsk's own (its Control Panel, through wpctl), so no mixer program is added.
 pipewire-jack
 
 # ── bluetooth ────────────────────────────────────────────────────────────────────────
-# bluedevil (the Plasma applet) is in the Plasma list above; this is the stack under it. The
-# s6 service (bluez-s6) is with the other -s6 packages above.
+# No Bluetooth applet: blueman, the one DEsk's Shell Settings opens, is Python. bluetoothctl
+# (bluez-utils) pairs devices. The s6 service (bluez-s6) is with the other -s6 packages above.
 bluez
 bluez-utils
 
 # ── printing ─────────────────────────────────────────────────────────────────────────
-# print-manager (the Plasma printer KCM) is in the Plasma list above and is
-# useless without a CUPS daemon. system-config-printer is deliberately NOT added: it
-# duplicates print-manager and drags in python-gobject/gtk3 bindings.
+# No printer program: system-config-printer is Python, so printers are set up on CUPS's own
+# page (http://localhost:631) in Firefox.
 cups
 
 # ── fonts ──────────────────────────────────────────────────────────────────────────────

@@ -32,7 +32,7 @@ SPDX-License-Identifier: MIT
 
 `LICENSES/` holds the text of every license used: MIT, GPL-2.0-only and CDDL-1.0, plus the
 Apache-2.0 for `validation/`, and the existing third-party ones (0BSD, BSD-2-Clause,
-GPL-2.0-or-later, GPL-3.0-only,
+GPL-3.0-only,
 CC-BY-4.0 for the Runink River artwork and the Code of Conduct, `LicenseRef-Public-Key`, `LicenseRef-Runink-Trademark`),
 and the `Linux-syscall-note` exception for the kernel uapi header in bpfdoc's test fixtures.
 
@@ -68,7 +68,6 @@ complete and fully open.
 | `branding/**` + overlay copies (`usr/share/runink/branding/**`, `usr/share/plymouth/themes/river/**`, `usr/share/wallpapers/River/**`) | Runink original artwork | CC-BY-4.0 for the files (as `REUSE.toml` maps them), trademarks reserved | Medium. Depends on the trademark plan (§5). `branding/render.sh` and `branding/**/*.md` are MIT. |
 | `branding/mascot/**`, `branding/logo/river-{mark,mark-small,lockup,lockup-dark}.svg`, `branding/icons/**`, `branding/ascii/**`, `branding/plymouth/river/logo.png`, `branding/splash/**`, `branding/grub/river/background.jpg`, the Runink River wallpaper (`branding/wallpapers/River/**`) + their overlay copies, and the profile's `/etc/issue` | The **Runink River community mark** (the M2 mascot, `branding/mascot/**`: mark, small mark, lockups, ASCII) and everything rendered from it (the Runink River edition's icons, favicons, splash images, GRUB background, wallpaper and terminal banner) | **`LicenseRef-Runink-Trademark`** (all rights reserved) | High. Owner's instruction (2026-09-24). See §5: a community image may need to swap them out. |
 | `branding/wallpapers/emerald/*/**` + overlay copies `usr/share/wallpapers/{Abstract,…,Spectrum}/**` | **CachyOS Emerald KDE** wallpapers by Dharam Dhurandhar, JPEG derivatives of upstream `CachyOS/CachyOS-Emerald-KDE@d61d1dd0` | **GPL-3.0-only** | Medium. Upstream has no LICENSE/README; each `metadata.desktop` says `GPLv3` (no "or later") and the CachyOS package says `GPL3`. The transform and per-file upstream and derived sha256 are in `branding/wallpapers/emerald/PROVENANCE`. Shipping GPL-3.0 images in the image is fine; they are separate works. `derive.sh` and the sha files are MIT. |
-| `iso-profiles/river/.../plasma/look-and-feel/org.runink.river.desktop/**` | Runink original | **GPL-2.0-or-later** (the splash image: `LicenseRef-Runink-Trademark`) | **Flag:** its own `metadata.json` declares `"License": "GPLv2+"` (probably copied from a Breeze template). It is mapped as declared. Change the field to `MIT` if the owner agrees. It is a small config package (defaults, layout script, splash QML) with no Breeze code. |
 | `docs/**`, `*.md` | Runink original | MIT | High. `docs/boot-test/*.png` are QEMU screenshots of Runink River's own boot output. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 | CC-BY-4.0 (© Contributor Covenant) | High. Upstream's license; not relicensed. |
 

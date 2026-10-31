@@ -29,6 +29,7 @@ var PublicPackages = map[string]string{
 	"runink-cage":          "build/pkgbuilds/runink-cage",
 	"runink-gtkgreet":      "build/pkgbuilds/runink-gtkgreet",
 	"runink-desk":          "build/pkgbuilds/runink-desk",
+	"runink-greetd-s6":     "build/pkgbuilds/runink-greetd-s6",
 	"river-guide":          "build/pkgbuilds/river-guide",
 	"runink-core":          "build/pkgbuilds/runink-core",
 	"runink-runtime":       "build/pkgbuilds/runink-runtime",

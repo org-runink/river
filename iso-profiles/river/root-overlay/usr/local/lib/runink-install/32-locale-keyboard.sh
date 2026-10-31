@@ -48,9 +48,9 @@ if [ -n "$KEYMAP" ]; then
 	printf 'KEYMAP=%s\n' "$KEYMAP" > "$TARGET/etc/vconsole.conf"
 	echo "locale-keyboard: console keymap $KEYMAP"
 fi
-# The desktop: the X11 keyboard (SDDM's greeter) and Plasma's default layout list.
-if [ -n "$XKB" ] && { [ -d "$TARGET/usr/share/sddm" ] || [ -d "$TARGET/usr/share/plasma" ]; }; then
-	mkdir -p "$TARGET/etc/X11/xorg.conf.d" "$TARGET/etc/xdg"
+# The desktop: the system keyboard, which DEsk and X11 programs read, and the login screen's.
+if [ -n "$XKB" ] && [ -f "$TARGET/usr/share/wayland-sessions/desk.desktop" ]; then
+	mkdir -p "$TARGET/etc/X11/xorg.conf.d"
 	cat > "$TARGET/etc/X11/xorg.conf.d/00-keyboard.conf" <<-EOF
 		# Written by the Runink River installer (32-locale-keyboard).
 		Section "InputClass"
@@ -60,6 +60,10 @@ if [ -n "$XKB" ] && { [ -d "$TARGET/usr/share/sddm" ] || [ -d "$TARGET/usr/share
 		        Option "XkbVariant" "$VARIANT"
 		EndSection
 	EOF
-	printf '[Layout]\nLayoutList=%s\nVariantList=%s\nUse=true\n' "$XKB" "$VARIANT" > "$TARGET/etc/xdg/kxkbrc"
+	# The greeter (gtkgreet in cage) types in the same layout: xkbcommon reads XKB_DEFAULT_*.
+	if [ -f "$TARGET/etc/greetd/config.toml" ]; then
+		sed -i "s|^command = \"cage |command = \"env XKB_DEFAULT_LAYOUT=$XKB XKB_DEFAULT_VARIANT=$VARIANT cage |" \
+			"$TARGET/etc/greetd/config.toml"
+	fi
 	echo "locale-keyboard: desktop keyboard $XKB${VARIANT:+ ($VARIANT)}"
 fi
