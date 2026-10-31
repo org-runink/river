@@ -68,11 +68,11 @@ build/qemu-test.sh     ~/.cache/river-build/iso-out/runink-river-<date>-x86_64.i
   graphical installer's API with the same calls the screens make, photographs every screen,
   reboots into the installed system, unlocks the pool, checks that `/home` is mounted, the
   firewall is loaded and the machine-id is set, logs in, waits for the desktop, and checks
-  the network. Its desktop checks still expect Plasma and SDDM: they are being rewritten
-  against the first DEsk image.
+  the network: it logs in at the greeter (gtkgreet) and waits for DEsk, and judges the
+  greeter's and the desktop's screendumps by their size and entropy (`river test screen`).
 - **`qemu-test.sh`** checks the live medium without installing: the GRUB entry, the live
-  session, and NetworkManager, Bluetooth and CUPS up in s6-rc (its desktop checks, too, are
-  being rewritten for DEsk).
+  session (greetd's autologin into the installer kiosk, its screendump judged the same way),
+  and NetworkManager, Bluetooth and CUPS up in s6-rc.
 
 Against an ISO built before your change, both can overlay this tree's installer and root
 overlay onto the live system first; see the scripts' headers.

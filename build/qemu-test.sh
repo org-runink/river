@@ -66,16 +66,20 @@
 # installed system, the live phase adds a one-line rc.local hook and a serial console to
 # the SCRATCH disk only. Nothing touches a host block device.
 #
-# --profile workstation (the default) boots a Runink River ISO and checks its live desktop (no
+# --profile workstation (the default) boots a Runink River ISO and checks its live medium (no
 # install phase here: build/qemu-gui-test.sh drives the graphical install and the login):
 #   grub-entry  as above
-#   sddm        SDDM runs; autologin  the live user is logged in through SDDM's drop-in
-#   plasma      the live Plasma session runs (plasmashell + kwin_wayland as the live user);
-#               screenshots desktop-early.png and desktop.png show it
-#   s6-*        s6-rc has NetworkManager-srv, sddm-srv, bluetoothd-srv and cupsd up
+#   greetd      greetd runs; autologin  greetd's initial_session (live.toml) logged the live
+#               user in: no login screen (gtkgreet) is waiting
+#   kiosk       the live session runs: weston as the live user, the installer full screen
+#   screen      the screendump desktop.png shows something drawn (`river test screen`: its PNG
+#               size and luma entropy; QEMU's 752-byte "Guest has not initialized the display"
+#               placeholder passed the old grey-mean check)
+#   desk-session  DEsk is on the medium for after the install (desk-session, desk.desktop)
+#   s6-*        s6-rc has NetworkManager-srv, greetd, bluetoothd-srv and cupsd up
 #   no-artix-live  no artix-live service or dependency on the medium
-#   net-*       network first, as for the server; net-autostart  the live Plasma session opened
-#               the graphical installer (older images: river-netsetup in Konsole)
+#   net-*       network first, as for the server; net-autostart  the live session opened
+#               the graphical installer (Firefox on the installer's address)
 #
 # Options:
 #   --profile workstation|server  which image the ISO is (default workstation)
@@ -202,6 +206,8 @@ OVMF_CODE="${OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}"
 OVMF_VARS="${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}"
 missing=""
 for t in qemu-system-x86_64 qemu-img mkfs.vfat mcopy blkid; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
+# go builds `river`, whose `test screen` judges the workstation's screendump.
+[ "$PROFILE" = server ] || command -v go >/dev/null 2>&1 || missing="$missing go"
 [ -f "$OVMF_CODE" ] && [ -f "$OVMF_VARS" ] || missing="$missing OVMF(edk2-ovmf)"
 [ -w /dev/kvm ] || missing="$missing /dev/kvm(writable)"
 [ -z "$missing" ] || die "missing prerequisites:$missing"
@@ -229,7 +235,7 @@ COMMON="-enable-kvm -machine q35 -cpu host -m $MEM -smp $CPUS $NIC -display none
  -drive if=none,id=kit,format=raw,file=$WORK/kit.img -device virtio-blk-pci,drive=kit,serial=RIVERTESTKIT
  -chardev pipe,id=ser0,path=$WORK/ser -serial chardev:ser0
  -chardev pipe,id=mon0,path=$WORK/mon -mon chardev=mon0,mode=readline"
-# The workstation draws a desktop: a virtio GPU (KMS for kwin_wayland; screendump reads it).
+# The workstation draws a desktop: a virtio GPU (KMS for the compositors; screendump reads it).
 [ "$PROFILE" = workstation ] && COMMON="$COMMON -vga virtio"
 
 echo "qemu-test: ISO $ISO (label $LABEL), profile=$PROFILE, lab=$LAB, unpack models=$([ -n "$PASSF" ] && echo yes || echo no), net=$NET, offline=$OFFLINE, expect-payloads=$EXPECT_PAYLOADS, public=$PUBLIC"
@@ -545,35 +551,36 @@ if [ -d /run/rt/overlay/root ]; then
 fi
 [ -f /run/rt/overlay/pre.sh ] && { echo "RIVERTEST NOTE overlay pre.sh"; sh /run/rt/overlay/pre.sh; }
 grep -q "label=$EXPECT_LABEL" /proc/cmdline && ok grub-entry || ko grub-entry "$(cat /proc/cmdline)"
-# Plasma on software rendering can take a while after SDDM's autologin: give it 4 minutes.
+# greetd's initial_session (live.toml) starts weston as the live user, and weston.ini opens the
+# installer full screen. On software rendering give it 4 minutes.
 i=0
-until pgrep -u runink -x plasmashell >/dev/null 2>&1 || [ "$i" -ge 240 ]; do sleep 5; i=$((i + 5)); done
-pgrep -x sddm >/dev/null && ok sddm || ko sddm
-# Autologin: the live drop-in names the user, no greeter is waiting, and the session is up.
-if grep -rqs '^User=runink' /etc/sddm.conf.d && ! pgrep -f sddm-greeter >/dev/null && pgrep -u runink -x plasmashell >/dev/null; then
+until pgrep -u runink -x weston >/dev/null 2>&1 || [ "$i" -ge 240 ]; do sleep 5; i=$((i + 5)); done
+pgrep -x greetd >/dev/null && ok greetd || ko greetd
+# Autologin: live.toml names the user, no login screen is waiting, and the session is up.
+if grep -qs '^user = "runink"' /etc/greetd/live.toml && ! pgrep -x gtkgreet >/dev/null && pgrep -u runink -x weston >/dev/null; then
 	ok autologin
-else ko autologin "greeter=$(pgrep -f sddm-greeter | head -1) conf=$(grep -rhs '^User=' /etc/sddm.conf.d | tr '\n' ' ')"; fi
-if pgrep -u runink -x plasmashell >/dev/null && pgrep -u runink -x kwin_wayland >/dev/null; then ok plasma
-else ko plasma "plasmashell=$(pgrep -u runink -x plasmashell | head -1) kwin_wayland=$(pgrep -u runink -x kwin_wayland | head -1)"; fi
+else ko autologin "gtkgreet=$(pgrep -x gtkgreet | head -1) live.toml=$(grep -s '^user' /etc/greetd/live.toml | tr '\n' ' ')"; fi
+if pgrep -u runink -x weston >/dev/null && pgrep -u runink -f 'firefox.*47660' >/dev/null; then ok kiosk
+else ko kiosk "weston=$(pgrep -u runink -x weston | head -1) firefox=$(pgrep -u runink -f 'firefox.*47660' | head -1)"; fi
+[ -f /usr/share/wayland-sessions/desk.desktop ] && command -v desk-session >/dev/null && ok desk-session \
+	|| ko desk-session "desk.desktop or desk-session missing"
 active="$(s6-rc -a list 2>&1)"
-for s in NetworkManager-srv sddm-srv bluetoothd-srv cupsd; do
+for s in NetworkManager-srv greetd bluetoothd-srv cupsd; do
 	printf '%s\n' "$active" | grep -qx "$s" && ok "s6-${s%-srv}" || ko "s6-${s%-srv}" "not up"
 done
 if [ -d /etc/s6/sv/artix-live ] || find /etc/s6/sv /etc/s6/adminsv -path '*/dependencies.d/artix-live' | grep -q .; then
 	ko no-artix-live
 else ok no-artix-live; fi
-# Network first, now through the graphical installer: the live session opened the installer
-# (whose network screen comes first) through its autostart entry. Images from before the
-# graphical installer opened river-netsetup in Konsole instead; either passes.
-if { [ -f /etc/xdg/autostart/river-installer.desktop ] && pgrep -f 'firefox.*47660' >/dev/null; } \
-	|| { [ -f /etc/xdg/autostart/river-netsetup.desktop ] && pgrep -f 'river-netsetup --desktop' >/dev/null; }; then ok net-autostart
-else ko net-autostart "entries=$(ls /etc/xdg/autostart/river-installer.desktop /etc/xdg/autostart/river-netsetup.desktop 2>/dev/null | tr '\n' ' ')"; fi
+# Network first, through the graphical installer: the live session opened the installer, whose
+# network screen comes first.
+if pgrep -u runink -f 'firefox.*47660' >/dev/null; then ok net-autostart
+else ko net-autostart "no installer page open for the live user"; fi
 . /run/rt/net.sh
 echo "s6-rc active: $(printf '%s\n' "$active" | tr '\n' ' ')"
-# Back to the desktop's virtual terminal for the harness's screenshot.
-pid="$(pgrep -u runink -x kwin_wayland | head -1)"
+# Back to the live session's virtual terminal (greetd's, VT 1) for the harness's screenshot.
+pid="$(pgrep -u runink -x weston | head -1)"
 vt="$( [ -n "$pid" ] && tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^XDG_VTNR=//p' | head -1)"
-if [ -n "$vt" ]; then chvt "$vt"; sleep 8; echo "RIVERTEST SHOT desktop"; sleep 15; fi
+chvt "${vt:-1}"; sleep 8; echo "RIVERTEST SHOT desktop"; sleep 15
 echo "RIVERTEST END live"
 sync
 poweroff -f 2>/dev/null || poweroff
@@ -768,9 +775,9 @@ echo "qemu-test: phase 1 — live boot from the $MEDIUM medium"
 start_vm live $MEDIUM_ARGS
 sleep 6; shot grub-menu
 sleep 20; shot live-boot
-# The workstation autologins into Plasma through SDDM: capture the desktop it reaches.
+# The workstation medium logs the live user into the installer kiosk (greetd): capture what it reaches.
 [ "$PROFILE" = workstation ] && { sleep 90; shot desktop-early; }
-# Ctrl+Alt+F2 from a graphical session (Alt+F2 there is KRunner); plain Alt+F2 on a text console.
+# Ctrl+Alt+F2 from a graphical session; plain Alt+F2 on a text console.
 if [ "$PROFILE" = workstation ]; then VTKEY=ctrl-alt-f2; else VTKEY=alt-f2; fi
 BOOT="sudo sh -c \"mkdir -p /run/rt; mount -r -L RIVERTEST /run/rt; sh /run/rt/live.sh\""
 tries=0
@@ -813,8 +820,15 @@ fi
 
 # --- verdict ---------------------------------------------------------------------------------------
 cat "$WORK"/serial-*.log 2>/dev/null | tr -d '\r' | grep -a 'RIVERTEST ' > "$WORK/results.txt" || true
+# The workstation's screen, judged on the host by `river test screen` (size and entropy, never
+# the grey mean: QEMU's no-display placeholder passed that). No desktop.png is a FAIL too.
 if [ "$PROFILE" = workstation ]; then
-	want="grub-entry sddm autologin plasma s6-NetworkManager s6-sddm s6-bluetoothd s6-cupsd no-artix-live net-autostart"
+	if ( cd "$REPO/cli" && go build -o "$WORK/river" ./cmd/river ) && "$WORK/river" test screen "$WORK/desktop.png" > "$WORK/screen.txt" 2>&1; then
+		echo "RIVERTEST OK screen" >> "$WORK/results.txt"
+	else echo "RIVERTEST FAIL screen ($(grep -m1 FAIL "$WORK/screen.txt" 2>/dev/null || echo 'river did not build'))" >> "$WORK/results.txt"; fi
+fi
+if [ "$PROFILE" = workstation ]; then
+	want="grub-entry greetd autologin kiosk desk-session screen s6-NetworkManager s6-greetd s6-bluetoothd s6-cupsd no-artix-live net-autostart"
 else
 	want="grub-entry guide-tty1 hwprobe plan plan-target fw-base fw-forward-drop fw-pair-live"
 fi

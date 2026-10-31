@@ -103,14 +103,14 @@ Environment: `PROFILE`, `RIVER_PROFILE_DIR`, `RIVER_BRANDING_DIR`, `RIVER_PUBLIC
 unattended, as the user (prerequisite: `edk2-ovmf`): the live desktop opens the installer,
 the install runs through every screen, the installed machine unlocks, `/home` is mounted,
 the firewall is loaded, the admin logs in and the desktop starts, and the network is up
-(`plasma-login`, `net-ready`; screenshots of every screen; its desktop checks still expect
-Plasma and are being rewritten for DEsk). Against an ISO built before a
+(`desk-login`, `net-ready`; screenshots of every screen, and the login screen and the desktop
+judged by `river test screen`: PNG size and luma entropy, never the grey mean). Against an ISO built before a
 change it overlays this tree's installer and root overlay on the live system first, and
 lists every file it copied. A profile's own installed-system checks
 (`tests/installed.d/`, [below](#installed-system-checks)) run last and join its verdict.
 `build/qemu-test.sh` checks a live medium without installing:
-the GRUB entry, the live session (screenshots `desktop-early.png` and
-`desktop.png`; its desktop checks are being rewritten for DEsk), NetworkManager, Bluetooth
+the GRUB entry, greetd's autologin into the installer kiosk (screenshots `desktop-early.png` and
+`desktop.png`, judged by `river test screen`), NetworkManager, Bluetooth
 and CUPS up in s6-rc, and the network step.
 Its `--profile server` mode (with `--lab`, `--offline`, `--expect-payloads`, `--public`) checks
 a downstream server distribution's ISO. See the scripts' headers.
