@@ -75,7 +75,7 @@ needs its EFI partition recreated before it boots again.
 | Codecs | `gst-plugins-base`, `-good`, `-bad`, `-ugly`, `gst-libav`, `ffmpeg` |
 | Firmware | `linux-firmware-amdgpu` and `linux-firmware-intel` only |
 | Audio | PipeWire (`pipewire`, `pipewire-pulse`, `pipewire-alsa`, `pipewire-jack`, `wireplumber`) |
-| Bluetooth, printing | `bluez`, `bluez-utils`, `cups`, with the Plasma front ends |
+| Bluetooth, printing | `bluez`, `bluez-utils` (`bluetoothctl`), `cups` (its web page, `http://localhost:631`) |
 
 NVIDIA's proprietary driver is not included. Devices that need firmware from other vendors'
 firmware packages (some Wi-Fi and Bluetooth chips, for example) may not work, because only the
@@ -83,7 +83,7 @@ AMD GPU and Intel firmware packages are on the image.
 
 ## Check a machine before you install
 
-In the live session (Konsole), the probe and the planner run without changing anything:
+In the live session (a terminal), the probe and the planner run without changing anything:
 
 ```bash
 river-hwprobe                                     # a human-readable summary

@@ -71,6 +71,24 @@ None.
   line say which and why; a workstation plans none
   ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
 
+### Changed
+
+- **DEsk replaces KDE Plasma** (owner decision 2026-10-30; docs/DESKTOP-DESK-PLAN.md). The
+  desktop is [DEsk](https://github.com/fyzugx/DEsk) (MIT, by fyzugx and the DEsk authors) on
+  wlroots, with the Runink fork's patches; the login screen is greetd (gtkgreet in cage),
+  from a new `runink-greetd-s6` package; the standard programs are the GTK ones DEsk lays
+  on its desk (foot, Thunar, Mousepad, Ristretto, Atril, Engrampa, Parole). The live medium
+  opens the installer in weston first. Installer contract change for downstream profiles:
+  `20-clone-rootfs` deletes `/etc/greetd/live.toml` and fails on any greetd
+  `initial_session` left on the target, and `32-locale-keyboard` keys on DEsk's session.
+  The QEMU harnesses' desktop checks still expect Plasma until they are rewritten.
+
+### Removed
+
+- KDE Plasma, KWin, SDDM, Breeze and the KDE applications; the SDDM theme and Plasma splash,
+  with `river test sddm-theme`; and the *Runink River Desk* wallpaper plugin listed under
+  Added, which was a Plasma plugin and never shipped in a release.
+
 ### Fixed
 
 - **A stick that cannot start the desktop now says what the machine is, on screen and on the

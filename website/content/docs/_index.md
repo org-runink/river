@@ -9,7 +9,7 @@ SPDX-FileCopyrightText: 2026 The RIVER Authors
 SPDX-License-Identifier: MIT
 -->
 
-**Runink River is an optimized developer workstation on s6.** It is a KDE Plasma desktop
+**Runink River is an optimized developer workstation on s6.** It is a DEsk desktop
 for data, analytics and AI development on hardware you own, built on:
 
 - **s6** init (s6, s6-rc, s6-linux-init). Never systemd.

@@ -179,8 +179,8 @@ foundation and the trademark transfer are covered in
 (the M2 mascot `branding/mascot/river-mascot.svg`, the marks generated from it,
 `branding/logo/river-mark.svg`, `river-mark-small.svg`, `river-lockup*.svg`, and the ASCII
 rendition `branding/ascii/river-mark-small.txt`) and everything rendered from it (the GRUB
-background, the Plymouth and Plasma splash logo, the Runink River wallpaper, the
-`runink-river` hicolor icons: Kickoff button, `LOGO=` in os-release, SDDM, the installer's
+background, the Plymouth logo, the Runink River wallpaper, the
+`runink-river` hicolor icons: `LOGO=` in os-release, the installer's
 edition icon; `branding/icons/favicon/*`; `/etc/issue`) are mapped to
 `LicenseRef-Runink-Trademark`: all rights reserved, trademark of Runink. A public or
 community Runink River image that is not published by Runink **may need to swap them out**. Replace
@@ -194,15 +194,14 @@ Linux® is the registered trademark of Linus Torvalds in the U.S. and other coun
 1. **archzfs**: confirm the MIT claim upstream, or replace the hook with Runink River's own.
 2. **AUR `linux-xanmod-lts`** derivation in the kernel PKGBUILD: confirm the license,
    or drop the XanMod switch in the zen move.
-3. **The plasma LnF `metadata.json`** says GPLv2+. Keep it or change it to MIT.
-4. **`runtime/` dependencies.** `riverd` may link only code available under an
+3. **`runtime/` dependencies.** `riverd` may link only code available under an
    OSI-approved license compatible with MIT. Anything that is not must be re-implemented
    in this repository.
-5. **AI-assisted history.** Many commits were made with AI coding tools. The copyright
+4. **AI-assisted history.** Many commits were made with AI coding tools. The copyright
    position of AI-generated portions is unsettled. The LF's generative-AI policy asks
    contributors to make sure the output can be licensed under the project license. The
    project's position is in [CONTRIBUTING.md](../CONTRIBUTING.md).
-6. **The ZFS legal opinion** (§4) before any foundation application.
+5. **The ZFS legal opinion** (§4) before any foundation application.
 
 ## 7. How to check
 

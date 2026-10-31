@@ -67,10 +67,12 @@ build/qemu-test.sh     ~/.cache/river-build/iso-out/runink-river-<date>-x86_64.i
 - **`qemu-gui-test.sh`** installs with no human, under QEMU/KVM with OVMF: it drives the
   graphical installer's API with the same calls the screens make, photographs every screen,
   reboots into the installed system, unlocks the pool, checks that `/home` is mounted, the
-  firewall is loaded and the machine-id is set, logs in at SDDM, waits for Plasma, and checks
-  the network.
-- **`qemu-test.sh`** checks the live medium without installing: the GRUB entry, SDDM, the
-  live user's Plasma session, and NetworkManager, SDDM, Bluetooth and CUPS up in s6-rc.
+  firewall is loaded and the machine-id is set, logs in, waits for the desktop, and checks
+  the network. Its desktop checks still expect Plasma and SDDM: they are being rewritten
+  against the first DEsk image.
+- **`qemu-test.sh`** checks the live medium without installing: the GRUB entry, the live
+  session, and NetworkManager, Bluetooth and CUPS up in s6-rc (its desktop checks, too, are
+  being rewritten for DEsk).
 
 Against an ISO built before your change, both can overlay this tree's installer and root
 overlay onto the live system first; see the scripts' headers.
