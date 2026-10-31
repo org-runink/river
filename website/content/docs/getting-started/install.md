@@ -191,7 +191,7 @@ you started from is never offered.
   ([Firewall]({{< relref "/docs/features/firewall" >}})).
 
 Your account is the administrator: it uses `sudo` with its own password, and its login
-shell is fish. The root account stays locked.
+shell is bash. The root account stays locked.
 
 ### Recovery key
 

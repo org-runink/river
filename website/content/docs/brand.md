@@ -65,4 +65,3 @@ community build replaces them. To ask for permission, contact a maintainer liste
 - [Runink River logo, small form, SVG](../../brand/river-mark-small.svg) (24 px and below)
 - [Runink River mascot, the drawing the logo is made from, SVG](../../brand/river-mascot.svg) (6 KB, any size)
 - [Runink River mascot, PNG](../../brand/river-mascot.png) (512 × 512, transparent)
-- [Share card, PNG](../../og/runink-river-card.png) (1200 × 627)
