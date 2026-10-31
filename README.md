@@ -49,7 +49,7 @@ that repoints them if the project moves. -->
 -->
 
 **Runink River** is a small, auditable Linux distribution for developers who work with
-data, analytics and AI on hardware they own. It installs KDE Plasma (Wayland) on **s6**,
+data, analytics and AI on hardware they own. It installs the DEsk desktop (Wayland) on **s6**,
 never systemd, with one pinned throughput-tuned kernel, an **encrypted ZFS root** with boot
 environments, a **default-deny firewall** and a **sandbox** for code you do not trust. There
 is no app store and no telemetry, and nothing in the image calls a hosted AI service.
@@ -58,7 +58,7 @@ is no app store and no telemetry, and nothing in the image calls a hosted AI ser
 
 | | |
 |---|---|
-| **What it is** | A developer workstation operating system: KDE Plasma on s6, one pinned kernel (`linux-runink`), an encrypted ZFS root with boot environments, a default-deny firewall, `river-sandbox` for untrusted code, and a graphical installer that sizes the machine before it touches a disk. |
+| **What it is** | A developer workstation operating system: the DEsk desktop on s6, one pinned kernel (`linux-runink`), an encrypted ZFS root with boot environments, a default-deny firewall, `river-sandbox` for untrusted code, and a graphical installer that sizes the machine before it touches a disk. |
 | **Who it is for** | Developers and teams who build data, analytics and AI software on their own machines and need to know exactly what runs there; and distributions that want a small, auditable base to build on. |
 | **Why it matters** | You can check what runs on your machine. Every upstream is pinned by version and checksum, the rules every change must keep are written down as [invariants](AGENTS.md) and checked in CI, releases are signed offline, and the whole image can be rebuilt from this repository. |
 | **Status** | Pre-release. **No signed release has been published yet.** The first release ships only after it installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that gate is still open. The image is assembled with transitional Artix Linux ISO tooling while the project moves to its own from-source base ([docs/OWN-BASE.md](docs/OWN-BASE.md)). |
@@ -88,11 +88,12 @@ build provenance ([RELEASE.md](RELEASE.md)). Until the first release is publishe
 ## Overview and scope
 
 * **s6 supervision, never systemd.** s6 / s6-rc / s6-linux-init + elogind as PID 1 and
-  service manager; SDDM, Bluetooth and printing run as s6 services, each with its own
+  service manager; the login screen (greetd), Bluetooth and printing run as s6 services, each with its own
   reliable logger.
-* **A Plasma developer desktop.** KDE Plasma 6 on Wayland from an explicit package list (no
-  plasma-meta, no app store, no Flatpak), PipeWire, Firefox with telemetry off, and
-  developer tools: `git`, `curl`, `base-devel`, `go`, Konsole, Kate.
+* **A DEsk developer desktop.** [DEsk](https://github.com/fyzugx/DEsk) on Wayland (windows as
+  paper on a desk, built from its release with the Runink fork's patches), greetd for login,
+  PipeWire, Firefox with telemetry off, no app store, no Flatpak, and developer tools: `git`,
+  `curl`, `base-devel`, `go`, foot, Mousepad.
 * **One kernel.** `linux-runink`, a pinned fork of the zen kernel 7.2.x stable series,
   sha256-pinned and signature-verified, with an enforced configuration floor (cgroup v2,
   eBPF with BTF and BPF LSM, `sched_ext`, hardening) and an analytics profile; full
@@ -200,7 +201,7 @@ You also need a USB stick at least as large as the ISO.
 
 ### Install
 
-Boot the stick (UEFI): the live Plasma session opens the graphical installer, which ends with
+Boot the stick (UEFI): the live session opens the graphical installer, which ends with
 a one-time recovery key and a machine that boots to the login screen. (`sudo runink-install`
 is the same installer in text mode.) See [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -279,7 +280,7 @@ Runink River builds on, and pins by version and checksum:
 * Kernel: [Linux](https://kernel.org) with the [zen patch set](https://github.com/zen-kernel/zen-kernel).
 * Storage: [OpenZFS](https://github.com/openzfs/zfs).
 * Init and supervision: [s6, s6-rc, s6-linux-init, execline and skalibs](https://skarnet.org/software/).
-* Desktop: [KDE Plasma](https://kde.org/plasma-desktop/) and [PipeWire](https://pipewire.org).
+* Desktop: [DEsk](https://github.com/fyzugx/DEsk) (MIT, by fyzugx and the DEsk authors) on [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots), [greetd](https://git.sr.ht/~kennylevinsen/greetd) and [PipeWire](https://pipewire.org).
 * Confinement: [bubblewrap](https://github.com/containers/bubblewrap).
 * Firewall: [nftables](https://netfilter.org/projects/nftables/).
 * Boot: [GRUB](https://www.gnu.org/software/grub/).

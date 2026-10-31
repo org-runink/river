@@ -43,7 +43,7 @@ bulk ingest), and keeps the switches to get latency back at boot:
 **On the workstation, the desktop keeps full preemption.** Because `PREEMPT_DYNAMIC` is
 kept, the preemption model is a boot parameter: Runink River sets `preempt=full` on the
 kernel command line (`/etc/default/grub.d/20-runink-preempt.cfg`), so the same kernel binary
-stays responsive under Plasma.
+stays responsive under a desktop session.
 
 The workstation also sets up zstd-compressed zram swap, sized by the install plan (half the
 RAM below 32 GiB, a quarter above, at most 16 GiB), and sets `vm.swappiness=150`,

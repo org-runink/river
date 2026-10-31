@@ -8,7 +8,7 @@ whatever) writes the patch, and a human contributor signs off every commit
 
 ## 1. What this is
 
-**Runink River is an optimized developer workstation on s6**: one OS image (KDE Plasma on
+**Runink River is an optimized developer workstation on s6**: one OS image (DEsk on
 Wayland, an encrypted ZFS root, one pinned kernel), its packaging, its graphical installer
 and (planned) the RIVER runtime, nothing else. RIVER (*Raft-Integrated Validated Event
 Runtime*) names only that pipeline runtime. The one in-tree profile is `iso-profiles/river`;
@@ -124,7 +124,8 @@ build/qemu-test.sh     ~/.cache/river-build/iso-out/runink-river-<date>-x86_64.i
 ```
 
 `qemu-gui-test.sh` installs through every installer screen unattended, reboots, unlocks,
-logs in at SDDM and prints `RIVERTEST OK|FAIL <check>` per check (the full list is the
+logs in at the login screen and prints `RIVERTEST OK|FAIL <check>` per check (its desktop checks still expect
+Plasma and are being rewritten for DEsk; the full list is the
 `want=` line near the end of the script; screenshots under
 `~/.cache/river-build/qemu-gui-test/<time>/`). For a downstream **server** image:
 `RIVER_PROFILE_DIR=<the staged branded profile> build/qemu-gui-test.sh --profile server --offline <iso>`
@@ -140,7 +141,7 @@ downstream profile, never here.
 
 1. **s6, never systemd.** No `.service` units, no `systemctl`. Services are s6-rc
    oneshots/longruns under `iso-profiles/*/root-overlay/etc/s6/`; the desktop's services
-   (SDDM, Bluetooth, printing) come from their `-s6` packages. Long-running services that
+   (greetd, Bluetooth, printing) come from their `-s6` packages. Long-running services that
    are not the desktop start from `rc.local` in init context, so elogind never reaps them.
 2. **Exactly one kernel**, `linux-runink` (`build/pkgbuilds/runink-kernel`): one pinned
    zen-kernel stable tag, kernel.org tarball + zen patch, both sha256-pinned and

@@ -12,7 +12,7 @@ SPDX-License-Identifier: MIT
 
 ### What is Runink River?
 
-An optimized developer workstation on s6: a KDE Plasma desktop with s6 init, the zen-based
+An optimized developer workstation on s6: the DEsk desktop with s6 init, the zen-based
 `linux-runink` kernel, an encrypted ZFS root with boot environments and a graphical installer,
 for data, analytics and AI development on hardware you own. See the
 [overview]({{< relref "/docs" >}}).
@@ -52,7 +52,7 @@ and a change to it needs a two-thirds vote of the technical steering committee.
 
 In practice: software that only ships systemd units needs an s6 service definition instead,
 and tools that require a running systemd (`systemctl`, `systemd --user`) will not work. The
-Plasma desktop runs on elogind and dbus, the same way other non-systemd distributions run it.
+DEsk desktop runs on elogind and dbus, the same way other non-systemd distributions run theirs.
 
 ### Is Runink River an official Arch Linux distribution, or Arch-based?
 

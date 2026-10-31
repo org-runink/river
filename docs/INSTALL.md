@@ -123,7 +123,7 @@ Take the USB drive out before the computer restarts, or it starts the installer 
    and the recovery key shown during the installation is that passphrase, the 64 characters
    with the spaces left out. Type it and press Enter.
 3. The login screen opens: *Sign in to runink*, with the administrator's user name, the
-   session (Plasma on Wayland) and the keyboard layout. Log in with the password chosen
+   session (DEsk on Wayland) and the keyboard layout. Log in with the password chosen
    during the installation.
 4. The desktop comes up, with the network the installer used already set up. Nothing else is
    left to do.
@@ -218,8 +218,8 @@ A **workstation** has none of this: it starts to its login screen, as above.
 - **Testing.** `build/qemu-gui-test.sh ISO` installs Runink River with no human: it drives the
   API with the same calls the UI makes (`river-installer drive`), photographs every screen in
   the live desktop, reboots into the installed system, unlocks it, checks that `/home` is
-  mounted, the firewall loaded and the machine-id set, types the password at SDDM and waits
-  for Plasma (`plasma-login`), then checks the network (`net-ready`). `--profile server`
+  mounted, the firewall loaded and the machine-id set, types the password at the login screen and waits
+  for the desktop (`plasma-login`: still Plasma-specific until the harness is rewritten for DEsk), then checks the network (`net-ready`). `--profile server`
   (with `RIVER_PROFILE_DIR`) does the same for a downstream server medium: the kiosk, a mouse
   click in it (`gui-pointer`), the
   first boot to *ready* (k0s Ready) and Finish removing the kiosk. A profile's own checks in
@@ -239,8 +239,8 @@ helper, `river-netcheck`, for the check; both ship in the `runink-installer` pac
   tty3 runs it before `river-guide` starts (once per boot, bounded, never prompts). The guide's
   first step, `network`, shows the result (`river-netsetup --check`), and `runink-install`
   opens with it as **step 0**.
-- **Runink River Workstation:** when the live Plasma session starts, the graphical installer
-  opens, and its network screen comes first. The network applet in the panel (plasma-nm) is
+- **Runink River Workstation:** when the live medium starts, the graphical installer
+  opens, and its network screen comes first. The network applet in DEsk's tray (nm-applet) is
   the other graphical way. `runink-install` opens with the same step 0.
 
 Interactively (`sudo river-netsetup`), it offers: **automatic** wired setup

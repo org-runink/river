@@ -7,8 +7,8 @@ SPDX-FileCopyrightText: 2026 The RIVER Authors
 SPDX-License-Identifier: MIT
 -->
 
-Runink River uses **NetworkManager**, supervised by s6. In Plasma, the network applet in the
-panel (plasma-nm) handles wired, Wi-Fi and VPN connections; `nmcli` and `nmtui` do the same
+Runink River uses **NetworkManager**, supervised by s6. In DEsk, the network applet in the
+tray (nm-applet, with nm-connection-editor) handles wired, Wi-Fi and VPN connections; `nmcli` and `nmtui` do the same
 from a terminal.
 
 ## During the install: network first
