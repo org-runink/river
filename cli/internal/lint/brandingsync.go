@@ -202,6 +202,7 @@ func brandSha256Check(dir string) ([]string, bool) {
 var (
 	brandSourceRe  = regexp.MustCompile(`.*"source": *"([^"]*)".*`)
 	brandIconRe    = regexp.MustCompile(`.*"icon": *"([^"]*)".*`)
+	brandGreeterBg = regexp.MustCompile(`.*url\("file://(/[^"]*)"\).*`)
 	brandNetModRe  = regexp.MustCompile(`(?i)"(publicip|weather|dns|netio)"|"type": *"(publicip|weather|netio)"`)
 	brandRetiredRe = regexp.MustCompile(`(?i)#(D9764E|C4623A|FBF7F1|1A1614|241F1B|EDE2D3|3F382D|ABA397|C2BBB0)`)
 )
@@ -241,6 +242,7 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	same("branding/icons/hicolor", O+"/usr/share/icons/hicolor")
 	same("branding/wallpapers/River", O+"/usr/share/wallpapers/River")
 	same("branding/fastfetch", O+"/usr/share/runink/fastfetch")
+	same("branding/greeter", O+"/usr/share/runink/branding/greeter")
 
 	// The terminal greeting (etc/profile.d/runink-greeting.sh). It is STATIC since 2026-10-02
 	// (owner: "Can we make it less dancy"), so the six-frame arrival animation and its 22-row
@@ -312,6 +314,16 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	// places that NAME an icon or an image must name the ones render.sh ships.
 	if !brandLineMatch(at(O+"/etc/os-release"), regexp.MustCompile(`^LOGO=runink-river$`)) {
 		r.fail("os-release LOGO is not runink-river")
+	}
+	// The login screen: greetd runs gtkgreet with the shipped stylesheet, whose background (the
+	// dark wallpaper, which draws the mark) the overlay ships.
+	const greeterCSS = "/usr/share/runink/branding/greeter/gtkgreet.css"
+	if !brandLineMatch(at(O+"/etc/greetd/config.toml"), regexp.MustCompile(`^command = ".*gtkgreet -s `+regexp.QuoteMeta(greeterCSS)+` `)) {
+		r.fail("etc/greetd/config.toml does not run gtkgreet with -s %s: the login screen is unbranded", greeterCSS)
+	}
+	css, _ := os.ReadFile(at(O + greeterCSS))
+	if bg := brandSedAll(css, brandGreeterBg); bg == "" || !isFile(O+bg) {
+		r.fail("the greeter's background '%s' is not in the overlay", bg)
 	}
 	eds, _ := filepath.Glob(at("iso-profiles/river/live-overlay/usr/share/river/installer/editions/*.json"))
 	for _, e := range eds {

@@ -1,0 +1,18 @@
+#%PAM-1.0
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# greetd's PAM stack on Runink River: the greetd package's own file, plus gnome-keyring, so the
+# login password also unlocks the keyring (the Secret Service programs keep passwords in) and
+# its daemon starts with the session. DEsk's own autostart entry (desk-keyring.desktop,
+# `gnome-keyring-daemon --start`) then finds that daemon and starts its components. Both
+# lines are optional: a login without a password (the live medium's initial_session) still
+# succeeds, with the keyring left locked until first used. `river lint profile-manifest`
+# checks this file's shape.
+auth       required     pam_securetty.so
+auth       requisite    pam_nologin.so
+auth       include      system-local-login
+auth       optional     pam_gnome_keyring.so
+account    include      system-local-login
+session    include      system-local-login
+session    optional     pam_gnome_keyring.so auto_start

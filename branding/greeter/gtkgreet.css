@@ -1,0 +1,52 @@
+/* The Runink River login screen: gtkgreet, full screen in cage (/etc/greetd/config.toml).
+   The background is the dark Runink River wallpaper, which draws the community mark; every
+   colour is from branding/palette.md (dark: ground, surface, card, ink, muted, the sage accent).
+   branding/render.sh ships this file to usr/share/runink/branding/greeter. */
+window {
+	background-color: #212121;
+	background-image: url("file:///usr/share/wallpapers/River/contents/images_dark/3840x2160.jpg");
+	background-size: cover;
+	background-position: center;
+}
+
+box#body {
+	background-color: rgba(44, 46, 48, 0.94);
+	border: 1px solid #717168;
+	border-radius: 8px;
+	padding: 32px;
+}
+
+#clock {
+	color: #E4E2D8;
+	font-size: 36px;
+}
+
+label {
+	color: #E4E2D8;
+}
+
+entry,
+combobox button {
+	background-image: none;
+	background-color: #36383A;
+	color: #E4E2D8;
+	border: 1px solid #717168;
+	border-radius: 4px;
+}
+
+entry:focus {
+	border: 3px solid #C0CC7C;
+}
+
+button {
+	background-image: none;
+	background-color: #36383A;
+	color: #E4E2D8;
+	border: 1px solid #B2B3A4;
+}
+
+button.suggested-action {
+	background-color: #C0CC7C;
+	color: #212121;
+	border-color: #C0CC7C;
+}

@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# DEsk session: a letter in the post box when the battery runs low (15%) and again when it is
+# critical (5%) (river-desk battery, from /sys/class/power_supply). DEsk's own entry for this
+# runs poweralertd or batsignal, neither of which is packaged here.
+[Desktop Entry]
+Type=Application
+Name=Battery letters
+Comment=Says when the battery runs low
+Exec=/usr/local/bin/river-desk battery
+TryExec=/usr/local/bin/river-desk
+OnlyShowIn=DEsk;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

@@ -8,13 +8,15 @@
 # river-netsetup (sh, over nmcli) and river-netcheck (its Go connectivity check) are the
 # network-first step every live session starts with (docs/INSTALL.md, "Network first"); the
 # installed node keeps them to reconfigure its network.
+# river-desk (Go) runs the DEsk session's small jobs: removable media, the low-battery letter,
+# and the Bluetooth and Printers settings (installer/desk).
 #
 # Kept apart from runink-runtime on purpose: runink-runtime carries only the host binaries a
 # downstream payload stages (none on a base image), while these ship on EVERY image.
 pkgname=runink-installer
 pkgver=2026.09
 pkgrel=1
-pkgdesc="Runink River installer: hardware probe, planner, payload tools, cloud first-boot agent, network-first setup and LAN-install pairing and the graphical installer (river-hwprobe, river-plan, river-modelpack, river-payloadpack, river-cloud-init, river-netcheck, river-netsetup, river-pair, river-pair-announce, river-installer, river-live-fallback)"
+pkgdesc="Runink River installer: hardware probe, planner, payload tools, cloud first-boot agent, network-first setup and LAN-install pairing and the graphical installer (river-hwprobe, river-plan, river-modelpack, river-payloadpack, river-cloud-init, river-netcheck, river-netsetup, river-pair, river-pair-announce, river-installer, river-live-fallback, river-desk)"
 arch=('x86_64')
 url="https://github.com/org-runink/river"
 license=('MIT')
@@ -30,13 +32,17 @@ package() {
   # river-pair-announce refuses to run anywhere but the live medium, and its s6 session
   # template is in the live overlay only (iso-profiles/river/live-overlay/usr/local/lib/river-pair),
   # so on an installed node it is inert; river-pair lets a node drive LAN installs.
-  for b in river-hwprobe river-plan river-modelpack river-payloadpack river-cloud-init river-netcheck river-netsetup river-pair river-pair-announce river-installer river-live-fallback; do
+  for b in river-hwprobe river-plan river-modelpack river-payloadpack river-cloud-init river-netcheck river-netsetup river-pair river-pair-announce river-installer river-live-fallback river-desk; do
     if [ -s "$out/installer-bin/$b" ]; then
       install -Dm755 "$out/installer-bin/$b" "$pkgdir/usr/local/bin/$b"
     else
       missing="$missing $b"
     fi
   done
+  # river-desk answers to two more names: the programs DEsk's Bluetooth and Printers rows open
+  # (runink-desk's patch 0005), which DEsk runs with no arguments.
+  [ -f "$pkgdir/usr/local/bin/river-desk" ] && ln -sf river-desk "$pkgdir/usr/local/bin/river-bluetooth" \
+    && ln -sf river-desk "$pkgdir/usr/local/bin/river-printers"
   if [ -n "$missing" ]; then
     if [ "${RUNINK_ALLOW_PARTIAL:-0}" = 1 ]; then
       echo "runink-installer: WARNING: missing:$missing (RUNINK_ALLOW_PARTIAL=1)" >&2

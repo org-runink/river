@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Bluetooth devices: bluetuith (runink-bluetuith) in foot. DEsk's Bluetooth settings row and its
+# Control Panel lever open this (runink-desk's patch 0005).
+[Desktop Entry]
+Type=Application
+Name=Bluetooth
+Comment=Find, pair and connect Bluetooth devices
+Exec=/usr/local/bin/river-bluetooth
+TryExec=/usr/local/bin/river-bluetooth
+Icon=bluetooth
+Categories=Settings;HardwareSettings;

@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Printers: CUPS's own pages (http://localhost:631/) in the default browser. DEsk's Printers
+# settings row opens this (runink-desk's patch 0005); system-config-printer is Python.
+[Desktop Entry]
+Type=Application
+Name=Printers
+Comment=Add and manage printers (CUPS)
+Exec=/usr/local/bin/river-printers
+TryExec=/usr/local/bin/river-printers
+Icon=printer
+Categories=Settings;HardwareSettings;

@@ -242,6 +242,17 @@ func ProfileManifest(_ context.Context, repo string, dirs []string, errw, outw i
 					"the getty on VT 1 starves the display manager's greeter (set SPAWN=\"no\")", p, dm)
 			}
 		}
+		// greetd's PAM stack unlocks the keyring at login: a profile that enables greetd ships
+		// root-overlay/etc/pam.d/greetd with pam_gnome_keyring after the system stack.
+		if slices.Contains(pmListOf(prof, "live-session/services"), "greetd") {
+			b, err := os.ReadFile(filepath.Join(d, "root-overlay", "etc", "pam.d", "greetd"))
+			if err != nil {
+				r.fail("%s: enables greetd but ships no root-overlay/etc/pam.d/greetd (the keyring never unlocks at login)", p)
+			}
+			for _, why := range pmGreetdPAM(b) {
+				r.fail("%s: etc/pam.d/greetd: %s", p, why)
+			}
+		}
 		livefs := pmListOf(prof, "livefs/packages")
 		if lb, err := os.ReadFile(filepath.Join(d, "Packages-Live")); err == nil {
 			compare(p+" livefs", pmManifest(lb), livefs)
@@ -367,4 +378,51 @@ func pmProfileKind(dir, name string) (kind string, ok bool) {
 		return kind, false
 	}
 	return kind, true
+}
+
+// pmGreetdPAM checks the shape of greetd's PAM file and returns what is wrong with it. The
+// greetd package's stack must be there (system-local-login, which brings elogind's seat and
+// XDG_RUNTIME_DIR), and gnome-keyring must come AFTER it in each of auth and session: in auth it
+// takes the password the stack has just checked, and in session it starts the daemon once
+// the session exists. Both keyring lines are optional, so a login without a password still
+// succeeds. A missing or empty file fails too: nothing would have been checked.
+func pmGreetdPAM(b []byte) []string {
+	var lines [][]string
+	for _, l := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(l); len(f) >= 3 && !strings.HasPrefix(f[0], "#") {
+			lines = append(lines, f)
+		}
+	}
+	if len(lines) == 0 {
+		return []string{"no PAM rules at all"}
+	}
+	find := func(typ, control, module string) int {
+		for i, f := range lines {
+			if f[0] == typ && f[1] == control && f[2] == module {
+				return i
+			}
+		}
+		return -1
+	}
+	var why []string
+	for _, t := range []struct{ typ, opts string }{{"auth", ""}, {"session", "auto_start"}} {
+		stack := find(t.typ, "include", "system-local-login")
+		ring := find(t.typ, "optional", "pam_gnome_keyring.so")
+		switch {
+		case stack < 0:
+			why = append(why, fmt.Sprintf("no '%s include system-local-login' (the greetd package's stack)", t.typ))
+		case ring < 0:
+			why = append(why, fmt.Sprintf("no '%s optional pam_gnome_keyring.so' (the keyring does not unlock at login)", t.typ))
+		case ring < stack:
+			why = append(why, fmt.Sprintf("'%s optional pam_gnome_keyring.so' comes before the system stack", t.typ))
+		case t.opts != "" && !slices.Contains(lines[ring][3:], t.opts):
+			why = append(why, fmt.Sprintf("'%s optional pam_gnome_keyring.so' lacks %s (the daemon does not start)", t.typ, t.opts))
+		}
+	}
+	for _, f := range lines {
+		if strings.Contains(f[2], "gnome_keyring") && f[1] != "optional" {
+			why = append(why, fmt.Sprintf("'%s %s %s': the keyring must never be able to refuse a login", f[0], f[1], f[2]))
+		}
+	}
+	return why
 }

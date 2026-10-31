@@ -200,6 +200,9 @@ live-session:
 `)
 		lbWrite(t, dir, "iso-profiles/river/live-overlay/etc/s6/config/tty1.conf",
 			"# live tty1\nSPAWN=\""+spawn+"\"\nGETTY=\"agetty\"\n")
+		if dm == "greetd" {
+			lbWrite(t, dir, "iso-profiles/river/root-overlay/etc/pam.d/greetd", pmGoodGreetdPAM)
+		}
 		return dir
 	}
 
@@ -213,5 +216,60 @@ live-session:
 
 	if out, err := pmRun(t, fixture("no")); err != nil {
 		t.Fatalf("SPAWN=\"no\" is the fixed state and must pass: %v\n%s", err, out)
+	}
+}
+
+// pmGoodGreetdPAM is iso-profiles/river's greetd PAM stack, as far as the lint reads it.
+const pmGoodGreetdPAM = `#%PAM-1.0
+# comment
+auth       required     pam_securetty.so
+auth       requisite    pam_nologin.so
+auth       include      system-local-login
+auth       optional     pam_gnome_keyring.so
+account    include      system-local-login
+session    include      system-local-login
+session    optional     pam_gnome_keyring.so auto_start
+`
+
+// TestGreetdPAMShape proves both outcomes: the shipped shape passes, and each way of breaking
+// the keyring unlock fails with its own reason.
+func TestGreetdPAMShape(t *testing.T) {
+	if why := pmGreetdPAM([]byte(pmGoodGreetdPAM)); len(why) != 0 {
+		t.Fatalf("the good stack failed: %v", why)
+	}
+	repo, _ := filepath.Abs("../../..")
+	if b, err := os.ReadFile(filepath.Join(repo, "iso-profiles/river/root-overlay/etc/pam.d/greetd")); err != nil {
+		t.Fatal(err)
+	} else if why := pmGreetdPAM(b); len(why) != 0 {
+		t.Fatalf("the image's etc/pam.d/greetd: %v", why)
+	}
+	for _, tc := range []struct{ name, from, to, want string }{
+		{"no auth line", "auth       optional     pam_gnome_keyring.so\n", "", "no 'auth optional pam_gnome_keyring.so'"},
+		{"no session line", "session    optional     pam_gnome_keyring.so auto_start\n", "", "no 'session optional pam_gnome_keyring.so'"},
+		{"no auto_start", "pam_gnome_keyring.so auto_start", "pam_gnome_keyring.so", "lacks auto_start"},
+		{"no stack", "auth       include      system-local-login\n", "", "no 'auth include system-local-login'"},
+		{"keyring first", "auth       include      system-local-login\nauth       optional     pam_gnome_keyring.so\n",
+			"auth       optional     pam_gnome_keyring.so\nauth       include      system-local-login\n", "comes before the system stack"},
+		{"required keyring", "auth       optional     pam_gnome_keyring.so", "auth       required     pam_gnome_keyring.so", "never be able to refuse a login"},
+		{"commented out", "session    optional     pam_gnome_keyring.so auto_start", "#session    optional     pam_gnome_keyring.so auto_start", "no 'session optional pam_gnome_keyring.so'"},
+		{"empty", pmGoodGreetdPAM, "", "no PAM rules"},
+	} {
+		why := strings.Join(pmGreetdPAM([]byte(strings.Replace(pmGoodGreetdPAM, tc.from, tc.to, 1))), "; ")
+		if !strings.Contains(why, tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, why, tc.want)
+		}
+	}
+}
+
+// A profile that enables greetd without the PAM file fails the lint; with it, it passes.
+func TestProfileManifestGreetdNeedsItsPAM(t *testing.T) {
+	dir := pmFixture(t, false)
+	lbWrite(t, dir, "iso-profiles/river/profile.yaml", "rootfs:\n  packages:\n    - base\nlivefs:\n  packages:\n    - river-live\nlive-session:\n  services:\n    - greetd\n")
+	if out, err := pmRun(t, dir); err == nil || !strings.Contains(out, "ships no root-overlay/etc/pam.d/greetd") {
+		t.Fatalf("no PAM file passed: %v\n%s", err, out)
+	}
+	lbWrite(t, dir, "iso-profiles/river/root-overlay/etc/pam.d/greetd", pmGoodGreetdPAM)
+	if out, err := pmRun(t, dir); err != nil {
+		t.Fatalf("with the PAM file: %v\n%s", err, out)
 	}
 }
