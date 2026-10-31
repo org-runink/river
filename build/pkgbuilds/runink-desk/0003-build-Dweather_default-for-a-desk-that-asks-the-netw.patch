@@ -1,0 +1,159 @@
+From 71a0893fe1af44c3e2eec247efe9b2a39ccf1627 Mon Sep 17 00:00:00 2001
+From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 23:45:25 +0000
+Subject: [PATCH 3/4] build: -Dweather_default, for a desk that asks the
+ network nothing
+
+The weather at the front door is on until a user turns it off: every half
+hour the time zone city's latitude and longitude go to open-meteo.com. A
+distribution that promises its machines contact nothing unasked needs it off
+until the user turns it on, without relying on /etc/xdg/desk/shell.conf
+being in place.
+
+meson -Dweather_default=false builds DEsk with `weather` off where shell.conf
+does not set it, and Shell Settings shows that default. The default build is
+unchanged (on).
+
+Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+---
+ SHA256SUMS            | 12 ++++++------
+ docs/CONFIGURATION.md |  2 +-
+ include/desk.h        |  7 +++++++
+ meson.build           |  3 +++
+ meson_options.txt     |  2 ++
+ src/settings.c        |  2 +-
+ src/wm.c              |  2 +-
+ 7 files changed, 21 insertions(+), 9 deletions(-)
+
+diff --git a/SHA256SUMS b/SHA256SUMS
+index 0cceb62..b1c3c8f 100644
+--- a/SHA256SUMS
++++ b/SHA256SUMS
+@@ -9,7 +9,7 @@ d41d53b642b8d333b1cc63e5d7f50834891882618bb1b9fb8045fdb43d1e73ba  ./RELEASE-NOTE
+ 95ec560c0517006961566f73ef2ae19b8f3dbe8b70b90366f0b908599957e49b  ./applications/meson.build
+ 039bbe804b06a40fee57f89b32d69bdee2f7f5b1e787fa8a39e4fc7368915a5b  ./docs/ARCHITECTURE.ja.md
+ 7fcd784dc2c23fbda9590635e240e60eb1e68d4ba599f16a89a679aa43fd85c0  ./docs/ARCHITECTURE.md
+-93d95a6f095b4275071e565cdb5e571316c43b05f20db8cd0b3357757e9a3d65  ./docs/CONFIGURATION.md
++d560e0b774c8413992226b0920220770521faa9831e90c4a32aa307a4a86c50b  ./docs/CONFIGURATION.md
+ 6f0aabf374290ad64fcc723caebd8033362258b5e2c52fc5a9673e1f9d11262e  ./docs/MODDING.ja.md
+ a9a64fc6d9c7532be104e3d5a4fdf340211159bfdc36eee1fb361fac24aef43a  ./docs/MODDING.md
+ 9847130f420eafa7c413afd5bf9cdddcbd7948d073dcc9334aa072766aec0e08  ./docs/design.md
+@@ -29,7 +29,7 @@ e009a84591da8027ee2dcaf9cc9ee2b0600f4e31d4e0cd086ee55caf2379d493  ./include/agen
+ 77bfbe83eb77faf7892cbfdd0e32c4f27143f48a77ea0b9d4bd01b41b9ac1a2e  ./include/camera.h
+ 5d5ae3d9d170d89c35ed04f92b19cac4b5c547f2a5b578c559e2c135524e1430  ./include/cards.h
+ a71cbc0ebb3f6130856f0f8c447730713d9367d166d5415fff71de1998f816a4  ./include/compat.h
+-2914a25ab6f8ac03b30fec2ffe8740543f90d75ea2779d23efd8470fd211c258  ./include/desk.h
++d7889bb24227d5d52525d1b39d57d090941874efb2ec8e93a885517af5a9b5ca  ./include/desk.h
+ ededcafbb90d0c6fd3d820b8a0d587638f3a3da1b38cfe2222a0b786e83e48db  ./include/fonts.h
+ 90b313bec4b9f4428bb965e27e86e42ddeebaf3c7bb6032b2a13c880ec6c4c91  ./include/gpu.h
+ 9460fa61fd8ac29a697632ce68ce677df2c6e690903213279229de028db0d49e  ./include/i18n.h
+@@ -44,8 +44,8 @@ c7824c26e80784ca6886a159209c787234667ed59f47c86481583daa680bf8d3  ./include/powe
+ 1083f28a3c8ec0b481cc342f45d442e521b313c5675efd70e95b856c49b617db  ./include/session.h
+ 2cbb569c046ab4be0b5be26795bd32e8724997407f095486a99f7e8ad0ba9895  ./include/sound.h
+ c66ceb68f5593ae2fb99a3f849694af74cf9e53173ff734a5038d8d47507cd81  ./include/tray.h
+-00888175acd1eaa64d2fab177de6c3af95f804fc68b69db3f865935de2bad1cd  ./meson.build
+-37fa2d0124ab1d5e76a4a7e4ec3aadd5b98afa1a1b5533ad87f6d292762a8f18  ./meson_options.txt
++6b2534693a3da0f2bc341c804d11ebaf8ee20dbfd7df6c3a4e729ce606846435  ./meson.build
++9c6dd85f85fbdd12a33d9a4a04b5e7af1c2e94fc86209fe63f88a8032d5611f5  ./meson_options.txt
+ 950ba49090168acdb352ee484939507b8077400d2ba017b1e2d7bb61b2189aa2  ./packaging/debian/desk-desktop.equivs
+ 65b0f82a6cf129bf1a1c31a2428795abd33886c15ddd5f3ad97e5922d7bdc3a7  ./protocols/wlr-output-management-unstable-v1.xml
+ 7ebd98f3449d246a57829e4b4dd9fbc3ef98e3dd42fa94ea102f14f490eb20de  ./protocols/wlr-output-power-management-unstable-v1.xml
+@@ -104,12 +104,12 @@ c70d0e3f0721cf8dcee45bddd1fbf9e8d20b875bf4d1654428dac764c13e6ead  ./src/memo.c
+ 19732cbfcb8226a5ec53a4a8bd0746b4f4bc20fe3e8398274cebe915c63d98c1  ./src/preview.c
+ 707031a01a2b69257d24aa891b6cbe73ed7026f9d23870667a53f877e53af25a  ./src/room.glsl
+ 95299633bbc782863119c83469bc5d2afb35ca1cccfce613ec4bacd64dbc1f28  ./src/session.c
+-2a2d0b8c66a47345ed2fb4f244e7eabdc8eabd36f8b75aa4e97ad9bb5c3aafed  ./src/settings.c
++e074d32c219bf647855b1e09558bbda1153ec38771aa5caac92556919e3bf51d  ./src/settings.c
+ 4c4e6cbe6b4e8eb5f0445f2ae831a40fc536e0f0a73898fae868bbbca80f4286  ./src/sfx.c
+ c5062fe9f23c69c728ed2505188f2bd5791a9072d1d013a073346dd79110646e  ./src/sound.c
+ 2c6a618dae877ea979543d050d2073e40513237d6fcf93fd8cbd3450bbf3fbaa  ./src/tray.c
+ b5839f73e869853bfa7a39143d642e98e8a28cd88a4157358b2c21477d7cd949  ./src/user.c
+-605314188f35888cf8d4ed52e58f7085b1d113a0687828d25f46ccffcdb5379d  ./src/wm.c
++11e6381df0a53206a172554ffaf7bdf456fff4204180a3917cd1da6cb4aaf2cb  ./src/wm.c
+ ccd7f9403ebc18dc92d8e84cbb112ed43b9ed5af04368a40f0429320d0032b0d  ./themes/gtk/DEsk/gtk-3.0/gtk.css
+ 934eb863fca7e67237ad54b439a88fb6f1bb44d339409784ddaf20262e9ec8fd  ./themes/gtk/DEsk/gtk-4.0/gtk.css
+ 15bd26eeb1073c7f06109c16d9fe4ffccb834aee6dbe1d628a07ffae675e2e37  ./themes/gtk/DEsk/gtk-4.0/paper.css
+diff --git a/docs/CONFIGURATION.md b/docs/CONFIGURATION.md
+index 49f2dc6..5a88a35 100644
+--- a/docs/CONFIGURATION.md
++++ b/docs/CONFIGURATION.md
+@@ -89,7 +89,7 @@ or power-saving setting, or `screen_off = never`, avoids it.
+ | Key | Values | Default | |
+ | --- | --- | --- | --- |
+ | `birthday` | `MM-DD` | none | |
+-| `weather` | `yes`, `no` | `yes` | Ask open-meteo.com every half hour for the weather at your time zone's city (only its latitude and longitude are sent). |
++| `weather` | `yes`, `no` | `yes` (`no` in a build made with `-Dweather_default=false`) | Ask open-meteo.com every half hour for the weather at your time zone's city (only its latitude and longitude are sent). |
+ 
+ ### Drawer and ALL APPS
+ 
+diff --git a/include/desk.h b/include/desk.h
+index 1d61f3e..a17071d 100644
+--- a/include/desk.h
++++ b/include/desk.h
+@@ -9,6 +9,13 @@
+ #include "media.h"
+ #include "panel.h"
+ 
++/* shell.conf's `weather` where nobody has set it: on, unless the build said
++ * otherwise (meson -Dweather_default=false), for a machine that is to ask
++ * nothing of the network until its user does */
++#ifndef DESK_WEATHER_DEFAULT
++#define DESK_WEATHER_DEFAULT 1
++#endif
++
+ enum {
+ 	DESK_TITLE_H = 46,
+ 	DESK_BORDER = 8,
+diff --git a/meson.build b/meson.build
+index 93399b3..21cf5b5 100644
+--- a/meson.build
++++ b/meson.build
+@@ -17,6 +17,9 @@ add_project_arguments(
+ # and its number, as the notification server tells programs that ask
+ add_project_arguments('-DDESK_RELEASE="DEsk v0.1.4 (BETA)"',
+   '-DDESK_VERSION="@0@"'.format(meson.project_version()), language: 'c')
++# shell.conf's weather, where nobody has set it (include/desk.h)
++add_project_arguments('-DDESK_WEATHER_DEFAULT=@0@'.format(get_option('weather_default') ? 1 : 0),
++  language: 'c')
+ # a variable initialised from itself (x = x) is uninitialised, and in C
+ # -Wall does not say so: a keysym once read as garbage that way
+ add_project_arguments(meson.get_compiler('c').get_supported_arguments('-Winit-self'),
+diff --git a/meson_options.txt b/meson_options.txt
+index 6003ab7..ad75f70 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -4,3 +4,5 @@ option('post', type: 'feature', value: 'auto',
+   description: 'Take the post (notifications) and keep the tray, over the session bus (needs libsystemd, or libelogind)')
+ option('sound', type: 'feature', value: 'auto',
+   description: 'The desk\'s sounds to the sound server, through libpulse (PulseAudio or PipeWire); without it, ALSA is tried at run time')
++option('weather_default', type: 'boolean', value: true,
++  description: 'Ask open-meteo.com for the weather at the front door until shell.conf says otherwise (false: not until the user turns it on)')
+diff --git a/src/settings.c b/src/settings.c
+index a42b6cf..4953ddb 100644
+--- a/src/settings.c
++++ b/src/settings.c
+@@ -363,7 +363,7 @@ static const struct setting SETTINGS[] = {
+ 	{ S_CHECK, "weather", "The real weather at the front door",
+ 		"Rain, snow and fog at the front door as they are where you live: the city your time "
+ 		"zone is named after is looked up on open-meteo.com every half hour, and nothing else "
+-		"is sent. Off, it is always fine.", NULL, NULL, 1, NULL },
++		"is sent. Off, it is always fine.", NULL, NULL, DESK_WEATHER_DEFAULT, NULL },
+ 	{ S_SECTION, NULL, "DRAWER AND ALL APPS", NULL, NULL, NULL, 0, NULL },
+ 	{ S_CHECK, "drawer_closes", "Put the drawer back after something in it is used",
+ 		"Off, it stays out until it is pushed back in.", NULL, NULL, 1, NULL },
+diff --git a/src/wm.c b/src/wm.c
+index ebe7dc1..90089b1 100644
+--- a/src/wm.c
++++ b/src/wm.c
+@@ -10231,7 +10231,7 @@ static void shell_conf_defaults(struct shell_conf *c)
+ 	c->gfx_own = false;
+ 	c->bday_month = c->bday_day = 0;
+ 	c->celebrations = true;
+-	c->weather = true;
++	c->weather = DESK_WEATHER_DEFAULT;
+ 	c->screen_off = 10;
+ 	c->lock_screen_off = true;
+ 	c->tap_click = true;
+-- 
+2.56.0
+

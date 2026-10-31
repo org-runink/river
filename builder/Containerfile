@@ -28,6 +28,9 @@ RUN pacman-key --init && pacman-key --populate artix archlinux 2>/dev/null || tr
         base-devel git rsync curl \
         go gcc \
         squashfs-tools dosfstools libarchive \
+        wayland wayland-protocols libxkbcommon libinput pixman libdrm mesa libglvnd \
+        libdisplay-info seatd libelogind hwdata libxcb xcb-util-renderutil xcb-util-wm \
+        xorg-xwayland cairo fontconfig pam libpulse gtk3 json-c greetd \
     ; \
     pacman -Scc --noconfirm
 
@@ -45,6 +48,24 @@ RUN py="$(pacman -Qq | grep -E '^python(-|$)' || true)" \
        fi \
     && ! command -v python3 && ! command -v python \
     && ! ls /usr/bin/python* >/dev/null 2>&1
+
+# muon: the C implementation of meson, for the desktop packages (build/pkgbuilds/runink-
+# {wlroots0.18,cage,gtkgreet,desk}), which are meson projects. Meson itself is Python, which the
+# step above removes; muon needs only the C compiler, bootstraps itself, and finds libraries with
+# pkg-config. A build tool (GPL-3.0) that never ships in an image. The desktop's build
+# dependencies are in the first RUN's package list (docs/DESKTOP-DESK-PLAN.md).
+ARG MUON_VERSION=0.5.0
+ARG MUON_SHA256=24aa4d29ed272893f6e6d355b1ec4ef20647438454e88161bdb9defd7c6faf77
+RUN cd /tmp \
+    && curl -fsSLo muon.tar.gz "https://muon.build/releases/v${MUON_VERSION}/muon-v${MUON_VERSION}.tar.gz" \
+    && echo "${MUON_SHA256}  muon.tar.gz" | sha256sum -c - \
+    && mkdir muon-src && tar -xzf muon.tar.gz -C muon-src --strip-components=1 && cd muon-src \
+    && ./bootstrap.sh build \
+    && build/muon-bootstrap setup -Dprefix=/usr/local -Dbuildtype=release build-final \
+    && build/muon-bootstrap -C build-final samu \
+    && build/muon-bootstrap -C build-final install \
+    && cd / && rm -rf /tmp/muon.tar.gz /tmp/muon-src \
+    && muon version
 
 # Optional Flutter SDK (large), for downstream payloads that build Flutter web bundles.
 RUN if [ "$BUILD_FLUTTER" = "1" ]; then \

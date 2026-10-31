@@ -1,0 +1,62 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-desk — DEsk, the Runink River desktop: a wlroots compositor that is the whole desktop
+# (windows as paper on a desk, the drawer, the bookcase, the post box, the front-door lock),
+# by fyzugx and the DEsk authors (MIT). docs/DESKTOP-DESK-PLAN.md has the why and the plan.
+#
+# SOURCE: upstream's v0.1.4 release plus the four patches beside this file, which are the
+# Runink fork's changes (0004 says so in the package's NOTICE). Until the fork's repository
+# exists they travel here; once it does, `source` names its tag and the patches go.
+#   0001  the build runs no Python (C build helpers, a Go word check)
+#   0002  runs without systemd: sd-bus from libelogind, no --systemd off systemd
+#   0003  -Dweather_default, so the desk asks the network nothing until its user does
+#   0004  fork credit: LICENSE, NOTICE, README
+#
+# BUILT WITH MUON (builder/Containerfile), the C implementation of meson, against
+# runink-wlroots0.18. -Dpost=enabled (the post box, the tray, MPRIS and logind power over
+# elogind's sd-bus) fails the build rather than quietly dropping them; -Dweather_default=false
+# keeps the image from contacting open-meteo.com unasked (AGENTS.md invariant 5).
+pkgname=runink-desk
+pkgver=0.1.4
+pkgrel=1
+pkgdesc="DEsk: the Runink River desktop, a skeuomorphic Wayland desktop (wlroots compositor)"
+arch=('x86_64')
+url="https://github.com/fyzugx/DEsk"
+license=('MIT')
+depends=('runink-wlroots0.18' 'wayland' 'libxkbcommon' 'cairo' 'pixman' 'fontconfig' 'libdrm'
+	'pam' 'libelogind' 'libpulse' 'libinput' 'mesa' 'libglvnd' 'libxcb' 'xcb-util-wm'
+	'xorg-xwayland' 'dbus')
+makedepends=('wayland-protocols')
+provides=('desk')
+conflicts=('desk')
+source=("desk-${pkgver}.tar.gz::https://github.com/fyzugx/DEsk/archive/refs/tags/v${pkgver}.tar.gz"
+	'0001-build-no-Python-C-build-helpers-a-Go-word-check.patch'
+	'0002-session-run-without-systemd-elogind-s-sd-bus-no-syst.patch'
+	'0003-build-Dweather_default-for-a-desk-that-asks-the-netw.patch'
+	'0004-Runink-fork-credit-upstream-say-what-changes.patch')
+sha256sums=('b35ea23b8311d67a61fa7ec14e505d4fa9f9b2b1e5b971661a05049f7bc0b23f'
+	'edbb8ae6d2e856a6147efb4199a34db60fcc307d93c6ccfc77e0467d4613add2'
+	'56a1da96dc5a48e7b0fadbe550ab92f23bdad2bb0921a787b4e80458a59402ed'
+	'e9583c573f831dc374edee8bfb3ffbdd7856c001595b1fd21dd523ee100d1e82'
+	'd9e5f86cfe9d559570b9660c8970c3623a20f8fe7ec5d2f7c5ae0a4994c41233')
+
+prepare() {
+	cd "DEsk-${pkgver}"
+	local p
+	for p in "$srcdir"/000*.patch; do
+		patch -Np1 -i "$p"
+	done
+}
+
+build() {
+	cd "DEsk-${pkgver}"
+	muon setup -Dprefix=/usr -Dbuildtype=release -Dpost=enabled -Dsound=enabled \
+		-Dxwayland=enabled -Dweather_default=false build
+	muon -C build samu
+}
+
+package() {
+	cd "DEsk-${pkgver}"
+	DESTDIR="$pkgdir" muon -C build install
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+}

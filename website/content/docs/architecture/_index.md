@@ -1,7 +1,7 @@
 ---
 title: Architecture
 weight: 6
-description: "How a Runink River machine is put together: the image's two layers, the boot chain from GRUB to Plasma, the s6 service graph, and the packages Runink River builds itself."
+description: "How a Runink River machine is put together: the image's two layers, the boot chain from GRUB to the desktop, the s6 service graph, and the packages Runink River builds itself."
 ---
 <!--
 SPDX-FileCopyrightText: 2026 The RIVER Authors
@@ -19,11 +19,11 @@ links to read the code.
 | Kernel | `linux-runink` 7.2.7-zen1: the zen kernel's 7.2.x stable series, the only kernel on the image | {{< repo "build/pkgbuilds/runink-kernel/" >}} |
 | Root filesystem | OpenZFS 2.4.4 as a separate module package (`runink-zfs`) plus its userland and initramfs hook (`runink-zfs-utils`) | {{< repo "build/pkgbuilds/runink-zfs/" >}} |
 | Init | s6, s6-rc and s6-linux-init, driven by the `s6` front end | {{< repo "iso-profiles/river/root-overlay/etc/s6/" >}} |
-| Desktop | KDE Plasma 6 on Wayland, SDDM, PipeWire, NetworkManager, Bluetooth and printing, each with its s6 service package | {{< repo "iso-profiles/river/profile.yaml" >}} |
+| Desktop | DEsk (a wlroots compositor that is the whole desktop) on Wayland, greetd with gtkgreet in cage, PipeWire, NetworkManager, Bluetooth and printing, each with its s6 service package | {{< repo "iso-profiles/river/profile.yaml" >}} |
 | Installer | `river-installer` (graphical), `runink-install` (text), `river-hwprobe`, `river-plan`, `river-netsetup` and the numbered install steps | {{< repo "installer/" >}} |
 | Host policy | the `runink-fw` firewall, `river-perms`, `river-sandbox`, sysctl and zram tuning | {{< repo "iso-profiles/river/root-overlay/usr/local/bin/" >}} |
 
-Everything else on the image (Plasma, Firefox, the libraries and tools) is a distribution
+Everything else on the image (Firefox, the desktop's programs, the libraries and tools) is a distribution
 package from pinned mirrors. Today those come from Artix Linux, through Artix's ISO tooling:
 that is the **transitional** builder, which Runink River is replacing with its own
 from-source base ([below](#the-transitional-builder-and-the-own-base)).
@@ -35,7 +35,7 @@ The ISO holds two squashfs layers ({{< repo "iso-profiles/river/profile.yaml" >}
 - **`rootfs`** is the finished system: every package the installed machine has, plus the
   profile's `root-overlay/`. An installed machine is a copy of it.
 - **`livefs`** is for the live medium only and sits on top of `rootfs`: the live user's
-  autologin (Plasma and a text console on Ctrl+Alt+F2), its passwordless `sudo`, the live
+  session (greetd starts the installer in weston with no login; a text console on Ctrl+Alt+F2), its passwordless `sudo`, the live
   hostname, the graphical installer's s6 service, and the live GRUB menu package
   (`artix-grub-live`, the whole of `Packages-Live`).
 
@@ -100,7 +100,7 @@ services the project adds, and the order they impose:
 | `NetworkManager-srv` | longrun | `runink-fw` (added) | the network |
 | `sshd-srv` | longrun | `runink-fw` (added) | SSH, still closed by the firewall until you open port 22 |
 | `plymouth-quit` | oneshot | | ends the boot splash |
-| `sddm-srv` | longrun | `plymouth-quit`, `zfs-mount` (added) | the login screen |
+| `greetd` | longrun (`runink-greetd-s6`) | `plymouth-quit`, `zfs-mount`, `elogind` | the login screen |
 | `rc-local` | oneshot | `mount-filesystems`, `runink-fw` | runs `/etc/s6/rc.local` |
 
 Bluetooth (`bluetoothd`) and printing (`cupsd`) come from the `bluez-s6` and `cups-s6`
@@ -117,7 +117,7 @@ River).
 
 ### Login
 
-SDDM shows the Runink River greeter; the session is Plasma on Wayland (KWin), with PipeWire
+greetd shows the login screen (gtkgreet in cage); the session is DEsk on Wayland, with PipeWire
 and WirePlumber as user services.
 
 {{% /steps %}}
@@ -134,6 +134,10 @@ image:
 | `runink-zfs` | OpenZFS kernel modules prebuilt for exactly that kernel release |
 | `runink-zfs-utils` | the matching OpenZFS userland and the mkinitcpio `zfs` hook, from the same PKGBUILD, so module and userland cannot drift apart |
 | `runink-installer` | `river-installer`, `river-hwprobe`, `river-plan`, `river-netsetup` and `river-netcheck`, from {{< repo "installer/" >}} (Go standard library only) |
+| `runink-desk` | DEsk, the desktop: upstream's release plus the Runink fork's patches (no Python in its build, elogind instead of systemd, the weather off until you turn it on) |
+| `runink-wlroots0.18` | wlroots 0.18.3, the compositor library DEsk and cage are built on |
+| `runink-cage`, `runink-gtkgreet` | the login screen: gtkgreet, full screen in the cage kiosk compositor |
+| `runink-greetd-s6` | the s6 service for greetd, which Artix ships without one |
 
 The tree builds further packages for downstream distributions; they are not on the Runink
 River image. An installed system gets updates of these packages from the public, signed
@@ -152,7 +156,7 @@ replaces it with Runink River's own base, built from source:
 | 1 | a reproducible toolchain | planned |
 | 2 | the base built from recipes, its own image assembly (`river-compose`) and `river-update` | planned |
 | 3 | migration of existing installs, removal of the Artix tooling | planned |
-| 5 | the Plasma 6 workstation built from recipes | planned |
+| 5 | the DEsk workstation built from recipes | planned |
 
 Planned changes that users will notice: the kernel booted as a signed unified kernel image
 instead of through GRUB, TPM 2.0 unlock of the pool, and updates installed as a new boot

@@ -123,11 +123,11 @@ on Windows use Hyper-V (**Generation 2**) or VirtualBox with **EFI enabled**.
 1. Plug in the stick and open the firmware's boot menu (often F12, F11, F8 or Esc at
    power-on). Pick the stick's **UEFI** entry.
 2. The GRUB menu of the stick starts the live system after a short timeout.
-3. The live Plasma desktop logs in by itself (user `runink`) and opens the installer
-   full-screen in Firefox. If you close it, the **Install Runink River** icon on the desktop
-   opens it again.
+3. The live system logs in by itself (user `runink`) and opens the installer
+   full-screen in Firefox. If you close it, the login screen follows: sign in as `runink`
+   (password `runink`) to a DEsk session, which opens the installer again.
 
-The live session is a normal desktop: you can open Konsole, browse the web or check the
+The DEsk session is a normal desktop: you can open a terminal, browse the web or check the
 hardware before you install. A text console, also logged in automatically, is on
 **Ctrl+Alt+F2**.
 
@@ -223,7 +223,7 @@ root. If its window reloads or its service restarts, it comes back on the same s
 
 ## The text installer
 
-In the live session, open Konsole (or the console on Ctrl+Alt+F2) and run:
+In the live session, open a terminal (or the console on Ctrl+Alt+F2) and run:
 
 ```bash
 sudo runink-install
@@ -263,9 +263,9 @@ installer on the Runink River image:
 | `00-preflight` | Checks UEFI, CPU features and the target disks. |
 | `05-hwplan-verify` | Probes the machine again and refuses if a target disk changed since you confirmed it. |
 | `10-disk-zfs` | Partitions every disk of the plan (a 1 GiB EFI partition plus ZFS), creates the **encrypted** pool (aes-256-gcm at the pool root) and the boot environment `<pool>/ROOT/runink`, creates `<pool>/home`, and mounts the EFI partition at `/boot`. |
-| `20-clone-rootfs` | Copies the live system onto the pool with `rsync`, then removes live-only state: the autologin, the live `sudo` rule, the installer, the machine-id and the SSH host keys. |
+| `20-clone-rootfs` | Copies the live system onto the pool with `rsync`, then removes live-only state: the no-login live session (`/etc/greetd/live.toml`), the live `sudo` rule, the installer, the machine-id and the SSH host keys. |
 | `30-target-config` | Hostname, `/etc/runink-os-version`, the `/boot` line in `/etc/fstab`, the ZFS cache limit and zram size from the plan, root-only modes on `/etc/runink`. It also removes the `curl` and `wget` programs from the installed system (their libraries stay). |
-| `32-locale-keyboard` | Your language and keyboard, for the console, the login screen and Plasma. |
+| `32-locale-keyboard` | Your language and keyboard, for the console, the login screen and DEsk. |
 | `35-pacman-keyring` | Sets up the package keyring: the distribution's packager keys and the Runink River release key, so `pacman` can verify what it installs, and the `[runink]` repository in `/etc/pacman.conf`. Fails the install if the keyring stays empty. |
 | `40-boot-grub-zfs` | `/etc/hostid` from the pool, the kernel and initramfs on the EFI partition, GRUB on the removable UEFI path, and the kernel command line. |
 | `50-runink-user` | Your administrator account; root locked. |

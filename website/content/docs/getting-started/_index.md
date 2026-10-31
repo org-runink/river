@@ -32,7 +32,7 @@ Boot the stick in UEFI mode and follow the graphical installer.
 
 ### First boot
 
-Unlock the disk with your passphrase and sign in to Plasma.
+Unlock the disk with your passphrase and sign in to DEsk.
 [First boot]({{< relref "first-boot" >}})
 
 {{% /steps %}}

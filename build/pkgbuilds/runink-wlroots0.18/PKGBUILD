@@ -1,0 +1,46 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-wlroots0.18 — wlroots 0.18.3, the Wayland compositor library DEsk (runink-desk) and the
+# greeter's compositor (runink-cage) are built on.
+#
+# FROM SOURCE, not Artix's wlroots0.18: the desktop's whole graphics stack is then pinned here
+# by hash with the rest of [runink]. Artix `world` does carry wlroots0.18 0.18.3, and that
+# package is the documented fallback (docs/DESKTOP-DESK-PLAN.md).
+#
+# BUILT WITH MUON (builder/Containerfile), the C implementation of meson: meson is Python, and
+# the build environment carries none (river lint python-purge).
+#
+# The options are the ones DEsk's own installer builds 0.18.3 with
+# (scripts/install_arch.sh upstream): the DRM and libinput backends for a real seat, the X11
+# backend for a nested desk, GLES2 only (no Vulkan renderer, so no glslang), GBM, a libseat
+# session (seatd's libseat talks to elogind), and Xwayland for X11 programs.
+pkgname=runink-wlroots0.18
+pkgver=0.18.3
+pkgrel=1
+pkgdesc="wlroots 0.18: the modular Wayland compositor library, for DEsk and the greeter"
+arch=('x86_64')
+url="https://gitlab.freedesktop.org/wlroots/wlroots"
+license=('MIT')
+depends=('glibc' 'libinput' 'libxkbcommon' 'pixman' 'libdrm' 'mesa' 'libglvnd'
+	'libdisplay-info' 'seatd' 'wayland' 'libxcb' 'xcb-util-renderutil' 'xcb-util-wm'
+	'xorg-xwayland')
+makedepends=('wayland-protocols' 'hwdata')
+provides=("wlroots0.18=${pkgver}" 'libwlroots-0.18.so')
+conflicts=('wlroots0.18')
+source=("https://gitlab.freedesktop.org/wlroots/wlroots/-/releases/${pkgver}/downloads/wlroots-${pkgver}.tar.gz")
+# The same pin DEsk's installer carries for this release (scripts/install_arch.sh, SOURCES).
+sha256sums=('164a7c8bf9f8ae2c1fb00e7bddb6f08cad7e81b3eb35577b48483b1ac265a087')
+
+build() {
+	cd "wlroots-${pkgver}"
+	muon setup -Dprefix=/usr -Dbuildtype=release -Dexamples=false -Dwerror=false \
+		-Dbackends=drm,libinput,x11 -Drenderers=gles2 -Dallocators=gbm -Dsession=enabled \
+		-Dxwayland=enabled -Dlibliftoff=disabled -Dcolor-management=disabled \
+		-Dxcb-errors=disabled -Dicon_directory=/usr/share/icons build
+	muon -C build samu
+}
+
+package() {
+	cd "wlroots-${pkgver}"
+	DESTDIR="$pkgdir" muon -C build install
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

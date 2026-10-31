@@ -102,14 +102,16 @@ Environment: `PROFILE`, `RIVER_PROFILE_DIR`, `RIVER_BRANDING_DIR`, `RIVER_PUBLIC
 `build/qemu-gui-test.sh` drives the graphical installer end to end under QEMU/KVM with OVMF,
 unattended, as the user (prerequisite: `edk2-ovmf`): the live desktop opens the installer,
 the install runs through every screen, the installed machine unlocks, `/home` is mounted,
-the firewall is loaded, the admin logs in at SDDM and Plasma starts, and the network is up
-(`plasma-login`, `net-ready`; screenshots of every screen). Against an ISO built before a
+the firewall is loaded, the admin logs in and the desktop starts, and the network is up
+(`plasma-login`, `net-ready`; screenshots of every screen; its desktop checks still expect
+Plasma and are being rewritten for DEsk). Against an ISO built before a
 change it overlays this tree's installer and root overlay on the live system first, and
 lists every file it copied. A profile's own installed-system checks
 (`tests/installed.d/`, [below](#installed-system-checks)) run last and join its verdict.
 `build/qemu-test.sh` checks a live medium without installing:
-the GRUB entry, SDDM, the live user logged into Plasma (screenshots `desktop-early.png` and
-`desktop.png`), NetworkManager, SDDM, Bluetooth and CUPS up in s6-rc, and the network step.
+the GRUB entry, the live session (screenshots `desktop-early.png` and
+`desktop.png`; its desktop checks are being rewritten for DEsk), NetworkManager, Bluetooth
+and CUPS up in s6-rc, and the network step.
 Its `--profile server` mode (with `--lab`, `--offline`, `--expect-payloads`, `--public`) checks
 a downstream server distribution's ISO. See the scripts' headers.
 
@@ -268,7 +270,7 @@ profile can stay a plain copy of an upstream one:
 
 | Path | Effect |
 |---|---|
-| `overlay/` | Copied over the profile, file by file (same tree: `root-overlay/`, `live-overlay/`, `grub/`, `river-profile.env`). Replace `os-release`, `issue`, `motd`, the GRUB theme the installer copies (`root-overlay/usr/share/runink/branding/grub/river/`), Plymouth and SDDM themes, wallpapers, icons and the edition descriptors here. |
+| `overlay/` | Copied over the profile, file by file (same tree: `root-overlay/`, `live-overlay/`, `grub/`, `river-profile.env`). Replace `os-release`, `issue`, `motd`, the GRUB theme the installer copies (`root-overlay/usr/share/runink/branding/grub/river/`), the Plymouth theme, the greeter's look (`etc/greetd/`), wallpapers, icons and the edition descriptors here. |
 | `overlay/grub/theme/` | The **live** menu's GRUB theme (`theme.txt` and its images). Without it the live menu uses `branding/grub/<theme>` from this repository. |
 | `remove` | Optional. One profile-relative path per line, deleted from the copy (for example an upstream wallpaper set the edition does not ship). An entry that names nothing is an error. |
 

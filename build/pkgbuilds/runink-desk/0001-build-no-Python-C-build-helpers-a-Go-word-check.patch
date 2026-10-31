@@ -1,0 +1,2783 @@
+From 60061bd618f5375ec164016a9cce111a856c235c Mon Sep 17 00:00:00 2001
+From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 23:24:10 +0000
+Subject: [PATCH 1/4] build: no Python -- C build helpers, a Go word check
+
+The build ran Python three times: scripts/room-key.py (always),
+scripts/glsl2c.py (GPU builds) and scripts/check-words.py (meson test). It
+now needs nothing beyond the C compiler, so it also builds with muon, the
+C implementation of meson, on systems that carry no Python at all.
+
+- tools/glsl2c.c and tools/room-key.c, built native: true by the build
+  itself, write the same headers the scripts wrote (FNV-1a over room.glsl,
+  then gpu.c; the shader as a C string, with \ " and ? escaped).
+- tools/checkwords: the word-table check as a Go test, with a mutation test
+  for each fault it reports. Run it with `cd tools && go test ./...`.
+- themes/make-icons.py and themes/contact-sheet.py are gone; the icon SVGs
+  they drew stay committed under themes/icons/DEsk.
+- The installers no longer install Python for the build (meson brings its
+  own where it is used). SHA256SUMS is made again for the changed tree.
+
+Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+---
+ README.ja.md                        |    4 +-
+ SHA256SUMS                          |   32 +-
+ docs/ARCHITECTURE.ja.md             |   10 +-
+ docs/ARCHITECTURE.md                |   10 +-
+ docs/MODDING.ja.md                  |   12 +-
+ docs/MODDING.md                     |   14 +-
+ meson.build                         |   24 +-
+ scripts/check-words.py              |  143 ---
+ scripts/glsl2c.py                   |   36 -
+ scripts/install_arch.sh             |    1 -
+ scripts/install_debian.sh           |    1 -
+ scripts/install_fedora.sh           |    1 -
+ scripts/install_ubuntu.sh           |    1 -
+ scripts/room-key.py                 |   37 -
+ themes/contact-sheet.py             |   57 -
+ themes/make-icons.py                | 1530 ---------------------------
+ tools/checkwords/checkwords.go      |  257 +++++
+ tools/checkwords/checkwords_test.go |   67 ++
+ tools/glsl2c.c                      |   71 ++
+ tools/go.mod                        |    3 +
+ tools/room-key.c                    |   56 +
+ 21 files changed, 507 insertions(+), 1860 deletions(-)
+ delete mode 100644 scripts/check-words.py
+ delete mode 100755 scripts/glsl2c.py
+ delete mode 100755 scripts/room-key.py
+ delete mode 100644 themes/contact-sheet.py
+ delete mode 100644 themes/make-icons.py
+ create mode 100644 tools/checkwords/checkwords.go
+ create mode 100644 tools/checkwords/checkwords_test.go
+ create mode 100644 tools/glsl2c.c
+ create mode 100644 tools/go.mod
+ create mode 100644 tools/room-key.c
+
+diff --git a/README.ja.md b/README.ja.md
+index 9596437..cbbbdab 100644
+--- a/README.ja.md
++++ b/README.ja.md
+@@ -95,7 +95,7 @@ sudo sh scripts/install_fedora.sh
+ 
+ DEsk のセッションでは、ほかのアプリも机に合わせた見た目になります。
+ 
+-- **アイコン「DEsk」**（`themes/icons/DEsk`、`themes/make-icons.py` で描いた SVG）：
++- **アイコン「DEsk」**（`themes/icons/DEsk`の SVG）：
+   iOS 6 のころのように、**本物がそのまま置かれたような**絵です。紙・厚紙・木・
+   ヘアラインの金属の地肌、縁に当たる光、型押しのくぼみ、机に落ちる影まで描いています。
+   - 場所：中に書類の入ったマニラの厚紙フォルダ（ドキュメント・ダウンロード・音楽・
+@@ -2440,7 +2440,7 @@ desk --headless --size 1600x1000 --dump chrome.png --screenshot desk.png --delay
+ desk-preview -o preview.png -s 1600x1000
+ desk-preview -o console.png -s 1440x900 --console
+ desk-preview --help                     # 描けるものの一覧
+-meson test -C build                     # 訳の表の確かめ（scripts/check-words.py）
++(cd tools && go test ./...)             # 訳の表の確かめ（tools/checkwords）
+ ```
+ 
+ ## 作り方について
+diff --git a/SHA256SUMS b/SHA256SUMS
+index ee54eb5..707495f 100644
+--- a/SHA256SUMS
++++ b/SHA256SUMS
+@@ -2,16 +2,16 @@
+ f23feed53be20d224688cb6cbd0a1e7ae0f68f9254ab74bf78d420b2825b71e7  ./.gitignore
+ 9ca2f8afe06176db8b331513b4c67681c6923b3414e194fe6ef66eb8c8fa6e44  ./Dockerfile
+ 87dd199cc6c7a1fd1fefb42f86d924b11a053ef5444dfd5cbf479dd22d6dbc15  ./LICENSE
+-7e3f75f2265d30163d276a1637c599022a8481c3067d37f5d6bfd1a23fd43dec  ./README.ja.md
+-371fca31dceea2ebe848a1f695e88dcafb500d6fd3ad25d14b78ddf3473b53d1  ./README.md
++46a60065cad2a794d5c5752a52acab57455da55c3647ab37830c22812d767754  ./README.ja.md
++dfdf12bb2f5e0aa60a7c8be3559fff7e3f6aed99e9c6c04636c36afcc6ead026  ./README.md
+ 6c979e967af7262f245367474aabb8479640a00107db06b503f78defe1d6def4  ./RELEASE-NOTES.ja.md
+ d41d53b642b8d333b1cc63e5d7f50834891882618bb1b9fb8045fdb43d1e73ba  ./RELEASE-NOTES.md
+ 95ec560c0517006961566f73ef2ae19b8f3dbe8b70b90366f0b908599957e49b  ./applications/meson.build
+-bf70843e99c013113c2546ff25cc85713ee8ac4ed42ed2690e9927fb23c8a62f  ./docs/ARCHITECTURE.ja.md
+-dd357af11e21ceebe6c1fe5ce6096305cf14036aa59173b59d2d41a80bc1d0c2  ./docs/ARCHITECTURE.md
++039bbe804b06a40fee57f89b32d69bdee2f7f5b1e787fa8a39e4fc7368915a5b  ./docs/ARCHITECTURE.ja.md
++a8664529d074dae23e396b4363c2391185cb2f5bc3f6892471e6725858030d7a  ./docs/ARCHITECTURE.md
+ 93d95a6f095b4275071e565cdb5e571316c43b05f20db8cd0b3357757e9a3d65  ./docs/CONFIGURATION.md
+-8451728b01a2963a21ab43a343adc6349476e848329add3d1c7256d73329b53b  ./docs/MODDING.ja.md
+-f13659ce393144c586bddc12270bb46417f99386c9083ccc6993d694b5e599e1  ./docs/MODDING.md
++6f0aabf374290ad64fcc723caebd8033362258b5e2c52fc5a9673e1f9d11262e  ./docs/MODDING.ja.md
++493ff5a2ba215b2275c8776db798a9d913aef24bca80ef72aa6520a4093a8982  ./docs/MODDING.md
+ 9847130f420eafa7c413afd5bf9cdddcbd7948d073dcc9334aa072766aec0e08  ./docs/design.md
+ c4efeabc60bc2cac593492b3b7e4c141a6f643819c83c9a5cd741d397a19c1a2  ./docs/screenshots/book-search.jpg
+ 5cebb4ef413b30a48fd63d511ecdfcdb9d2daebe175fd79f94e288ac50099548  ./docs/screenshots/book.jpg
+@@ -44,12 +44,11 @@ c7824c26e80784ca6886a159209c787234667ed59f47c86481583daa680bf8d3  ./include/powe
+ 1083f28a3c8ec0b481cc342f45d442e521b313c5675efd70e95b856c49b617db  ./include/session.h
+ 2cbb569c046ab4be0b5be26795bd32e8724997407f095486a99f7e8ad0ba9895  ./include/sound.h
+ c66ceb68f5593ae2fb99a3f849694af74cf9e53173ff734a5038d8d47507cd81  ./include/tray.h
+-2938ebd301ff06f45e186ee7458256ea7bfd9ff5ea6aa9bdf78c507e86a073c8  ./meson.build
++20c325efa43f44ab03e75afcc90317c8d8743b073b8e7e77347c6a8a26fbe396  ./meson.build
+ d71a97f44854ceed9b3c1c68506b083ce22099977388599e1eabaed37002deed  ./meson_options.txt
+ 950ba49090168acdb352ee484939507b8077400d2ba017b1e2d7bb61b2189aa2  ./packaging/debian/desk-desktop.equivs
+ 65b0f82a6cf129bf1a1c31a2428795abd33886c15ddd5f3ad97e5922d7bdc3a7  ./protocols/wlr-output-management-unstable-v1.xml
+ 7ebd98f3449d246a57829e4b4dd9fbc3ef98e3dd42fa94ea102f14f490eb20de  ./protocols/wlr-output-power-management-unstable-v1.xml
+-84d400c18f7f7804c3a979de2c72b1bdee26da5067add45d2aba79bda16f1be0  ./scripts/check-words.py
+ d45b7f3fb8115abeee25582d8d5ae20c0c48fcc826ca10fc533eec8583a6d5e4  ./scripts/desk-ctl
+ 2eff68e7d83546949fcbb0d2d7011d981102e0366765525cff504a18ee62f03e  ./scripts/desk-report
+ d714dd7ce294b9121f2dd10e045f1486c68c5663a755967bf3dd7cb406be0515  ./scripts/desk-screen-chooser
+@@ -57,15 +56,13 @@ d714dd7ce294b9121f2dd10e045f1486c68c5663a755967bf3dd7cb406be0515  ./scripts/desk
+ 165d98fd9d35e8d570826809f4cc05486f0543531c28a59f08ae85f7f50e96e3  ./scripts/desk-session-helper
+ c1c176a9e9bb5638bd09ca515aa59d57b0651c1a772920fcdd69364675605a34  ./scripts/desk-window
+ 2d9657bb6047fde2475d0503c6d4141781e1e1489ad81fefdeb93d5d5d94d152  ./scripts/entrypoint.sh
+-92bb78331c858b067696bc4771a5b225616a613ee1ae7276e1d6f69406c27226  ./scripts/glsl2c.py
+ 8bb9498037ce7adaa0a019fa528b45d1e50127d89a6fbd0ff08970b514f09efe  ./scripts/install-desktop.sh
+ f497730ae4f3845d5f2d4af8f7752cd6cd93be9f280541649ecac5aa7e3cfcc5  ./scripts/install.sh
+-a5d7c2d523ffb787d60ec737626b1946ef3d05e9124618037910323e7d8fa95c  ./scripts/install_arch.sh
+-347f7bf68dfdb87a75f1811ba773203b8170720d2b8e3a6a9e4ef9dc8932f99e  ./scripts/install_debian.sh
+-2ee0af3eb67d359af7aedd177a29e4f98411d4d5988d4a8617604564757ec73c  ./scripts/install_fedora.sh
++35052a2ec18ecbc71d7fcc8d8cd56b5d3c8cc8ba2dd6eda667302d7b6b8f8c28  ./scripts/install_arch.sh
++6045fa5c3db24524dc2ada9d3f1f60bbd6e92d5f3f1c265d4430681ebc99b52d  ./scripts/install_debian.sh
++21194f48ef123e2ab8e699563e960dbef553a5268e368262caa5295c277ab0ff  ./scripts/install_fedora.sh
+ 88d207cb26e99df2efa67ea71dd3e8f9908bbfa350bf689ef2ff84326f2798dc  ./scripts/install_session.sh
+-efd8b0334fcb3ad8a4e80fe5e05d8843042d1414a95b65c1ea29cef891282023  ./scripts/install_ubuntu.sh
+-b6164325cec6f7b2a2328c01ad0daade3d6a3ed26de3eca51007dd2b86028442  ./scripts/room-key.py
++68c2ed3ec1497c8001ce1e421d01d176e3219fcd42a18278dc5091aaccc2d2cd  ./scripts/install_ubuntu.sh
+ a36962be2c4e986469cabc39daf728ed925380168d6b054eb160c60a54342463  ./scripts/uninstall.sh
+ 950590bbb80842a602afe00517244207bb7db4b078dd98b6220239e85b07c556  ./scripts/verify.sh
+ efb1e1e656adf893543970a70e1417942f5df28b7f134a60d022e9291ea7ab8d  ./session/autostart/desk-ime.desktop
+@@ -113,7 +110,6 @@ c5062fe9f23c69c728ed2505188f2bd5791a9072d1d013a073346dd79110646e  ./src/sound.c
+ 2c6a618dae877ea979543d050d2073e40513237d6fcf93fd8cbd3450bbf3fbaa  ./src/tray.c
+ b5839f73e869853bfa7a39143d642e98e8a28cd88a4157358b2c21477d7cd949  ./src/user.c
+ 605314188f35888cf8d4ed52e58f7085b1d113a0687828d25f46ccffcdb5379d  ./src/wm.c
+-95084c4fdadd53f3e2a2df6b92d261bbb0be395b98844c021320a7a54dbf7fce  ./themes/contact-sheet.py
+ ccd7f9403ebc18dc92d8e84cbb112ed43b9ed5af04368a40f0429320d0032b0d  ./themes/gtk/DEsk/gtk-3.0/gtk.css
+ 934eb863fca7e67237ad54b439a88fb6f1bb44d339409784ddaf20262e9ec8fd  ./themes/gtk/DEsk/gtk-4.0/gtk.css
+ 15bd26eeb1073c7f06109c16d9fe4ffccb834aee6dbe1d628a07ffae675e2e37  ./themes/gtk/DEsk/gtk-4.0/paper.css
+@@ -215,4 +211,8 @@ a39046305fe92b5d8af1cb0096b986eef501099c172a3928401589868ecae975  ./themes/icons
+ a806e4b3cfe95955d298f1e6b643f41dfcadde5ffe0c361177cf1d2dd89c2dee  ./themes/icons/DEsk/scalable/places/user-home.svg
+ b386c13798b379ca063e77c6ffecca88ff22bcc0f6fc6a191b9988844bb7f4e2  ./themes/icons/DEsk/scalable/places/user-trash-full.svg
+ cf6fe72932ac0ebba8d4c8a8c50dcafff41f20b7387ee85530dddc657105ea9d  ./themes/icons/DEsk/scalable/places/user-trash.svg
+-55ace577961d69f6ce789c7fc8e5500dabff7e57cada44cce8d1f4491631f22a  ./themes/make-icons.py
++b791287f4424d98a17cb3432b84bfafe270c48e98f59676261b632b394509328  ./tools/checkwords/checkwords.go
++7e021dbbb5c04091fd314c8403679d60d948f0ea708f2bb3448895aa34c30755  ./tools/checkwords/checkwords_test.go
++cd9e5cf6d7475bf7cb7ee601ed15636a1c11ab714ff941521d7d0333cd5415e6  ./tools/glsl2c.c
++c7fb350c95cf2b58c8a06ec232e08421f02a35a7b508ae9ee01ec16149b9062c  ./tools/go.mod
++577c45eb3769dd23762f05450913f60653f0239d5a09fe455dd6f3490dd0baea  ./tools/room-key.c
+diff --git a/docs/ARCHITECTURE.ja.md b/docs/ARCHITECTURE.ja.md
+index 7b30ae8..1b22599 100644
+--- a/docs/ARCHITECTURE.ja.md
++++ b/docs/ARCHITECTURE.ja.md
+@@ -71,9 +71,9 @@ DEsk v0.1 (BETA) の技術的な全体像です。どんなプログラムがあ
+ | `include/desk.h` | 約 1,200 | 描画ライブラリの API。`wm.c`・`settings.c`・`index.c`・道具が使います。 |
+ | `include/compat.h` | | 旧名（DeskWM）の設定とデータを引き継ぎます。 |
+ | `protocols/` | | wlr-output-management と wlr-output-power-management の XML。 |
+-| `scripts/` | | インストーラ、セッションのスクリプト、ビルドの補助（`glsl2c.py`、`room-key.py`）、`check-words.py`（訳のテスト）。 |
++| `scripts/` | | インストーラ、セッションのスクリプト、インストーラの補助。ビルドの補助は `tools/`（`glsl2c.c`、`room-key.c`）に、訳のテスト（`tools/checkwords`、Go）と共に。 |
+ | `session/` | | セッションのエントリ、PAM のファイル、autostart、既定のアプリの一覧、ポータルの設定。 |
+-| `themes/` | | DEsk のアイコンテーマ（`themes/make-icons.py` で生成）と GTK テーマ。 |
++| `themes/` | | DEsk のアイコンテーマ（SVG をそのまま置いたもの）と GTK テーマ。 |
+ | `packaging/` | | おすすめのプログラム一式のための Debian の equivs ファイル。 |
+ | `docs/` | | この文書群と開発の記録。 |
+ 
+@@ -176,7 +176,7 @@ libsystemd がある（`-Dpost=enabled`）と、DEsk はイベントループの
+ | Medium、Low | 小さく焼き、重ね描きも小さく。動いている紙は粗く描きます。 |
+ | 2D Fallback | 一度だけ小さく、1 画素 1 サンプル（ぼかして）。影・フェード・ぼかし・アニメーションなし。画面を CPU で描いているときは自動でこれになります。 |
+ 
+-焼いたシートは `$XDG_CACHE_HOME/desk` に、シートの種類・大きさ・机の幅・段階・`ROOM_KEY` の付いた名前の PNG で置きます。`ROOM_KEY` はビルド時に `room.glsl` と `gpu.c` から作るハッシュです（`scripts/room-key.py`）。部屋のコードを変えれば古いシートは使われず、普通の更新では残ります。
++焼いたシートは `$XDG_CACHE_HOME/desk` に、シートの種類・大きさ・机の幅・段階・`ROOM_KEY` の付いた名前の PNG で置きます。`ROOM_KEY` はビルド時に `room.glsl` と `gpu.c` から作るハッシュです（`tools/room-key.c`）。部屋のコードを変えれば古いシートは使われず、普通の更新では残ります。
+ 
+ ### 5.3 平らなもの
+ 
+@@ -221,7 +221,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
+ 
+ ## 8. 言語・書体・音
+ 
+-- **言葉**：`TR("English")` は英語で `WORDS`（`src/i18n.c`）を引きます。言語ごとに列がある表です（`enum desk_lang`：en、ja、zh、ko、es、fr、de）。訳の無い語は英語のまま出ます。キーには文脈を付けられます（`"clock|DAY"`）。`desk-index` は `index.c` に自分の表を持ちます。`meson test` が両方の表を確かめます（`scripts/check-words.py`）。
++- **言葉**：`TR("English")` は英語で `WORDS`（`src/i18n.c`）を引きます。言語ごとに列がある表です（`enum desk_lang`：en、ja、zh、ko、es、fr、de）。訳の無い語は英語のまま出ます。キーには文脈を付けられます（`"clock|DAY"`）。`desk-index` は `index.c` に自分の表を持ちます。`tools/` の `go test ./...` が両方の表を確かめます（`tools/checkwords`）。
+ - **書体**：役割（UI、印刷、見出し、刻印、タイプ、画面、手書き）ごとにラテン文字の一覧と CJK の一覧があり、CJK の一覧は中国語・日本語・韓国語ごとに選び直します（Noto CJK の SC・JP・KR）。同じ字でも国によって字形が違うためです。
+ - **音**：録音は一つもありません。`sfx.c` が起動時に、固有振動、雑音、ぱりぱりという音、きしみからすべての音を合成し、`sound.c` が少しずつ違う版を、画面上のその物の位置の左右に振って鳴らします。
+ 
+@@ -229,7 +229,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
+ 
+ ```sh
+ meson setup build && meson compile -C build
+-meson test -C build                       # 訳の表
++(cd tools && go test ./...)               # 訳の表
+ ./build/desk-preview -o out.png --shelf   # コンポジタなしで描く
+ ./scripts/desk-window                     # 今のセッションの中で動かす
+ ```
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 6eb950e..d3ce27b 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -106,9 +106,9 @@ Logging out, restarting and powering off ask every window to close first
+ | `include/desk.h` | ~1,200 | The drawing library's API, as used by `wm.c`, `settings.c`, `index.c` and the tools. |
+ | `include/compat.h` | | Carries settings and data over from DEsk's old name (DeskWM). |
+ | `protocols/` | | wlr-output-management and wlr-output-power-management XML. |
+-| `scripts/` | | Installers, session scripts, build helpers (`glsl2c.py`, `room-key.py`), `check-words.py` (the translation test). |
++| `scripts/` | | Installers, session scripts, and the installers' helpers. The build's own helpers are in `tools/` (`glsl2c.c`, `room-key.c`), with the translation test (`tools/checkwords`, Go). |
+ | `session/` | | Session entry, PAM file, autostart entries, default applications list, portal configuration. |
+-| `themes/` | | The DEsk icon theme (generated by `themes/make-icons.py`) and GTK theme. |
++| `themes/` | | The DEsk icon theme (committed SVGs) and GTK theme. |
+ | `packaging/` | | A Debian equivs file for the recommended program set. |
+ | `docs/` | | These documents and the development log. |
+ 
+@@ -293,7 +293,7 @@ There are two tracers:
+ 
+ Traced sheets are kept in `$XDG_CACHE_HOME/desk` as PNGs named by sheet,
+ size, desk width, level and `ROOM_KEY`. `ROOM_KEY` is a hash of
+-`room.glsl` and `gpu.c` made at build time (`scripts/room-key.py`), so a
++`room.glsl` and `gpu.c` made at build time (`tools/room-key.c`), so a
+ change to the room's code invalidates old sheets while ordinary updates keep
+ them.
+ 
+@@ -365,7 +365,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
+   a table with one column per language (`enum desk_lang`: en, ja, zh, ko,
+   es, fr, de). A missing translation shows the English. Keys may carry a
+   context, `"clock|DAY"`. `desk-index` keeps its own table in `index.c`.
+-  `meson test` checks both tables (`scripts/check-words.py`).
++  `go test ./...` in `tools/` checks both tables (`tools/checkwords`).
+ - **Fonts**: each role (UI, print, display, engrave, type, screen, hand) has
+   a Latin list and a CJK list; the CJK list is chosen again for Chinese,
+   Japanese or Korean (Noto CJK SC, JP or KR), because shared characters are
+@@ -378,7 +378,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
+ 
+ ```sh
+ meson setup build && meson compile -C build
+-meson test -C build                       # the translation tables
++(cd tools && go test ./...)               # the translation tables
+ ./build/desk-preview -o out.png --shelf   # draw without a compositor
+ ./scripts/desk-window                     # run nested in the current session
+ ```
+diff --git a/docs/MODDING.ja.md b/docs/MODDING.ja.md
+index 76e4b6e..70dd44a 100644
+--- a/docs/MODDING.ja.md
++++ b/docs/MODDING.ja.md
+@@ -11,7 +11,7 @@ DEsk は MIT ライセンスです。配るときは `LICENSE` を同梱し、RE
+ ```sh
+ meson setup build                  # ./build にデバッグ最適化のビルド
+ meson compile -C build
+-meson test -C build                # 訳の表を確かめる
++(cd tools && go test ./...)      # 訳の表を確かめる
+ ```
+ 
+ ビルドに要るものは README の「必要なもの」にあります。Debian・Ubuntu・Arch なら `scripts/install_session.sh --bare` がそれだけを入れて一度ビルドします。
+@@ -53,20 +53,20 @@ DEsk が動きながら言うことは `~/.local/state/desk/session.log`（入
+    ```
+ 
+ 3. printf の書式なら、どの訳も英語と同じ変換を同じ順で取らなければなりません（英語に `%d` があるところは `%d`）。
+-4. `meson test -C build` がすべての行を確かめます（列の数、キーの重複、printf の変換）。
++4. `tools/` で `go test ./...` がすべての行を確かめます（列の数、キーの重複、printf の変換）。
+ 
+ `desk-index` だけが使う言葉は、`src/index.c` の冒頭の表に書き、`W()` で引きます。
+ 
+ ### 言語を足す
+ 
+ 1. `include/i18n.h` の `enum desk_lang` の `DESK_LANG_COUNT` の前に足します。
+-2. `src/i18n.c`：`CODES` にその言語のコードと英語名を足し、`WORDS` のすべての行に列を足し（表は規則的です。読み方は `scripts/check-words.py` を見てください）、`MONTH_WHOLE`・`MONTH_SHORT`・`DAY_WHOLE`・`DAY_SHORT`・`DAY_LETTER` に行を足します。単語の間に空白を入れない言語なら、`desk_lang_wide` が真を返すようにします。
++2. `src/i18n.c`：`CODES` にその言語のコードと英語名を足し、`WORDS` のすべての行に列を足し（表は規則的です。読み方は `tools/checkwords` を見てください）、`MONTH_WHOLE`・`MONTH_SHORT`・`DAY_WHOLE`・`DAY_SHORT`・`DAY_LETTER` に行を足します。単語の間に空白を入れない言語なら、`desk_lang_wide` が真を返すようにします。
+ 3. `src/index.c`：その `WORDS` に列を足し、`when_words` の午前・午後（`HALF`）を足します。
+ 4. 日付の並びが違うなら：`src/draw.c` の `cal_year_word`・`cal_month_year`・`cal_week_range`・`clk_page_day`、`src/index.c` の `when_words` と `stamp_date`。
+ 5. `src/settings.c`：`LANG_WORDS` にその言語自身での名前を、`LANG_VALS` にコードを。`src/wm.c`：`shell.conf` の `language` が受け付けるコードの一覧に。
+ 6. `src/apps.c`：`REGION`（`locale_build`）にその言語のふつうのロケールを。プログラムの名前に使います。
+ 7. CJK の文字を使うなら、`src/fonts.c` にその地域の書体を（`CUTS`、`ONLY_FOR`、`desk_font_set_region`）。
+-8. 確認：`meson test`、それから `desk-preview --lang xx` に `--shelf`・`--console`・`--post`・`--calendar`・`--memo`・`--agenda`・`--lock`。長い語はいくつかの場所では縮めて収めますが、それでもはみ出す所は短い語を選びます。
++8. 確認：`tools/` で `go test ./...`、それから `desk-preview --lang xx` に `--shelf`・`--console`・`--post`・`--calendar`・`--memo`・`--agenda`・`--lock`。長い語はいくつかの場所では縮めて収めますが、それでもはみ出す所は短い語を選びます。
+ 
+ 訳の無い行は英語で出て、名前の表に行の無い言語は英語の名前で出るので、言語は少しずつ足せます。
+ 
+@@ -139,14 +139,14 @@ org.kde.kate.desktop = Development
+ 
+ ## 9. アイコンとテーマ
+ 
+-- DEsk のアイコンテーマは生成物です：`python3 themes/make-icons.py` が `themes/icons/DEsk` を書きます。形と光はグラデーション、質感は SVG のフィルタで、フィルタなしでも同じ物に見えなければなりません（Qt はフィルタを描きません）。`themes/contact-sheet.py` で一覧の画像を作って見られます。
++- DEsk のアイコンテーマは `themes/icons/DEsk` に置いた SVG です（生成スクリプトはこのフォークにはありません）。形と光はグラデーション、質感は SVG のフィルタで、フィルタなしでも同じ物に見えなければなりません（Qt はフィルタを描きません）。
+ - GTK テーマは Adwaita の上に重ねた `themes/gtk/DEsk/gtk-3.0/gtk.css` です。
+ - どちらも DEsk 専用の dconf の層に入るので、ほかのデスクトップの見た目は変えません。
+ 
+ ## 10. 変更を配る前に
+ 
+ ```sh
+-meson test -C build
++(cd tools && go test ./...)
+ # DEsk を確かめている構成（それぞれ別のディレクトリで）
+ meson setup b-min -Dpost=disabled -Dsound=disabled -Dxwayland=disabled
+ meson setup b-werror -Dbuildtype=debug -Dwerror=true
+diff --git a/docs/MODDING.md b/docs/MODDING.md
+index 37f4915..26b9c80 100644
+--- a/docs/MODDING.md
++++ b/docs/MODDING.md
+@@ -16,7 +16,7 @@ README what you changed.
+ ```sh
+ meson setup build                  # debug-optimised build in ./build
+ meson compile -C build
+-meson test -C build                # checks the translation tables
++(cd tools && go test ./...)      # checks the translation tables
+ ```
+ 
+ What the build needs is in the README ("Requirements"); on Debian, Ubuntu or
+@@ -83,7 +83,7 @@ stderr when nested). `DESK_PROFILE=1` adds frame timings.
+ 
+ 3. If it is a printf format, every translation must take the same
+    conversions in the same order (`%d` where the English has `%d`).
+-4. `meson test -C build` checks every row (column count, duplicate keys,
++4. `go test ./...` in `tools/` checks every row (column count, duplicate keys,
+    printf conversions).
+ 
+ Words used only by `desk-index` go in the table at the top of `src/index.c`
+@@ -94,7 +94,7 @@ instead, looked up with `W()`.
+ 1. Add it to `enum desk_lang` in `include/i18n.h`, before
+    `DESK_LANG_COUNT`.
+ 2. `src/i18n.c`: add its code and English name to `CODES`; add a column to
+-   every row of `WORDS` (the table is regular; `scripts/check-words.py`
++   every row of `WORDS` (the table is regular; `tools/checkwords`
+    shows how to read it) and a row to `MONTH_WHOLE`, `MONTH_SHORT`,
+    `DAY_WHOLE`, `DAY_SHORT` and `DAY_LETTER`. If it is written without spaces
+    between words, make `desk_lang_wide` return true for it.
+@@ -110,7 +110,7 @@ instead, looked up with `W()`.
+    programs are filed under.
+ 7. If it uses CJK characters, the region's fonts in `src/fonts.c` (`CUTS`,
+    `ONLY_FOR`, `desk_font_set_region`).
+-8. Check: `meson test`, then `desk-preview --lang xx` with `--shelf`,
++8. Check: `go test ./...` in `tools/`, then `desk-preview --lang xx` with `--shelf`,
+    `--console`, `--post`, `--calendar`, `--memo`, `--agenda`, `--lock`.
+    Long words are shrunk to fit in a few places; anything that still runs
+    over needs a shorter word.
+@@ -244,10 +244,10 @@ one:
+ 
+ ## 9. Icons and theme
+ 
+-- The DEsk icon theme is generated: `python3 themes/make-icons.py` writes
++- The DEsk icon theme is the SVGs committed in
+   `themes/icons/DEsk`. Shapes and light are gradients; texture is SVG
+   filters, and each icon must still read without filters (Qt ignores them).
+-  `themes/contact-sheet.py` makes a sheet of all of them to look at.
++  (They were drawn by a generator script, which this fork does not carry.)
+ - The GTK theme is `themes/gtk/DEsk/gtk-3.0/gtk.css`, on top of Adwaita.
+ - Both are installed into DEsk's own dconf layer, so they never change
+   another desktop's look.
+@@ -255,7 +255,7 @@ one:
+ ## 10. Before you share a change
+ 
+ ```sh
+-meson test -C build
++(cd tools && go test ./...)
+ # the build configurations DEsk is checked in (each in its own directory)
+ meson setup b-min -Dpost=disabled -Dsound=disabled -Dxwayland=disabled
+ meson setup b-werror -Dbuildtype=debug -Dwerror=true
+diff --git a/meson.build b/meson.build
+index 36fa9fa..5dbceb9 100644
+--- a/meson.build
++++ b/meson.build
+@@ -81,13 +81,17 @@ draw_deps = [cairo, fontconfig, math, threads]
+ # and the C tracer -- which stays the reference either way -- is all there
+ # is.
+ have_gpu = egl.found() and glesv2.found() and gbm_dep.found()
++# The build's own helpers, in C for the machine doing the build (tools/): the
++# shader made into a C string, and the room's key. Nothing but the C compiler
++# is needed to make them.
++glsl2c = executable('glsl2c', 'tools/glsl2c.c', native: true)
++room_key = executable('room-key', 'tools/room-key.c', native: true)
+ # What the room looks like, as a number: a room traced once is kept on disk
+-# until that changes (scripts/room-key.py), not thrown away with each build.
++# until that changes (tools/room-key.c), not thrown away with each build.
+ room_key_h = custom_target('room_key.h',
+   input: ['src/room.glsl', 'src/gpu.c'],
+   output: 'room_key.h',
+-  command: [import('python').find_installation(), files('scripts/room-key.py'),
+-    '@OUTPUT@', '@INPUT0@', '@INPUT1@'],
++  command: [room_key, '@OUTPUT@', '@INPUT0@', '@INPUT1@'],
+ )
+ draw_sources += [room_key_h]
+ if have_gpu
+@@ -95,8 +99,7 @@ if have_gpu
+   room_glsl_h = custom_target('room_glsl.h',
+     input: 'src/room.glsl',
+     output: 'room_glsl.h',
+-    command: [import('python').find_installation(), files('scripts/glsl2c.py'),
+-      'ROOM_GLSL', '@INPUT@', '@OUTPUT@'],
++    command: [glsl2c, 'ROOM_GLSL', '@INPUT@', '@OUTPUT@'],
+   )
+   draw_sources += ['src/gpu.c', room_glsl_h]
+   draw_deps += [egl, glesv2, gbm_dep]
+@@ -314,7 +317,7 @@ install_data('session/desk-mimeapps.list',
+ )
+ 
+ # The look of other programs in a DEsk session: its icons (themes/icons,
+-# drawn by themes/make-icons.py) and its GTK theme (themes/gtk), given to
++# committed SVGs) and its GTK theme (themes/gtk), given to
+ # the session's own layer of settings by desk-session (desk-dconf-profile)
+ install_subdir('themes/icons/DEsk', install_dir: get_option('datadir') / 'icons')
+ install_subdir('themes/gtk/DEsk', install_dir: get_option('datadir') / 'themes')
+@@ -359,9 +362,6 @@ install_data('session/desk.png',
+   install_dir: get_option('datadir') / 'icons/hicolor/512x512/apps',
+ )
+ 
+-# meson test: the word tables (src/i18n.c, src/index.c) have a column for
+-# each language, and every translation takes the printf conversions its
+-# English takes, in the same order (scripts/check-words.py)
+-test('words', import('python').find_installation(),
+-  args: [files('scripts/check-words.py'), meson.project_source_root()],
+-)
++# The word tables (src/i18n.c, src/index.c) have a column for each language,
++# and every translation takes the printf conversions its English takes, in
++# the same order: checked by `go test ./...` in tools/ (tools/checkwords).
+diff --git a/scripts/check-words.py b/scripts/check-words.py
+deleted file mode 100644
+index 7bdda16..0000000
+--- a/scripts/check-words.py
++++ /dev/null
+@@ -1,143 +0,0 @@
+-#!/usr/bin/env python3
+-"""check-words.py SOURCE_DIR -- the desk's word tables, checked (meson test).
+-
+-src/i18n.c and src/index.c keep every word the desk prints in a table with a
+-column for each language (include/i18n.h, enum desk_lang): the English, which
+-is the key, then the same in each language, or NULL where there is none yet.
+-A translation that is printed with printf must take what the English takes,
+-in the same order -- %d where %d, %s where %s -- or it reads the wrong thing
+-off the stack. This reads the tables as C does and says, for each row that
+-is wrong, what is wrong with it:
+-
+-  - not one column for each language
+-  - a key twice
+-  - a translation whose printf conversions are not the English one's
+-  - a translation with a control character in it other than a new line
+-
+-It also counts, as information only, the TR("...") keys the sources print
+-that have no row (they are printed in English, which may be meant).
+-Exit status 1 if anything is wrong."""
+-import glob
+-import os
+-import re
+-import sys
+-
+-LANGS = ('en', 'ja', 'zh', 'ko', 'es', 'fr', 'de')
+-FMT = re.compile(r'%[-+ #0]*\d*(?:\.\d+)?[hlLqjzt]*[diouxXeEfgGcsp%]')
+-TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|(/\*.*?\*/)|([{},])|(NULL)|(\s+)', re.S)
+-
+-
+-def unescape(body):
+-    out = bytearray()
+-    raw = body.encode('utf-8')
+-    i = 0
+-    while i < len(raw):
+-        c = raw[i]
+-        if c == 0x5c:
+-            n = chr(raw[i + 1])
+-            if n == 'x':
+-                j = i + 2
+-                while j < len(raw) and chr(raw[j]) in '0123456789abcdefABCDEF':
+-                    j += 1
+-                out.append(int(raw[i + 2:j], 16))
+-                i = j
+-                continue
+-            out += {'n': b'\n', 't': b'\t', '"': b'"', '\\': b'\\', "'": b"'"}[n]
+-            i += 2
+-            continue
+-        out.append(c)
+-        i += 1
+-    return out.decode('utf-8')
+-
+-
+-def table(path):
+-    """The rows of the WORDS table in path: (line, [strings or None])."""
+-    src = open(path, encoding='utf-8').read()
+-    m = re.search(r'static const char \*const WORDS\[\]\[DESK_LANG_COUNT\] = \{\n', src)
+-    if not m:
+-        sys.exit(f'{path}: no WORDS table')
+-    end = src.index('\n};\n', m.end())
+-    body = src[m.end():end]
+-    base = src[:m.end()].count('\n') + 1
+-    rows, cur, lit, pos = [], None, None, 0
+-    row_line = 0
+-    while pos < len(body):
+-        t = TOKEN.match(body, pos)
+-        if not t:
+-            sys.exit(f'{path}: cannot read the table near line '
+-                     f'{base + body[:pos].count(chr(10))}')
+-        s, com, punct, null, _ = t.groups()
+-        if s is not None:
+-            lit = (lit or '') + unescape(s)
+-        elif null:
+-            cur.append(None)
+-        elif punct == '{':
+-            cur = []
+-            row_line = base + body[:pos].count('\n')
+-        elif punct is not None and punct in ',}':
+-            if lit is not None:
+-                cur.append(lit)
+-                lit = None
+-            if punct == '}':
+-                rows.append((row_line, cur))
+-                cur = None
+-        pos = t.end()
+-    return rows
+-
+-
+-def main():
+-    root = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(
+-        os.path.abspath(__file__)))
+-    bad = 0
+-    keys = set()
+-    for name in ('src/i18n.c', 'src/index.c'):
+-        path = os.path.join(root, name)
+-        seen = {}
+-        rows = table(path)
+-        for line, row in rows:
+-            where = f'{name}:{line}'
+-            if len(row) != len(LANGS):
+-                print(f'{where}: {len(row)} columns, not {len(LANGS)}: {row[:1]}')
+-                bad += 1
+-                continue
+-            key = row[0]
+-            if key is None:
+-                print(f'{where}: no English')
+-                bad += 1
+-                continue
+-            if key in seen:
+-                print(f'{where}: "{key}" is in the table already (line {seen[key]})')
+-                bad += 1
+-            seen[key] = line
+-            want = FMT.findall(key.split('|', 1)[-1])
+-            for lang, text in zip(LANGS[1:], row[1:]):
+-                if text is None:
+-                    continue
+-                got = FMT.findall(text)
+-                if [g for g in got if g != '%%'] != [w for w in want if w != '%%'] \
+-                        or got.count('%%') != want.count('%%'):
+-                    print(f'{where}: {lang} takes {got}, the English {want}: "{key}"')
+-                    bad += 1
+-                if any(ord(ch) < 0x20 and ch != '\n' for ch in text):
+-                    print(f'{where}: {lang} has a control character in it: "{key}"')
+-                    bad += 1
+-        keys |= set(seen)
+-        print(f'{name}: {len(rows)} rows')
+-    # (information) what is printed and has no row
+-    used = set()
+-    for path in glob.glob(os.path.join(root, 'src', '*.c')):
+-        for m in re.finditer(r'\b(?:TR|W)\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)\)',
+-                             open(path, encoding='utf-8').read()):
+-            used.add(''.join(unescape(p) for p in re.findall(r'"((?:[^"\\]|\\.)*)"',
+-                                                            m.group(1))))
+-    missing = sorted(k for k in used - keys if re.search('[A-Za-z]', k))
+-    print(f'{len(missing)} printed keys with no row (shown in English)')
+-    for k in missing:
+-        print(f'  {k!r}')
+-    if bad:
+-        print(f'{bad} wrong')
+-    return 1 if bad else 0
+-
+-
+-if __name__ == '__main__':
+-    sys.exit(main())
+diff --git a/scripts/glsl2c.py b/scripts/glsl2c.py
+deleted file mode 100755
+index 60ea396..0000000
+--- a/scripts/glsl2c.py
++++ /dev/null
+@@ -1,36 +0,0 @@
+-#!/usr/bin/env python3
+-"""Wrap a GLSL file as a C string, so the shader ships inside the binary.
+-
+-    glsl2c.py NAME in.glsl out.h
+-
+-Run by meson with the Python meson itself runs on, so the build needs
+-nothing it did not already have. The shader is kept as a .glsl file rather
+-than as a C string because it is two thousand lines of code that a person
+-has to read against draw.c, and quotes on every line do not help with that.
+-"""
+-
+-import os
+-import sys
+-
+-
+-def main():
+-    name, src, dst = sys.argv[1:4]
+-    with open(src, encoding="ascii") as f:
+-        text = f.read()
+-    out = [
+-        "/* generated from %s by glsl2c.py -- edit that, not this */"
+-        % os.path.basename(src),
+-        "static const char %s[] =" % name,
+-    ]
+-    for line in text.splitlines():
+-        # backslash and quote for C; '?' because -std=c11 still reads
+-        # trigraphs, and a "??/" in a comment would eat the next character
+-        esc = line.replace("\\", "\\\\").replace('"', '\\"').replace("?", "\\?")
+-        out.append('\t"%s\\n"' % esc)
+-    out.append("\t;")
+-    with open(dst, "w", encoding="ascii") as f:
+-        f.write("\n".join(out) + "\n")
+-
+-
+-if __name__ == "__main__":
+-    main()
+diff --git a/scripts/install_arch.sh b/scripts/install_arch.sh
+index 2f6071e..94a3532 100755
+--- a/scripts/install_arch.sh
++++ b/scripts/install_arch.sh
+@@ -201,7 +201,6 @@ build|compiler and the tools to build with (base-devel)|base-devel
+ build|build system (Meson)|meson
+ build|build system: Ninja|ninja
+ build|build system: finding libraries (pkgconf)|pkgconf
+-build|the room shader, made into C (Python)|python
+ build|Wayland|wayland
+ build|Wayland protocols|wayland-protocols
+ build|keyboards (xkbcommon)|libxkbcommon
+diff --git a/scripts/install_debian.sh b/scripts/install_debian.sh
+index 014b7df..e4de528 100755
+--- a/scripts/install_debian.sh
++++ b/scripts/install_debian.sh
+@@ -162,7 +162,6 @@ build|compiler: the C library headers|libc6-dev
+ build|build system (Meson)|meson
+ build|build system: Ninja|ninja-build
+ build|build system: finding libraries|pkg-config
+-build|the room shader, made into C (Python)|python3
+ build|wlroots 0.18|libwlroots-0.18-dev
+ build|Wayland|libwayland-dev
+ build|Wayland protocols|wayland-protocols
+diff --git a/scripts/install_fedora.sh b/scripts/install_fedora.sh
+index c0d6e86..16c7f0d 100755
+--- a/scripts/install_fedora.sh
++++ b/scripts/install_fedora.sh
+@@ -197,7 +197,6 @@ build|compiler: the C library headers|glibc-devel
+ build|build system (Meson)|meson
+ build|build system: Ninja|ninja-build
+ build|build system: finding libraries (pkgconf)|pkgconf-pkg-config
+-build|the room shader, made into C (Python)|python3
+ dnf|wlroots 0.18|@WLROOTS@
+ build|Wayland|wayland-devel
+ build|Wayland protocols|wayland-protocols-devel
+diff --git a/scripts/install_ubuntu.sh b/scripts/install_ubuntu.sh
+index aedb39e..6dbf791 100755
+--- a/scripts/install_ubuntu.sh
++++ b/scripts/install_ubuntu.sh
+@@ -191,7 +191,6 @@ build|compiler: the C library headers|libc6-dev
+ build|build system (Meson)|meson
+ build|build system: Ninja|ninja-build
+ build|build system: finding libraries|pkg-config
+-build|the room shader, made into C (Python)|python3
+ build|Wayland|libwayland-dev
+ build|Wayland protocols|wayland-protocols
+ build|keyboards (xkbcommon)|libxkbcommon-dev
+diff --git a/scripts/room-key.py b/scripts/room-key.py
+deleted file mode 100755
+index f6bfebe..0000000
+--- a/scripts/room-key.py
++++ /dev/null
+@@ -1,37 +0,0 @@
+-#!/usr/bin/env python3
+-"""What the room looks like, as numbers, for the cache of traced rooms.
+-
+-    room-key.py out.h room.glsl gpu.c
+-
+-A traced room is kept on disk from one login to the next, and is traced
+-again only when it would come out different. Every change to the scene has
+-to reach the shader -- room.glsl is the C tracer's double, and checked
+-against it -- so a hash of the shader stands for the room; a change on the
+-C side alone (a camera, the resolve, the sidecar) bumps ROOM_LOOK in
+-draw.c. Whether this machine's GPU traces it right is asked again when
+-gpu.c changes as well. Run by meson with the Python meson itself runs on.
+-"""
+-
+-import sys
+-
+-
+-def fnv(data, h=2166136261):
+-    for b in data:
+-        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+-    return h
+-
+-
+-def main():
+-    out, glsl, gpu = sys.argv[1:4]
+-    with open(glsl, "rb") as f:
+-        room = fnv(f.read())
+-    with open(gpu, "rb") as f:
+-        both = fnv(f.read(), room)
+-    with open(out, "w", encoding="ascii") as f:
+-        f.write("/* generated by room-key.py: a hash of room.glsl, and of gpu.c after it */\n")
+-        f.write("#define DESK_ROOM_GLSL_KEY 0x%08xu\n" % room)
+-        f.write("#define DESK_ROOM_GPU_KEY 0x%08xu\n" % both)
+-
+-
+-if __name__ == "__main__":
+-    main()
+diff --git a/themes/contact-sheet.py b/themes/contact-sheet.py
+deleted file mode 100644
+index 36d86a2..0000000
+--- a/themes/contact-sheet.py
++++ /dev/null
+@@ -1,57 +0,0 @@
+-#!/usr/bin/env python3
+-"""contact-sheet.py OUT.png [SIZE...] -- every icon of themes/icons/DEsk at
+-each size (64 48 32 22 16 by default), drawn by gdk-pixbuf (librsvg, as GTK
+-draws them) on the desk's paper, for looking at them all at once. The
+-16x16 drawings are used up to 31 px, as the theme says."""
+-
+-import os
+-import sys
+-
+-import cairo
+-import gi
+-
+-gi.require_version("GdkPixbuf", "2.0")
+-gi.require_version("Gdk", "3.0")
+-from gi.repository import Gdk, GdkPixbuf  # noqa: E402
+-
+-HERE = os.path.dirname(os.path.abspath(__file__))
+-THEME = os.path.join(HERE, "icons", "DEsk")
+-
+-
+-def main():
+-    out = sys.argv[1]
+-    sizes = [int(a) for a in sys.argv[2:]] or [64, 48, 32, 22, 16]
+-    names = []
+-    for ctx in ("places", "devices", "mimetypes"):
+-        d = os.path.join(THEME, "scalable", ctx)
+-        names += [(ctx, f[:-4]) for f in sorted(os.listdir(d)) if f.endswith(".svg")]
+-    cols = 8
+-    cell = sum(sizes) + 12 * len(sizes) + 8
+-    rows = (len(names) + cols - 1) // cols
+-    cw, ch = 210, max(sizes) + 30
+-    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, cols * cw, rows * ch + 10)
+-    cr = cairo.Context(surf)
+-    cr.set_source_rgb(0.95, 0.92, 0.85)
+-    cr.paint()
+-    for i, (ctx, name) in enumerate(names):
+-        x0, y0 = (i % cols) * cw + 6, (i // cols) * ch + 6
+-        x = x0
+-        for s in sizes:
+-            sub = "16x16" if s < 32 else "scalable"
+-            pb = GdkPixbuf.Pixbuf.new_from_file_at_size(
+-                os.path.join(THEME, sub, ctx, name + ".svg"), s, s)
+-            Gdk.cairo_set_source_pixbuf(cr, pb, x, y0 + max(sizes) - s)
+-            cr.paint()
+-            x += s + 6
+-        cr.set_source_rgb(0.25, 0.18, 0.1)
+-        cr.select_font_face("DejaVu Sans")
+-        cr.set_font_size(9)
+-        cr.move_to(x0, y0 + max(sizes) + 14)
+-        cr.show_text(name)
+-    del cell
+-    surf.write_to_png(out)
+-    print(out)
+-
+-
+-if __name__ == "__main__":
+-    main()
+diff --git a/themes/make-icons.py b/themes/make-icons.py
+deleted file mode 100644
+index 25f326f..0000000
+--- a/themes/make-icons.py
++++ /dev/null
+@@ -1,1530 +0,0 @@
+-#!/usr/bin/env python3
+-"""make-icons.py -- DEsk's icon theme, drawn here as SVG.
+-
+-The programs on the desk (Thunar first) show folders, files, drives and
+-places in whatever icon theme they are given; Adwaita's are flat and grey,
+-and on a walnut desk among paper sheets they look like something left
+-behind by another desktop. These are the things themselves, as near as a
+-drawing gets: a manila folder of card with sheets in it, a page with a
+-corner turned down and typing on it, a stack of instant photographs, a
+-record sliding out of its sleeve, a film slate, a carton taped shut, a
+-punched card, a block of wood type, a wire wastebasket, a brass globe, a
+-drive in its aluminium case. What is not here (toolbar arrows, dialog
+-signs) comes from Adwaita, which the theme inherits.
+-
+-How they are made real: the shape and its light are gradients -- every
+-icon reads as itself with nothing more, which is how Qt's programs (whose
+-SVG has no filters) show them -- and over that, SVG filters as librsvg
+-draws them for GTK: the grain of card, paper, wood and brushed metal
+-(feTurbulence), the light catching an edge (feSpecularLighting on the
+-blurred outline), what is pressed in (an inner shadow) and the shadow a
+-thing lays on the desk. Nothing is drawn by a filter alone.
+-
+-Each icon is drawn twice: in full, from 32 px up (scalable/), and plainer
+--- no grain, no fine print, heavier edges -- for the 16 to 31 px of a side
+-pane or a list (16x16/, scaled). Both on 256 units. Run it from anywhere;
+-it writes themes/icons/DEsk next to itself.
+-
+-    python3 themes/make-icons.py
+-"""
+-
+-import math
+-import os
+-import random
+-import shutil
+-
+-HERE = os.path.dirname(os.path.abspath(__file__))
+-OUT = os.path.join(HERE, "icons", "DEsk")
+-
+-
+-def rgbf(h):
+-    h = h.lstrip("#")
+-    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+-
+-
+-def poly(*pts):
+-    return "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in pts) + " Z"
+-
+-
+-class Icon:
+-    """One SVG, 256 units square: its gradients, clips and filters
+-    numbered within it, each filter made once."""
+-
+-    def __init__(self, small):
+-        self.small = small
+-        self.defs = []
+-        self.body = []
+-        self.n = 0
+-        self.made = {}
+-
+-    def _id(self, p):
+-        self.n += 1
+-        return f"{p}{self.n}"
+-
+-    @staticmethod
+-    def _stops(stops):
+-        out = []
+-        for st in stops:
+-            op = st[2] if len(st) > 2 else 1
+-            out.append(f'<stop offset="{st[0]:g}" stop-color="{st[1]}"'
+-                       + (f' stop-opacity="{op:g}"' if op != 1 else "") + "/>")
+-        return "".join(out)
+-
+-    def lin(self, stops, x1=0, y1=0, x2=0, y2=1, user=False):
+-        i = self._id("l")
+-        u = ' gradientUnits="userSpaceOnUse"' if user else ""
+-        self.defs.append(f'<linearGradient id="{i}" x1="{x1:g}" y1="{y1:g}" x2="{x2:g}" '
+-                         f'y2="{y2:g}"{u}>{self._stops(stops)}</linearGradient>')
+-        return f"url(#{i})"
+-
+-    def rad(self, stops, cx=0.5, cy=0.5, r=0.5, fx=None, fy=None, user=False):
+-        i = self._id("r")
+-        u = ' gradientUnits="userSpaceOnUse"' if user else ""
+-        f = f' fx="{fx:g}" fy="{fy:g}"' if fx is not None else ""
+-        self.defs.append(f'<radialGradient id="{i}" cx="{cx:g}" cy="{cy:g}" r="{r:g}"{f}{u}>'
+-                         f"{self._stops(stops)}</radialGradient>")
+-        return f"url(#{i})"
+-
+-    def clip(self, shapes):
+-        i = self._id("c")
+-        self.defs.append(f'<clipPath id="{i}">{shapes}</clipPath>')
+-        return f"url(#{i})"
+-
+-    def filt(self, key, body, region='x="-4%" y="-4%" width="108%" height="108%"'):
+-        """a filter, or None small: at 16 px there is nothing for one to do"""
+-        if self.small:
+-            return None
+-        if key not in self.made:
+-            i = self._id("f")
+-            self.defs.append(f'<filter id="{i}" {region} color-interpolation-filters="sRGB">'
+-                             f"{body}</filter>")
+-            self.made[key] = f"url(#{i})"
+-        return self.made[key]
+-
+-    def add(self, s):
+-        self.body.append(s)
+-
+-    def svg(self):
+-        size = 16 if self.small else 64
+-        return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+-                f'viewBox="0 0 256 256"><defs>{"".join(self.defs)}</defs>'
+-                f'{"".join(self.body)}</svg>\n')
+-
+-
+-def g(inner, filt=None, tf=None, op=None, clip=None):
+-    a = ""
+-    if filt:
+-        a += f' filter="{filt}"'
+-    if tf:
+-        a += f' transform="{tf}"'
+-    if op is not None:
+-        a += f' opacity="{op:g}"'
+-    if clip:
+-        a += f' clip-path="{clip}"'
+-    return f"<g{a}>{inner}</g>"
+-
+-
+-# ---- what makes a drawing a thing ------------------------------------------
+-
+-def grain(ic, amt=0.05, freq="0.8", octaves=2, seed=1, dark="#3a2812", light=0.7):
+-    """Specks, dark and light, in whatever it is put on: the fibres of
+-    paper and card. freq as "fx fy" draws them out into streaks -- wood
+-    along its grain, brushed metal along the brush."""
+-    r, gg, b = rgbf(dark)
+-    k = 4.0 * amt
+-    kl = k * light
+-    body = (f'<feTurbulence type="fractalNoise" baseFrequency="{freq}" numOctaves="{octaves}" '
+-            f'seed="{seed}" result="n"/>'
+-            f'<feColorMatrix in="n" type="matrix" values="0 0 0 0 {r:.3f} 0 0 0 0 {gg:.3f} '
+-            f'0 0 0 0 {b:.3f} {k:.3f} 0 0 0 {-0.5 * k:.3f}" result="d"/>'
+-            f'<feColorMatrix in="n" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 '
+-            f'{-kl:.3f} 0 0 0 {0.5 * kl:.3f}" result="l"/>'
+-            '<feMerge result="m"><feMergeNode in="d"/><feMergeNode in="l"/></feMerge>'
+-            '<feComposite in="m" in2="SourceAlpha" operator="in" result="t"/>'
+-            '<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="t"/></feMerge>')
+-    return ic.filt(("grain", amt, freq, octaves, seed, dark, light), body)
+-
+-
+-def edge_light(ic, blur=3.0, depth=3.0, shine=0.9, exp=26, elev=48, k=0.7):
+-    """The light along an edge that faces it: the outline, blurred, lit as
+-    a surface from above -- what a bevel is."""
+-    body = (f'<feGaussianBlur in="SourceAlpha" stdDeviation="{blur:g}" result="b"/>'
+-            f'<feSpecularLighting in="b" surfaceScale="{depth:g}" specularConstant="{shine:g}" '
+-            f'specularExponent="{exp:g}" lighting-color="#fff" result="s">'
+-            f'<feDistantLight azimuth="270" elevation="{elev:g}"/></feSpecularLighting>'
+-            '<feComposite in="s" in2="SourceAlpha" operator="in" result="si"/>'
+-            f'<feComposite in="SourceGraphic" in2="si" operator="arithmetic" k1="0" k2="1" '
+-            f'k3="{k:g}" k4="0"/>')
+-    return ic.filt(("bevel", blur, depth, shine, exp, elev, k), body)
+-
+-
+-def pressed(ic, dy=2.0, blur=1.6, col="#000", op=0.5):
+-    """An inner shadow: the shape pressed into what it is on, darker under
+-    its top edge."""
+-    body = ('<feComponentTransfer in="SourceAlpha" result="inv">'
+-            '<feFuncA type="table" tableValues="1 0"/></feComponentTransfer>'
+-            f'<feGaussianBlur in="inv" stdDeviation="{blur:g}"/>'
+-            f'<feOffset dx="0" dy="{dy:g}" result="o"/>'
+-            f'<feFlood flood-color="{col}" flood-opacity="{op:g}"/>'
+-            '<feComposite in2="o" operator="in"/>'
+-            '<feComposite in2="SourceAlpha" operator="in" result="is"/>'
+-            '<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="is"/></feMerge>')
+-    return ic.filt(("inner", dy, blur, col, op), body)
+-
+-
+-def dropped(ic, dy=4.0, blur=4.0, op=0.38):
+-    """the soft shadow a thing lays on the desk below it"""
+-    body = (f'<feGaussianBlur in="SourceAlpha" stdDeviation="{blur:g}"/>'
+-            f'<feOffset dx="0" dy="{dy:g}" result="o"/>'
+-            f'<feFlood flood-color="#1a1006" flood-opacity="{op:g}"/>'
+-            '<feComposite in2="o" operator="in" result="s"/>'
+-            '<feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>')
+-    return ic.filt(("drop", dy, blur, op), body,
+-                   'filterUnits="userSpaceOnUse" x="-16" y="-16" width="288" height="288"')
+-
+-
+-def inked(ic, seed=4):
+-    """ink as a rubber stamp leaves it: heavy here, hardly there"""
+-    body = (f'<feTurbulence type="fractalNoise" baseFrequency="0.3" numOctaves="2" '
+-            f'seed="{seed}" result="n"/>'
+-            '<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 '
+-            '3.4 0 0 0 -0.62" result="a"/>'
+-            '<feComposite in="SourceGraphic" in2="a" operator="in"/>')
+-    return ic.filt(("ink", seed), body)
+-
+-
+-def contact(ic, cx, cy, rx, ry, op=0.32):
+-    """the dark right under a thing, where it meets the desk"""
+-    return (f'<ellipse cx="{cx:g}" cy="{cy:g}" rx="{rx:g}" ry="{ry:g}" fill="'
+-            f'{ic.rad([(0, "#1a1006", op), (0.6, "#1a1006", op * 0.42), (1, "#1a1006", 0)])}"/>')
+-
+-
+-def place(ic, inner, cx, cy, rx, ry, op=0.3, drop=(3.0, 4.0, 0.34)):
+-    """a thing set down: its contact shadow, then it, with its own shadow"""
+-    ic.add(contact(ic, cx, cy, rx, ry, op))
+-    ic.add(g(inner, dropped(ic, *drop)))
+-
+-
+-def typed(x0, x1, y0, rows, gap=11.0, h=4.4, col="#6a6457", seed=1, last_short=True, op=1.0):
+-    """lines of typing: words of every length, a ragged right edge"""
+-    rnd = random.Random(seed)
+-    parts = []
+-    for i in range(rows):
+-        y = y0 + i * gap
+-        end = x1 - rnd.uniform(0, 6)
+-        if last_short and i == rows - 1:
+-            end = x0 + (x1 - x0) * rnd.uniform(0.35, 0.6)
+-        elif rows > 3 and rnd.random() < 0.12:
+-            end = x0 + (x1 - x0) * rnd.uniform(0.55, 0.85)
+-        x = x0
+-        while x < end - 4:
+-            w = min(rnd.uniform(7, 24), end - x)
+-            parts.append(f'<rect x="{x:.1f}" y="{y - h / 2:.1f}" width="{w:.1f}" '
+-                         f'height="{h:g}" rx="{h / 2:g}"/>')
+-            x += w + rnd.uniform(4, 6)
+-    return f'<g fill="{col}" opacity="{op:g}">{"".join(parts)}</g>'
+-
+-
+-# ---- materials ----------------------------------------------------------
+-
+-PAPER = [(0, "#fffefa"), (1, "#f1ebde")]
+-PAPER_EDGE = "#c4b9a2"
+-MANILA_BACK = [(0, "#e6c47f"), (1, "#c8994d")]
+-MANILA_FRONT = [(0, "#fae6b8"), (0.05, "#f3d89f"), (0.7, "#e3bd73"), (1, "#d3a75a")]
+-MANILA_EDGE = "#97692f"
+-BRASS = [(0, "#fff0bf"), (0.3, "#e6c166"), (0.62, "#a77b2a"), (0.85, "#d8b257"), (1, "#8a6420")]
+-WALNUT = [(0, "#87532c"), (1, "#56311a")]
+-STEEL = [(0, "#fbfcfd"), (0.45, "#cfd4da"), (0.55, "#bcc2ca"), (1, "#e8ebee")]
+-
+-
+-def brass(ic, vertical=False):
+-    return ic.lin(BRASS, 0, 0, 0, 1) if vertical else ic.lin(BRASS, 0, 0, 1, 0)
+-
+-
+-# ---- folders ------------------------------------------------------------
+-
+-BACK = ("M24,60 V46 Q24,34 36,34 H93 Q100,34 104.5,39.5 L111.5,48 H220 Q232,48 232,60 "
+-        "V204 Q232,216 220,216 H36 Q24,216 24,204 Z")
+-
+-
+-def front_path(xt0, xt1, top, xb0, xb1, bot, rt=6.0, rb=10.0):
+-    """the front of a folder: a little wider at the top, leaning out"""
+-    h = bot - top
+-    lr = xt1 - xb1
+-    ll = xb0 - xt0
+-    return (f"M{xt0 + rt:.1f},{top:.1f} H{xt1 - rt:.1f} "
+-            f"Q{xt1:.1f},{top:.1f} {xt1 - lr * rt / h:.1f},{top + rt:.1f} "
+-            f"L{xb1 + lr * rb / h:.1f},{bot - rb:.1f} Q{xb1:.1f},{bot:.1f} {xb1 - rb:.1f},{bot:.1f} "
+-            f"H{xb0 + rb:.1f} Q{xb0:.1f},{bot:.1f} {xb0 - ll * rb / h:.1f},{bot - rb:.1f} "
+-            f"L{xt0 + ll * rt / h:.1f},{top + rt:.1f} Q{xt0:.1f},{top:.1f} {xt0 + rt:.1f},{top:.1f} Z")
+-
+-
+-def loose_sheet(ic, x, y, w, h, angle, seed, rows=0):
+-    s = (f'<rect x="{x:g}" y="{y:g}" width="{w:g}" height="{h:g}" rx="2.5" '
+-         f'fill="{ic.lin(PAPER)}" stroke="{PAPER_EDGE}" stroke-width="1.4"/>')
+-    if rows:
+-        s += typed(x + 16, x + w - 24, y + 16, rows, 10, 3.6, "#7b7466", seed, False)
+-    return g(s, tf=f"rotate({angle:g} {x + w / 2:g} {y + h / 2:g})")
+-
+-
+-def deboss(ic, shape, cx, cy, scale=1.0):
+-    """pressed into the card, as a blind stamp does: the hollow in shadow
+-    under its top edge, and a lip of light along the bottom of it"""
+-    if ic.small:
+-        return (f'<g transform="translate({cx:g} {cy:g}) scale({scale:g})" fill="#8f5f24" '
+-                f'stroke="#8f5f24" opacity=".85">{shape}</g>')
+-    lip = f'<g transform="translate(0 1.8)" fill="#fff4d8" stroke="#fff4d8" opacity=".9">{shape}</g>'
+-    sunk = g(f'<g fill="#a8762f" stroke="#a8762f">{shape}</g>',
+-             pressed(ic, 2.2, 1.5, "#4a2c06", 0.65), op=0.86)
+-    return f'<g transform="translate({cx:g} {cy:g}) scale({scale:g})">{lip}{sunk}</g>'
+-
+-
+-def folder(ic, emblem=None, open_=False):
+-    sm = ic.small
+-    parts = []
+-    back = (f'<path d="{BACK}" fill="{ic.lin(MANILA_BACK)}" stroke="{MANILA_EDGE}" '
+-            f'stroke-width="{12 if sm else 2.2:g}" stroke-linejoin="round"/>')
+-    if not sm:
+-        back += ('<path d="M36,37.2 H92" stroke="#fbe9bf" stroke-width="2.4" '
+-                 'stroke-linecap="round" opacity=".9"/>'
+-                 '<path d="M114,51.2 H219" stroke="#f6dfab" stroke-width="2" '
+-                 'stroke-linecap="round" opacity=".7"/>')
+-    parts.append(g(back, grain(ic, 0.05, "0.85", 2, 3, "#5a3a10")))
+-    top = 124 if open_ else 98
+-    # the sheets in it, and how dark it is down among them
+-    if sm:
+-        parts.append('<rect x="38" y="58" width="180" height="96" fill="#fffdf6" '
+-                     'stroke="#a8977a" stroke-width="10"/>')
+-    else:
+-        inside = loose_sheet(ic, 38, 58, 182, 148, -2.2, 5)
+-        inside += loose_sheet(ic, 44, 64, 172, 140, 1.5, 7, 5 if open_ else 3)
+-        inside += (f'<rect x="24" y="{top - 40:g}" width="208" height="40" '
+-                   f'fill="{ic.lin([(0, "#3b250a", 0), (1, "#3b250a", 0.3)])}"/>')
+-        parts.append(g(inside, clip=ic.clip(f'<path d="{BACK}"/>')))
+-    # the front, leaning out a little -- open, further
+-    lean = 16 if open_ else 7
+-    xb0, xb1, bot = 22, 234, 220
+-    d = front_path(xb0 - lean, xb1 + lean, top, xb0, xb1, bot)
+-    fr = (f'<path d="{d}" fill="{ic.lin(MANILA_FRONT)}" stroke="{MANILA_EDGE}" '
+-          f'stroke-width="{12 if sm else 2:g}" stroke-linejoin="round"/>')
+-    if not sm:
+-        fr += (f'<path d="{d}" fill="'
+-               f'{ic.lin([(0, "#5a3a10", 0.16), (0.12, "#5a3a10", 0), (0.88, "#5a3a10", 0), (1, "#5a3a10", 0.16)], 0, 0, 1, 0)}"/>'
+-               f'<path d="M{xb0 - lean + 9:g},{top + 2.4:g} H{xb1 + lean - 9:g}" stroke="#fffaea" '
+-               'stroke-width="2.6" stroke-linecap="round"/>'
+-               f'<path d="M{xb0 - lean + 9:g},{top + 5.4:g} H{xb1 + lean - 9:g}" stroke="#c59447" '
+-               'stroke-width="1.1" stroke-linecap="round" opacity=".45"/>'
+-               f'<path d="M{xb0 + 4:g},{bot - 20:g} H{xb1 - 4:g}" stroke="#b98a45" stroke-width="1.4" opacity=".5"/>'
+-               f'<path d="M{xb0 + 4:g},{bot - 18.4:g} H{xb1 - 4:g}" stroke="#fff0c6" stroke-width="1.4" opacity=".7"/>')
+-    if emblem:
+-        fr += deboss(ic, emblem(sm), 128, (top + bot) / 2 + (2 if sm else 3), 1.4 if sm else 1.0)
+-    parts.append(g(fr, grain(ic, 0.05, "0.85", 2, 9, "#5a3a10")))
+-    place(ic, "".join(parts), 128, 222, 114, 12, 0.3, (3, 4, 0.32))
+-
+-
+-def em_documents(sm):
+-    return (f'<path d="M-24,-16 H24 M-24,0 H24 M-24,16 H6" fill="none" '
+-            f'stroke-width="{18 if sm else 7:g}" stroke-linecap="round"/>')
+-
+-
+-def em_download(sm):
+-    return ('<path d="M0,-28 V8 M-15,-7 L0,8 L15,-7 M-27,14 V25 H27 V14" fill="none" '
+-            f'stroke-width="{18 if sm else 7.5:g}" stroke-linecap="round" stroke-linejoin="round"/>')
+-
+-
+-def em_music(sm):
+-    return ('<g stroke="none"><ellipse cx="-13" cy="20" rx="10" ry="7.5" transform="rotate(-22 -13 20)"/>'
+-            '<ellipse cx="17" cy="14" rx="10" ry="7.5" transform="rotate(-22 17 14)"/>'
+-            '<path d="M-5,17 V-22 L25,-30 V11 H20 V-17 L0,-12 V17 Z"/></g>')
+-
+-
+-def em_pictures(sm):
+-    return (f'<rect x="-28" y="-21" width="56" height="42" rx="3" fill="none" '
+-            f'stroke-width="{16 if sm else 6:g}"/>'
+-            '<path d="M-22,15 L-8,-2 L2,8 L10,0 L22,15 Z" stroke="none"/>'
+-            '<circle cx="12" cy="-9" r="5" stroke="none"/>')
+-
+-
+-def em_videos(sm):
+-    holes = "".join(f" M{x},-21 h6 v6 h-6 Z M{x},15 h6 v6 h-6 Z" for x in (-25, -13, -1, 11, 23))
+-    return (f'<path d="M-31,-26 H35 V26 H-31 Z{holes} M-21,-10 H25 V10 H-21 Z" '
+-            'fill-rule="evenodd" stroke="none" transform="translate(-2 0)"/>')
+-
+-
+-def em_templates(sm):
+-    return '<path d="M-26,24 V-26 L24,24 Z M-17,15 V-5 L3,15 Z" fill-rule="evenodd" stroke="none"/>'
+-
+-
+-def em_people(sm):
+-    return ('<g stroke="none"><circle cx="-11" cy="-12" r="9"/><circle cx="14" cy="-9" r="8"/>'
+-            '<path d="M-30,24 Q-30,0 -11,0 Q8,0 8,24 Z"/><path d="M5,24 Q5,3 14,3 Q31,3 31,24 Z"/></g>')
+-
+-
+-def em_globe(sm):
+-    return (f'<g fill="none" stroke-width="{14 if sm else 5:g}"><circle r="26"/><ellipse rx="11" ry="26"/>'
+-            '<path d="M-26,0 H26 M-22,-13 H22 M-22,13 H22"/></g>')
+-
+-
+-def em_clock(sm):
+-    return (f'<g fill="none" stroke-width="{14 if sm else 6:g}" stroke-linecap="round"><circle r="26"/>'
+-            '<path d="M0,-15 V0 L11,8"/></g>')
+-
+-
+-FOLDERS = {
+-    "folder": None,
+-    "inode-directory": None,
+-    "folder-documents": em_documents,
+-    "folder-download": em_download,
+-    "folder-music": em_music,
+-    "folder-pictures": em_pictures,
+-    "folder-videos": em_videos,
+-    "folder-templates": em_templates,
+-    "folder-publicshare": em_people,
+-    "folder-remote": em_globe,
+-    "folder-recent": em_clock,
+-}
+-
+-
+-# ---- a sheet and what is on it -------------------------------------------
+-
+-SHEET = "M54,20 H172 L210,58 V228 Q210,236 202,236 H54 Q46,236 46,228 V28 Q46,20 54,20 Z"
+-FOLD = "M172,20 L210,58 H180 Q172,58 172,50 Z"
+-
+-
+-def sheet(ic, content="", tint=None, seed=1):
+-    """A page, its top right corner turned down; what is on it goes
+-    under the corner, as it would."""
+-    sm = ic.small
+-    body = (f'<path d="{SHEET}" fill="{ic.lin(tint or PAPER)}" stroke="{PAPER_EDGE}" '
+-            f'stroke-width="{12 if sm else 2:g}" stroke-linejoin="round"/>')
+-    page = g(body, grain(ic, 0.035, "0.9", 2, seed, "#4a3a20")) + content
+-    if not sm:
+-        page += (f'<path d="M172,58 H210 V68 H172 Z" fill="{ic.lin([(0, "#4a3818", 0.22), (1, "#4a3818", 0)])}"/>'
+-                 f'<path d="M163,22 H172 V58 H163 Z" fill="'
+-                 f'{ic.lin([(0, "#4a3818", 0), (1, "#4a3818", 0.14)], 0, 0, 1, 0)}"/>')
+-    page += (f'<path d="{FOLD}" fill="{ic.lin([(0, "#fdfbf5"), (0.55, "#ede6d6"), (1, "#d4c9b0")], 0.5, 0.5, 0, 1)}" '
+-             f'stroke="#b9ac91" stroke-width="{10 if sm else 1.5:g}" stroke-linejoin="round"/>')
+-    place(ic, page, 128, 238, 82, 8, 0.28, (2.5, 3.5, 0.3))
+-
+-
+-def small_lines(ys, x0=78, x1=178, col="#8d8471", w=15, last=None):
+-    d = " ".join(f"M{x0},{y} H{x1 if (last is None or i < len(ys) - 1) else last}"
+-                 for i, y in enumerate(ys))
+-    return f'<path d="{d}" stroke="{col}" stroke-width="{w}"/>'
+-
+-
+-def m_text(ic):
+-    if ic.small:
+-        return sheet(ic, small_lines((96, 132, 168, 204), last=140))
+-    c = typed(66, 150, 80, 1, 0, 7, "#3c362c", 2, False)
+-    c += typed(66, 192, 100, 11, 11, 4.4, "#6a6457", 3)
+-    sheet(ic, c, seed=2)
+-
+-
+-def m_unknown(ic):
+-    """a blank page, a question pencilled on it"""
+-    q = ('<path d="M108,116 C108,92 150,90 150,114 C150,132 128,132 128,152" fill="none" '
+-         f'stroke="#6b6b6b" stroke-width="{16 if ic.small else 7:g}" stroke-linecap="round" opacity=".7"/>'
+-         f'<circle cx="128" cy="178" r="{10 if ic.small else 5:g}" fill="#6b6b6b" opacity=".7"/>')
+-    sheet(ic, g(q, grain(ic, 0.12, "1.2", 1, 12, "#000000", 1.0)), seed=6)
+-
+-
+-def mono(x0, y0, rows, seed, x1=196, col="#24402b", cw=5.6, gap=12.0, h=5.0):
+-    """a printout of a program: indented, every letter as wide as the next"""
+-    rnd = random.Random(seed)
+-    ind = [0, 0, 2, 2, 4, 4, 4, 2, 0, 0, 2, 4, 4, 2, 0, 0]
+-    parts = []
+-    last_x = x0
+-    for i in range(rows):
+-        y = y0 + i * gap
+-        x = x0 + ind[i % len(ind)] * cw
+-        if i == 0:
+-            parts.append(f'<rect x="{x:.1f}" y="{y - h / 2:.1f}" width="{cw - 1:.1f}" height="{h:g}"/>')
+-            x += 2 * cw
+-        elif rnd.random() < 0.12:
+-            continue
+-        room = int((x1 - x) / cw)
+-        n = min(rnd.randint(8, 20), room)
+-        used = 0
+-        while used < n:
+-            w = min(rnd.randint(2, 7), n - used)
+-            parts.append(f'<rect x="{x + used * cw:.1f}" y="{y - h / 2:.1f}" '
+-                         f'width="{w * cw - 1:.1f}" height="{h:g}"/>')
+-            used += w + 1
+-        last_x = x + used * cw
+-    y = y0 + (rows - 1) * gap
+-    cursor = (f'<rect x="{min(last_x + cw, x1 - cw):.1f}" y="{y - h / 2 - 1:.1f}" '
+-              f'width="{cw:.1f}" height="{h + 2:g}"/>')
+-    return f'<g fill="{col}" opacity=".88">{"".join(parts)}{cursor}</g>'
+-
+-
+-def m_script(ic):
+-    """the green-barred paper a line printer ran off, its feed holes down
+-    both sides"""
+-    sm = ic.small
+-    x0, x1, y0, y1 = 32, 224, 16, 238
+-    holes = "" if sm else "".join(
+-        f" M{x - 4.2:g},{y:g} a4.2,4.2 0 1 0 8.4,0 a4.2,4.2 0 1 0 -8.4,0 Z"
+-        for y in range(28, 232, 16) for x in (43, 213))
+-    d = (f"M{x0 + 3},{y0} H{x1 - 3} Q{x1},{y0} {x1},{y0 + 3} V{y1 - 3} Q{x1},{y1} {x1 - 3},{y1} "
+-         f"H{x0 + 3} Q{x0},{y1} {x0},{y1 - 3} V{y0 + 3} Q{x0},{y0} {x0 + 3},{y0} Z{holes}")
+-    body = (f'<path d="{d}" fill-rule="evenodd" fill="{ic.lin(PAPER)}" stroke="#c2b99f" '
+-            f'stroke-width="{12 if sm else 1.8:g}"/>')
+-    clip = ic.clip(f'<rect x="56" y="{y0}" width="144" height="{y1 - y0}"/>')
+-    if sm:
+-        bands = "".join(f'<rect x="56" y="{y}" width="144" height="36" fill="#c9e3c4"/>' for y in (40, 112, 184))
+-        code = small_lines((76, 112, 148, 184, 214), 76, 170, "#2c4a33", 14, 120)
+-        page = body + g(bands, clip=clip) + code
+-    else:
+-        bands = "".join(f'<rect x="56" y="{y}" width="144" height="{min(20, y1 - 1 - y)}" fill="#d6ecd2"/>'
+-                        for y in range(22, 238, 40))
+-        perf = ('<path d="M56,17 V237 M200,17 V237" stroke="#b5ac94" stroke-width="1.2" '
+-                'stroke-dasharray="3 3"/>')
+-        page = g(body + g(bands, clip=clip) + perf, grain(ic, 0.035, "0.9", 2, 13, "#4a3a20"))
+-        page += mono(66, 34, 16, 17)
+-    place(ic, page, 128, 240, 98, 8, 0.26, (2.5, 3.5, 0.3))
+-
+-
+-def scene(ic, x, y, w, h, sunset=False):
+-    """a photograph: sky, sun, far hills, near ones, water"""
+-    def X(f):
+-        return x + w * f
+-
+-    def Y(f):
+-        return y + h * f
+-    if sunset:
+-        sky = ic.lin([(0, "#3d4f8f"), (0.45, "#e2795b"), (0.7, "#f6c26b"), (1, "#fbe3a1")])
+-        sun, sea = "#fff1c4", ic.lin([(0, "#e79c62"), (1, "#3d4f7a")])
+-    else:
+-        sky = ic.lin([(0, "#3f8edb"), (0.62, "#a6d4f3"), (1, "#eaf4f2")])
+-        sun, sea = "#fffbe6", ic.lin([(0, "#5e9fd2"), (1, "#25598f")])
+-    sy = Y(0.5 if sunset else 0.26)
+-    s = f'<rect x="{x:g}" y="{y:g}" width="{w:g}" height="{h:g}" fill="{sky}"/>'
+-    s += (f'<circle cx="{X(0.72):g}" cy="{sy:g}" r="{w * 0.22:g}" fill="'
+-          f'{ic.rad([(0, "#fff8d8", 0.9), (0.35, "#fff1b0", 0.35), (1, "#fff1b0", 0)])}"/>'
+-          f'<circle cx="{X(0.72):g}" cy="{sy:g}" r="{w * 0.075:g}" fill="{sun}"/>')
+-    if not sunset:
+-        far = poly((X(0), Y(0.66)), (X(0.18), Y(0.42)), (X(0.3), Y(0.52)), (X(0.46), Y(0.34)),
+-                   (X(0.64), Y(0.58)), (X(0.8), Y(0.46)), (X(1), Y(0.62)), (X(1), Y(0.75)), (X(0), Y(0.75)))
+-        snow = poly((X(0.46), Y(0.34)), (X(0.52), Y(0.41)), (X(0.48), Y(0.40)), (X(0.42), Y(0.39)))
+-        s += (f'<path d="{far}" fill="{ic.lin([(0, "#8597bb"), (1, "#b4c0d6")])}"/>'
+-              f'<path d="{snow}" fill="#f4f7fb" opacity=".9"/>'
+-              f'<path d="M{X(0):g},{Y(0.78):g} Q{X(0.25):g},{Y(0.58):g} {X(0.55):g},{Y(0.7):g} '
+-              f'T{X(1):g},{Y(0.64):g} V{Y(0.82):g} H{X(0):g} Z" '
+-              f'fill="{ic.lin([(0, "#7fbf55"), (1, "#3e7a2a")])}"/>')
+-    s += f'<rect x="{x:g}" y="{Y(0.8):g}" width="{w:g}" height="{h * 0.2:g}" fill="{sea}"/>'
+-    s += (f'<path d="M{X(0.55):g},{Y(0.84):g} h{w * 0.3:g} M{X(0.62):g},{Y(0.89):g} h{w * 0.2:g} '
+-          f'M{X(0.66):g},{Y(0.94):g} h{w * 0.12:g}" stroke="#fff6dc" '
+-          f'stroke-width="{max(1.2, h * 0.012):g}" stroke-linecap="round" opacity=".7"/>')
+-    return g(s, clip=ic.clip(f'<rect x="{x:g}" y="{y:g}" width="{w:g}" height="{h:g}"/>'))
+-
+-
+-def m_html(ic):
+-    """a web page as it prints: the site's band across the top, a picture,
+-    the words, the links in blue"""
+-    if ic.small:
+-        c = ('<rect x="62" y="72" width="134" height="40" fill="#3d73b3"/>'
+-             + small_lines((144, 176, 208), 72, 184, "#8d8471", 14, 140))
+-        return sheet(ic, c)
+-    c = (f'<rect x="62" y="70" width="132" height="24" rx="3" fill="{ic.lin([(0, "#5b90cf"), (1, "#2f5f9b")])}"/>'
+-         '<circle cx="75" cy="82" r="6" fill="#fff" opacity=".92"/>'
+-         '<g fill="#fff" opacity=".75"><rect x="88" y="79.5" width="20" height="5" rx="2.5"/>'
+-         '<rect x="112" y="79.5" width="16" height="5" rx="2.5"/>'
+-         '<rect x="132" y="79.5" width="22" height="5" rx="2.5"/></g>')
+-    c += scene(ic, 62, 102, 62, 46)
+-    c += ('<rect x="62" y="102" width="62" height="46" fill="none" stroke="#7d7462" '
+-          'stroke-width=".8" opacity=".6"/>')
+-    c += typed(132, 194, 107, 4, 10, 4, "#6a6457", 21)
+-    c += typed(62, 194, 160, 4, 10, 4, "#6a6457", 22)
+-    c += ('<g fill="#2a5db0"><rect x="62" y="202" width="40" height="4" rx="2"/>'
+-          '<rect x="110" y="202" width="30" height="4" rx="2"/><rect x="148" y="202" width="34" height="4" rx="2"/></g>'
+-          '<path d="M62,208.5 H102 M110,208.5 H140 M148,208.5 H182" stroke="#2a5db0" stroke-width="1.1"/>')
+-    sheet(ic, c, seed=4)
+-
+-
+-def seal(ic, cx, cy, r):
+-    """a little brass seal, struck"""
+-    return (f'<circle cx="{cx:g}" cy="{cy:g}" r="{r:g}" fill="{ic.rad(BRASS[::-1], 0.38, 0.32, 0.75)}" '
+-            f'stroke="#7a5418" stroke-width="1"/>'
+-            f'<circle cx="{cx:g}" cy="{cy:g}" r="{r * 0.68:g}" fill="none" stroke="#fff3c6" '
+-            'stroke-width="1" opacity=".7"/>')
+-
+-
+-def m_doc(ic):
+-    """a letter: its letterhead, the date, the words, signed in blue ink"""
+-    if ic.small:
+-        c = ('<circle cx="80" cy="84" r="14" fill="#c99a3c"/>'
+-             + small_lines((132, 164, 196), 72, 184, "#8d8471", 14, 150)
+-             + '<path d="M112,220 q12,-18 22,-4 t24,-6" fill="none" stroke="#1f3f8a" stroke-width="12"/>')
+-        return sheet(ic, c)
+-    c = g(seal(ic, 77, 79, 10), edge_light(ic, 1.2, 2, 0.8, 20, 50, 0.6))
+-    c += ('<rect x="93" y="72" width="62" height="6.5" rx="3" fill="#3c362c"/>'
+-          '<rect x="93" y="83" width="42" height="3.6" rx="1.8" fill="#9a9284"/>')
+-    c += typed(150, 194, 106, 1, 0, 4, "#6a6457", 31, False)
+-    c += typed(66, 112, 124, 1, 0, 4, "#6a6457", 32, False)
+-    c += typed(66, 194, 140, 6, 10, 4, "#6a6457", 33)
+-    c += ('<path d="M120,214 c4,-10 9,-16 12,-8 c2,6 -4,12 2,8 c5,-4 7,-14 11,-10 c3,3 -1,10 3,8 '
+-          'c6,-3 9,-8 14,-6 c4,2 6,4 14,-2" fill="none" stroke="#1f3f8a" stroke-width="2.4" '
+-          'stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>')
+-    sheet(ic, c, seed=5)
+-
+-
+-def m_sheet(ic):
+-    """a ledger: green rules, a column for the date, two for the money"""
+-    tint = [(0, "#f7fbf1"), (1, "#e6eed9")]
+-    if ic.small:
+-        c = ('<rect x="62" y="70" width="134" height="30" fill="#8fbf86"/>'
+-             '<path d="M62,132 H196 M62,168 H196 M62,204 H196 M128,100 V220" stroke="#5f9a58" stroke-width="12"/>')
+-        return sheet(ic, c, tint)
+-    rnd = random.Random(51)
+-    rows = [82 + 11 * i for i in range(13)]
+-    c = '<rect x="60" y="68" width="136" height="14" fill="#8fbf86" opacity=".55"/>'
+-    c += '<path d="' + " ".join(f"M60,{y} H196" for y in rows) + '" stroke="#9cc596" stroke-width="1"/>'
+-    c += ('<path d="M60,68 V218 M84,68 V218 M138,68 V218 M141,68 V218 M166,68 V218 M169,68 V218 M196,68 V218" '
+-          'stroke="#7fb178" stroke-width="1"/>')
+-    ent = []
+-    for y in rows[:-2]:
+-        cy = y + 5.5
+-        ent.append(f'<rect x="64" y="{cy - 2:g}" width="{rnd.uniform(9, 15):.1f}" height="4" rx="2"/>')
+-        x = 88
+-        end = rnd.uniform(108, 134)
+-        while x < end - 4:
+-            w = min(rnd.uniform(6, 16), end - x)
+-            ent.append(f'<rect x="{x:.1f}" y="{cy - 2:g}" width="{w:.1f}" height="4" rx="2"/>')
+-            x += w + 4
+-        for c1 in (166, 196):
+-            if rnd.random() < 0.75:
+-                w = rnd.uniform(10, 19)
+-                ent.append(f'<rect x="{c1 - 3 - w:.1f}" y="{cy - 2:g}" width="{w:.1f}" height="4" rx="1"/>')
+-    c += f'<g fill="#3f4a3a" opacity=".8">{"".join(ent)}</g>'
+-    yt = rows[-2] + 5.5
+-    c += (f'<g fill="#2c3528"><rect x="146" y="{yt - 2.2:g}" width="17" height="4.4" rx="1"/>'
+-          f'<rect x="172" y="{yt - 2.2:g}" width="21" height="4.4" rx="1"/></g>'
+-          f'<path d="M143,{yt + 5:g} H165 M143,{yt + 7.4:g} H165 M171,{yt + 5:g} H195 M171,{yt + 7.4:g} H195" '
+-          'stroke="#c0392b" stroke-width="1"/>')
+-    sheet(ic, c, tint, seed=8)
+-
+-
+-def m_pdf(ic):
+-    """typing, and over it the red of a rubber stamp"""
+-    if ic.small:
+-        c = (small_lines((80, 112, 208), 72, 184, "#8d8471", 14)
+-             + '<rect x="70" y="132" width="118" height="54" fill="none" stroke="#c42b22" stroke-width="14"/>')
+-        return sheet(ic, c)
+-    c = typed(66, 194, 80, 13, 11, 4.2, "#6a6457", 41)
+-    stamp = ('<rect x="74" y="122" width="112" height="54" rx="6" fill="none" stroke="#c42b22" stroke-width="5"/>'
+-             '<rect x="81.5" y="129.5" width="97" height="39" rx="3" fill="none" stroke="#c42b22" stroke-width="1.6"/>'
+-             '<text x="130" y="161" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" '
+-             'font-weight="bold" font-size="31" letter-spacing="3" text-anchor="middle" fill="#c42b22">PDF</text>')
+-    c += g(g(stamp, inked(ic, 7)), tf="rotate(-12 130 149)", op=0.9)
+-    sheet(ic, c, seed=9)
+-
+-
+-def mount(ic, tf, chart):
+-    """a slide in its mount, the light coming through it"""
+-    sm = ic.small
+-    d = "M48,30 H208 Q226,30 226,48 V208 Q226,226 208,226 H48 Q30,226 30,208 V48 Q30,30 48,30 Z"
+-    win = "M62,74 H194 V170 H62 Z"
+-    film = f'<rect x="58" y="70" width="140" height="104" fill="{ic.lin([(0, "#3a74b0"), (1, "#173d63")])}"/>'
+-    if chart:
+-        bars = ((80, 132, "#f2c14e"), (104, 112, "#f08a5d"), (128, 122, "#5ec2b7"), (152, 98, "#e8eef5"))
+-        film += ('<rect x="74" y="82" width="70" height="6" rx="3" fill="#fff" opacity=".9"/>'
+-                 '<rect x="74" y="92" width="44" height="4" rx="2" fill="#cfe0f2" opacity=".75"/>')
+-        film += "".join(f'<rect x="{x}" y="{y}" width="16" height="{160 - y}" fill="{c}"/>' for x, y, c in bars)
+-        film += '<path d="M72,160.5 H184" stroke="#ffffff" stroke-width="1.6" opacity=".8"/>'
+-    else:
+-        film += scene(ic, 58, 70, 140, 104, True)
+-    body = (f'<path d="{d} {win}" fill-rule="evenodd" fill="{ic.lin([(0, "#fbfaf6"), (1, "#dcd6ca")])}" '
+-            f'stroke="#a39c8c" stroke-width="{12 if sm else 1.8:g}"/>')
+-    if not sm:
+-        body = g(body, edge_light(ic, 3, 3, 0.8, 24, 50, 0.6))
+-        body += (f'<path d="M62,74 H194 V81 H62 Z" fill="{ic.lin([(0, "#000", 0.45), (1, "#000", 0)])}"/>'
+-                 f'<path d="M62,74 H69 V170 H62 Z" fill="{ic.lin([(0, "#000", 0.35), (1, "#000", 0)], 0, 0, 1, 0)}"/>'
+-                 '<g fill="#8f887a" opacity=".8"><rect x="62" y="186" width="58" height="5" rx="2.5"/>'
+-                 '<rect x="62" y="196" width="38" height="4" rx="2"/><rect x="176" y="186" width="18" height="12" rx="2"/></g>'
+-                 '<circle cx="46" cy="46" r="3" fill="#b3ab9a"/>')
+-    return g(film + body, tf=tf)
+-
+-
+-def m_slides(ic):
+-    """slides in their mounts, the kind a projector takes"""
+-    inner = mount(ic, "translate(12 -8) rotate(8 128 128)", False)
+-    inner += mount(ic, "rotate(-5 128 128)", True)
+-    place(ic, inner, 128, 234, 96, 10, 0.3, (3, 4, 0.34))
+-
+-
+-def m_font(ic):
+-    """a block of wood type: an A, inked, standing out of its face. An A
+-    reads the same either way round, as type has to be cut."""
+-    sm = ic.small
+-    face = "M50,24 H206 Q216,24 216,34 V190 Q216,200 206,200 H50 Q40,200 40,190 V34 Q40,24 50,24 Z"
+-    side = ("M42,196 H214 Q214,200 213,204 L210,226 Q209,232 203,232 H53 Q47,232 46,226 "
+-            "L43,204 Q42,200 42,196 Z")
+-    blk = (f'<path d="{side}" fill="{ic.lin([(0, "#b27c45"), (1, "#7d5228")])}" stroke="#5f3c1b" '
+-           f'stroke-width="{12 if sm else 1.6:g}"/>')
+-    if not sm:
+-        blk = g(blk, grain(ic, 0.16, "0.12 0.012", 3, 21, "#3e230b", 0.5))
+-    fc = (f'<path d="{face}" fill="{ic.lin([(0, "#efd6a8"), (1, "#d3aa6e")])}" stroke="#8a5d2c" '
+-          f'stroke-width="{12 if sm else 1.6:g}"/>')
+-    if not sm:
+-        fc = g(g(fc, grain(ic, 0.14, "0.01 0.1", 3, 22, "#6b4316", 0.6)),
+-               edge_light(ic, 4, 4, 0.9, 28, 50, 0.55))
+-    a = ("M119,50 L137,50 L190,182 H202 V192 H150 V182 H160 L147.2,150 H97.9 L86,182 H96 V192 "
+-         "H56 V182 H70 Z M121.6,86.2 L141.5,136 H103.1 Z")
+-    letter = (f'<path d="{a}" fill-rule="evenodd" fill="{ic.lin([(0, "#3a312a"), (1, "#14100c")])}" '
+-              f'stroke="#0b0806" stroke-width="{8 if sm else 1:g}" transform="translate(0 -6)"/>')
+-    if not sm:
+-        letter = g(g(letter, edge_light(ic, 2, 3, 1.1, 30, 52, 0.9)), dropped(ic, 3, 2.5, 0.5))
+-    place(ic, blk + fc + letter, 128, 234, 96, 9, 0.32, (2, 3, 0.3))
+-
+-
+-def polaroid(ic, x, y, angle, sunset, seed):
+-    w, h = 156, 184
+-    fr = (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2.5" '
+-          f'fill="{ic.lin([(0, "#fbfaf6"), (1, "#e9e5db")])}" stroke="#cdc6b5" '
+-          f'stroke-width="{12 if ic.small else 1.4:g}"/>')
+-    fr = g(fr, grain(ic, 0.04, "0.9", 2, seed, "#4a3a20"))
+-    px, py, pw, ph = x + 12, y + 12, w - 24, h - 56
+-    pic = scene(ic, px, py, pw, ph, sunset)
+-    if not ic.small:
+-        pic += (f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" fill="none" stroke="#000" '
+-                'stroke-width="1" opacity=".25"/>'
+-                f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" fill="'
+-                f'{ic.lin([(0, "#fff", 0.38), (0.45, "#fff", 0.06), (0.5, "#fff", 0)], 0, 0, 1, 1)}"/>')
+-    return g(g(fr + pic, dropped(ic, 2, 3, 0.3)),
+-             tf=f"rotate({angle:g} {x + w / 2:g} {y + h / 2:g})")
+-
+-
+-def m_image(ic):
+-    """two instant photographs, one fallen across the other"""
+-    inner = polaroid(ic, 62, 30, 9, True, 31) + polaroid(ic, 42, 38, -7, False, 32)
+-    ic.add(contact(ic, 128, 234, 96, 10, 0.28))
+-    ic.add(inner)
+-
+-
+-def record(ic, cx, cy, r):
+-    sm = ic.small
+-    s = f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{ic.rad([(0, "#303030"), (0.45, "#161616"), (1, "#080808")])}"/>'
+-    if not sm:
+-        grooves = []
+-        for i, rr in enumerate(30 + 3.1 * k for k in range(int((r - 34) / 3.1))):
+-            col, op = ("#000000", ".55") if i % 2 else ("#3a3a3a", ".4")
+-            grooves.append(f'<circle cx="{cx}" cy="{cy}" r="{rr:.1f}" fill="none" stroke="{col}" '
+-                           f'stroke-width=".9" opacity="{op}"/>')
+-        s += "".join(grooves)
+-        for a0 in (-62, 118):
+-            a1 = a0 + 34
+-            pts = [(cx + rr * math.cos(math.radians(a)), cy + rr * math.sin(math.radians(a)))
+-                   for a, rr in ((a0, r - 3), (a1, r - 3), (a1, 30), (a0, 30))]
+-            sheen = ic.rad([(0, "#fff", 0), (0.55, "#fff", 0.16), (1, "#fff", 0.02)], cx, cy, r, user=True)
+-            s += (f'<path d="M{pts[0][0]:.1f},{pts[0][1]:.1f} A{r - 3},{r - 3} 0 0 1 '
+-                  f'{pts[1][0]:.1f},{pts[1][1]:.1f} L{pts[2][0]:.1f},{pts[2][1]:.1f} '
+-                  f'A30,30 0 0 0 {pts[3][0]:.1f},{pts[3][1]:.1f} Z" fill="{sheen}"/>')
+-        s += (f'<circle cx="{cx}" cy="{cy}" r="{r - 1}" fill="none" stroke="#5a5a5a" '
+-              'stroke-width="1.2" opacity=".7"/>')
+-    s += f'<circle cx="{cx}" cy="{cy}" r="27" fill="{ic.rad([(0, "#f58a5e"), (1, "#bd3b1c")], 0.4, 0.35, 0.7)}"/>'
+-    if not sm:
+-        s += (f'<circle cx="{cx}" cy="{cy}" r="21" fill="none" stroke="#ffe6c8" stroke-width="1" opacity=".55"/>'
+-              f'<rect x="{cx - 12}" y="{cy - 14}" width="24" height="3.5" rx="1.7" fill="#ffe6c8" opacity=".8"/>'
+-              f'<rect x="{cx - 8}" y="{cy + 9}" width="16" height="3" rx="1.5" fill="#ffe6c8" opacity=".7"/>')
+-    s += f'<circle cx="{cx}" cy="{cy}" r="{8 if sm else 3.5}" fill="#0a0a0a"/>'
+-    return s
+-
+-
+-def m_audio(ic):
+-    """a record, half out of its paper sleeve"""
+-    sm = ic.small
+-    rec = record(ic, 172, 118, 78)
+-    sl = "M24,54 H170 V202 H24 Z"
+-    sleeve = (f'<path d="{sl}" fill="{ic.lin([(0, "#f1e4c6"), (1, "#d6be90")])}" stroke="#9a7f52" '
+-              f'stroke-width="{12 if sm else 1.6:g}"/>')
+-    art = "".join(f'<circle cx="97" cy="114" r="{r}" fill="{c}" opacity=".92"/>'
+-                  for r, c in ((58, "#d9662f"), (44, "#e9a23b"), (30, "#2f6f73"), (16, "#f1e4c6")))
+-    if not sm:
+-        art += ('<rect x="40" y="180" width="70" height="6" rx="3" fill="#5b3a1e" opacity=".8"/>'
+-                '<rect x="40" y="190" width="44" height="4" rx="2" fill="#5b3a1e" opacity=".55"/>')
+-        sleeve = g(sleeve + g(art, clip=ic.clip(f'<path d="{sl}"/>')),
+-                   grain(ic, 0.07, "0.7", 2, 41, "#4a2e10"))
+-        sleeve += '<path d="M170,56 V200" stroke="#fff6e0" stroke-width="1.6" opacity=".6"/>'
+-        shade = (f'<rect x="170" y="40" width="16" height="156" '
+-                 f'fill="{ic.lin([(0, "#000", 0.45), (1, "#000", 0)], 0, 0, 1, 0)}"/>')
+-        rec = g(rec + shade, clip=ic.clip('<circle cx="172" cy="118" r="78"/>'))
+-    else:
+-        sleeve += g(art, clip=ic.clip(f'<path d="{sl}"/>'))
+-    place(ic, rec + sleeve, 128, 214, 104, 10, 0.3, (3, 4, 0.34))
+-
+-
+-def slab(pts, x0, x1):
+-    """a convex shape cut to lie between x0 and x1 (Sutherland-Hodgman):
+-    what a clip would do, for an SVG drawn where clips are not"""
+-    for edge, inside in ((x0, lambda p: p[0] >= x0), (x1, lambda p: p[0] <= x1)):
+-        out = []
+-        for i, cur in enumerate(pts):
+-            prev = pts[i - 1]
+-            if inside(cur) != inside(prev):
+-                t = (edge - prev[0]) / (cur[0] - prev[0])
+-                out.append((edge, prev[1] + t * (cur[1] - prev[1])))
+-            if inside(cur):
+-                out.append(cur)
+-        pts = out
+-    return pts
+-
+-
+-def stripes(ic, x, y, w, h, slant=12, width=26):
+-    """a clapper stick: black and white, slanted"""
+-    s = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="#f4f2ec"/>'
+-    for i in range(-1, int(w / width) + 2, 2):
+-        x0 = x + i * width
+-        cut = slab([(x0, y), (x0 + width, y), (x0 + width - slant, y + h), (x0 - slant, y + h)], x, x + w)
+-        if len(cut) >= 3:
+-            s += f'<path d="{poly(*cut)}" fill="#1b1b1d"/>'
+-    return s
+-
+-
+-def m_video(ic):
+-    """a film slate: chalk on black, and its sticks about to clap"""
+-    sm = ic.small
+-    slate = (f'<rect x="30" y="108" width="196" height="120" rx="8" '
+-             f'fill="{ic.lin([(0, "#3e4248"), (1, "#1c1e22")])}" stroke="#0d0e10" '
+-             f'stroke-width="{12 if sm else 2:g}"/>')
+-    if not sm:
+-        slate = g(slate, edge_light(ic, 3, 3, 0.7, 24, 50, 0.45))
+-        chalk = ('<g stroke="#f4f2ea" stroke-width="2.2" opacity=".75" fill="none">'
+-                 '<path d="M40,150 H216 M40,182 H216 M40,206 H216 M128,150 V206 M86,182 V206"/></g>')
+-        rnd = random.Random(61)
+-        marks = []
+-        for (x0, x1, y) in ((46, 120, 130), (136, 208, 130), (46, 120, 166), (136, 208, 166),
+-                            (46, 80, 194), (92, 120, 194), (136, 208, 194), (46, 150, 218)):
+-            x = x0
+-            end = x0 + (x1 - x0) * rnd.uniform(0.5, 0.9)
+-            while x < end:
+-                w = min(rnd.uniform(6, 16), end - x)
+-                marks.append(f'<rect x="{x:.1f}" y="{y - 2.5:g}" width="{w:.1f}" height="5" rx="2.5"/>')
+-                x += w + 4
+-        slate += chalk + f'<g fill="#f4f2ea" opacity=".6">{"".join(marks)}</g>'
+-    else:
+-        slate += '<path d="M44,160 H212 M44,196 H212" stroke="#d8d6ce" stroke-width="12"/>'
+-    low = stripes(ic, 30, 88, 196, 22)
+-    top = g(stripes(ic, 30, 64, 196, 22), tf="rotate(-17 36 86)")
+-    if not sm:
+-        low = g(low, edge_light(ic, 2, 2, 0.6, 24, 50, 0.4))
+-        top = g(top, dropped(ic, 3, 2.5, 0.35))
+-    hinge = (f'<circle cx="38" cy="88" r="8" fill="{ic.rad(STEEL, 0.35, 0.3, 0.7)}" stroke="#5d6168" '
+-             f'stroke-width="{6 if sm else 1.4:g}"/>')
+-    place(ic, slate + low + top + hinge, 128, 232, 104, 9, 0.32, (3, 4, 0.36))
+-
+-
+-def m_package(ic):
+-    """a carton taped shut, its address label on the front"""
+-    sm = ic.small
+-    front = poly((34, 112), (190, 112), (190, 226), (34, 226))
+-    side = poly((190, 112), (238, 66), (238, 180), (190, 226))
+-    topf = poly((34, 112), (190, 112), (238, 66), (82, 66))
+-    sw = 12 if sm else 1.6
+-    box = (f'<path d="{side}" fill="{ic.lin([(0, "#a97b46"), (1, "#86592c")])}" stroke="#6b4720" '
+-           f'stroke-width="{sw}" stroke-linejoin="round"/>'
+-           f'<path d="{front}" fill="{ic.lin([(0, "#cb9b60"), (1, "#a97a44")])}" stroke="#6b4720" '
+-           f'stroke-width="{sw}" stroke-linejoin="round"/>'
+-           f'<path d="{topf}" fill="{ic.lin([(0, "#d0a873"), (1, "#e1c094")])}" stroke="#6b4720" '
+-           f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    if not sm:
+-        box = g(box, grain(ic, 0.07, "0.6", 3, 71, "#4a2c0e"))
+-        box += ('<path d="M58,89 L214,89" stroke="#7a5426" stroke-width="1.6" opacity=".7"/>'
+-                '<path d="M36,113.5 H189" stroke="#f3dcb2" stroke-width="1.6" opacity=".8"/>')
+-    tape = (f'<path d="{poly((52.2, 94.5), (208.2, 94.5), (219.8, 83.5), (63.8, 83.5))}" '
+-            f'fill="{ic.lin([(0, "#e9c780"), (0.5, "#d7ac5c"), (1, "#c9984a")])}" stroke="#9a7230" '
+-            f'stroke-width="{6 if sm else 1:g}" stroke-linejoin="round" opacity=".95"/>'
+-            f'<path d="{poly((208.2, 94.5), (219.8, 83.5), (219.8, 197.5), (208.2, 208.5))}" '
+-            f'fill="{ic.lin([(0, "#c99a4e"), (1, "#a97a35")], 0, 0, 1, 0)}" stroke="#8a6428" '
+-            f'stroke-width="{6 if sm else 1:g}" stroke-linejoin="round" opacity=".95"/>')
+-    if not sm:
+-        tape += ('<path d="M60,86.2 L214,86.2" stroke="#fffaf0" stroke-width="1.6" opacity=".6"/>'
+-                 '<path d="M211.2,94 V205" stroke="#fff3d6" stroke-width="1.3" opacity=".5"/>')
+-    label = (f'<rect x="50" y="136" width="76" height="60" rx="2" '
+-             f'fill="{ic.lin([(0, "#fdfcf7"), (1, "#ece7da")])}" stroke="#b8ad95" '
+-             f'stroke-width="{8 if sm else 1:g}"/>')
+-    if not sm:
+-        rnd = random.Random(73)
+-        bars = []
+-        x = 58
+-        while x < 116:
+-            w = rnd.choice((1.2, 1.2, 2.2, 3.2))
+-            bars.append(f'<rect x="{x:.1f}" y="178" width="{w:g}" height="12"/>')
+-            x += w + rnd.choice((1.2, 2.0, 2.6))
+-        label += ('<rect x="50" y="136" width="76" height="8" fill="#c0392b" opacity=".85"/>'
+-                  + typed(56, 118, 152, 3, 7.5, 3.2, "#4a4438", 74)
+-                  + f'<g fill="#2b2620">{"".join(bars)}</g>')
+-    else:
+-        label += '<path d="M60,160 H116 M60,178 H100" stroke="#6a6152" stroke-width="10"/>'
+-    label = g(label, tf="rotate(-2 88 166)")
+-    place(ic, box + tape + label, 132, 226, 108, 10, 0.3, (3, 4, 0.34))
+-
+-
+-def card(ic, x, y, angle, seed, back=False):
+-    """a punched card: the clipped corner, the printed columns, the holes"""
+-    sm = ic.small
+-    w, h = 210, 104
+-    d = (f"M{x + 18},{y} H{x + w - 4} Q{x + w},{y} {x + w},{y + 4} V{y + h - 4} "
+-         f"Q{x + w},{y + h} {x + w - 4},{y + h} H{x + 4} Q{x},{y + h} {x},{y + h - 4} V{y + 18} Z")
+-    tone = [(0, "#efe4c6"), (1, "#dccb9f")] if back else [(0, "#f8f0d9"), (1, "#e8dab6")]
+-    s = (f'<path d="{d}" fill="{ic.lin(tone)}" stroke="#b9a77c" stroke-width="{12 if sm else 1.4:g}" '
+-         'stroke-linejoin="round"/>')
+-    if sm:
+-        s += "".join(f'<rect x="{x + 30 + 26 * i}" y="{y + 30 + (i * 37) % 50}" width="12" height="22" '
+-                     'fill="#3b2f1f"/>' for i in range(7))
+-        return g(s, tf=f"rotate({angle:g} {x + w / 2:g} {y + h / 2:g})")
+-    s = g(s, grain(ic, 0.04, "0.9", 2, seed, "#4a3a20"))
+-    rnd = random.Random(seed)
+-    cols = [x + 22 + 6.2 * i for i in range(30)]
+-    rows = [y + 22 + 8.4 * j for j in range(9)]
+-    s += f'<path d="M{x + 20},{y + 13} H{x + w - 8}" stroke="#c0533f" stroke-width="1.2" opacity=".6"/>'
+-    digits = "".join(f"M{cx:.1f},{ry - 1.6:.1f}h2v3.2h-2z" for cx in cols for ry in rows)
+-    s += f'<path d="{digits}" fill="#8a7a5a" opacity=".45"/>'
+-    holes = []
+-    for cx in cols:
+-        if rnd.random() < 0.7:
+-            for _ in range(rnd.choice((1, 1, 2))):
+-                ry = rnd.choice(rows)
+-                holes.append(f"M{cx - 0.8:.1f},{ry - 4:.1f}h3.6v8h-3.6z")
+-    s += f'<path d="{"".join(holes)}" fill="#3b2f1f" opacity=".88"/>'
+-    return g(g(s, dropped(ic, 2, 2.5, 0.28)), tf=f"rotate({angle:g} {x + w / 2:g} {y + h / 2:g})")
+-
+-
+-def m_exec(ic):
+-    """a program, as one once was: a deck of punched cards"""
+-    inner = card(ic, 30, 62, 7, 81, True) + card(ic, 18, 96, -6, 82)
+-    ic.add(contact(ic, 128, 222, 108, 12, 0.28))
+-    ic.add(inner)
+-
+-
+-MIMES = {
+-    "text-x-generic": m_text,
+-    "text-plain": m_text,
+-    "text-x-script": m_script,
+-    "application-x-shellscript": m_script,
+-    "text-html": m_html,
+-    "x-office-document": m_doc,
+-    "x-office-spreadsheet": m_sheet,
+-    "x-office-presentation": m_slides,
+-    "application-pdf": m_pdf,
+-    "font-x-generic": m_font,
+-    "image-x-generic": m_image,
+-    "audio-x-generic": m_audio,
+-    "video-x-generic": m_video,
+-    "package-x-generic": m_package,
+-    "application-x-executable": m_exec,
+-    "application-x-generic": m_unknown,
+-    "unknown": m_unknown,
+-}
+-
+-
+-# ---- places and things ---------------------------------------------------
+-
+-def lerp(a, b, t):
+-    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+-
+-
+-def p_home(ic):
+-    """a cottage: stucco walls, a roof of clay tiles, the lights on"""
+-    sm = ic.small
+-    sw = 12 if sm else 1.6
+-    gable = poly((42, 226), (140, 226), (140, 130), (91, 80), (42, 130))
+-    side = poly((140, 226), (224, 206), (224, 118), (140, 130))
+-    A, R, E1, E2 = (91, 70), (177, 57), (148, 136), (234, 120)
+-    roof = poly(A, R, E2, E1)
+-    walls = (f'<path d="{side}" fill="{ic.lin([(0, "#dcc79f"), (1, "#c3a97a")])}" stroke="#8c7550" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>'
+-             f'<path d="{gable}" fill="{ic.lin([(0, "#fbf3df"), (1, "#e8d7b3")])}" stroke="#8c7550" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    if not sm:
+-        walls = g(walls, grain(ic, 0.06, "0.7", 2, 91, "#5a4628"))
+-        walls += (f'<path d="{poly((140, 130), (224, 118), (224, 134), (140, 146))}" '
+-                  f'fill="{ic.lin([(0, "#3a2810", 0.35), (1, "#3a2810", 0)])}"/>')
+-    win = []
+-    for (x0, y0, x1, y1) in ((156, 150, 178, 146), (194, 143, 214, 139)):
+-        quad = poly((x0, y0), (x1, y1), (x1, y1 + 30), (x0, y0 + 30))
+-        win.append(f'<path d="{quad}" fill="{ic.lin([(0, "#ffe7a3"), (1, "#f0a43a")])}" stroke="#f7f1e4" '
+-                   f'stroke-width="{8 if sm else 3.2:g}" stroke-linejoin="round"/>')
+-        if not sm:
+-            mx, my0, my1 = (x0 + x1) / 2, (y0 + y1) / 2, (y0 + y1) / 2 + 30
+-            win.append(f'<path d="M{mx:g},{my0:g} V{my1:g} M{x0:g},{y0 + 15:g} L{x1:g},{y1 + 15:g}" '
+-                       'stroke="#f7f1e4" stroke-width="2.2"/>')
+-    win.append(f'<circle cx="91" cy="116" r="11" fill="{ic.rad([(0, "#fff0b8"), (1, "#f0a43a")])}" '
+-               f'stroke="#f7f1e4" stroke-width="{8 if sm else 3.4:g}"/>')
+-    if not sm:
+-        win.append('<path d="M91,105 V127 M80,116 H102" stroke="#f7f1e4" stroke-width="2"/>')
+-    door = (f'<path d="M77,226 V186 A14,14 0 0 1 105,186 V226 Z" fill="{ic.lin(WALNUT)}" stroke="#3d220f" '
+-            f'stroke-width="{8 if sm else 1.4:g}"/>')
+-    if not sm:
+-        door += ('<path d="M83,222 V190 A8,8 0 0 1 99,190 V222" fill="none" stroke="#a26c3f" '
+-                 'stroke-width="1.2" opacity=".7"/>'
+-                 f'<circle cx="99" cy="206" r="2.6" fill="{ic.rad(BRASS[::-1], 0.35, 0.3, 0.8)}"/>'
+-                 '<rect x="70" y="225" width="42" height="6" rx="1.5" fill="#a9a59c" stroke="#77736a" stroke-width="1"/>')
+-    # the chimney stands on the near slope: its foot cut along the slope
+-    chim = (f'<path d="{poly((176, 40), (186, 38.5), (186, 82.5), (176, 84))}" fill="#7a3020" '
+-            f'stroke="#5e2416" stroke-width="{sw}" stroke-linejoin="round"/>'
+-            f'<path d="{poly((160, 40), (176, 40), (176, 84), (160, 65.5))}" '
+-            f'fill="{ic.lin([(0, "#bd5a40"), (1, "#8d3a26")])}" stroke="#5e2416" stroke-width="{sw}" '
+-            'stroke-linejoin="round"/>')
+-    if not sm:
+-        chim += ('<path d="M160,48 H176 M160,56 H176 M163,64 H176 M168,72 H176 M168,40 V48 M172,48 V56 '
+-                 'M166,56 V64 M171,64 V72" stroke="#6e2416" stroke-width=".9" opacity=".55"/>'
+-                 f'<path d="{poly((186, 82.5), (198, 80.7), (208, 92), (190, 95))}" fill="#3a1206" opacity=".22"/>')
+-    chim += (f'<path d="{poly((157, 35), (179, 35), (190, 33.3), (168, 33.3))}" fill="#8a8380" stroke="#3f3a37" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>'
+-             f'<path d="{poly((157, 35), (179, 35), (179, 42), (157, 42))}" fill="#6b6460" stroke="#3f3a37" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>'
+-             f'<path d="{poly((179, 35), (190, 33.3), (190, 40.3), (179, 42))}" fill="#4f4946" stroke="#3f3a37" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    tiles = (f'<path d="{roof}" fill="{ic.lin([(0, "#d4664a"), (1, "#963622")])}" stroke="#5e2416" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    if not sm:
+-        rows, ridges = [], []
+-        for t in (0.2, 0.4, 0.6, 0.8):
+-            p, q = lerp(A, E1, t), lerp(R, E2, t)
+-            rows.append(f"M{p[0]:.1f},{p[1]:.1f} L{q[0]:.1f},{q[1]:.1f}")
+-        for s_ in [0.06 + 0.075 * k for k in range(13)]:
+-            p, q = lerp(A, R, s_), lerp(E1, E2, s_)
+-            ridges.append(f"M{p[0]:.1f},{p[1]:.1f} L{q[0]:.1f},{q[1]:.1f}")
+-        tiles += (f'<path d="{" ".join(ridges)}" stroke="#7d2a1a" stroke-width="1" opacity=".3"/>'
+-                  f'<path d="{" ".join(rows)}" stroke="#6e2416" stroke-width="2.2" opacity=".55"/>'
+-                  f'<path d="{" ".join(rows)}" stroke="#f0937a" stroke-width="1" opacity=".55" '
+-                  'transform="translate(0 -2)"/>')
+-        tiles = g(tiles, grain(ic, 0.06, "0.8", 2, 93, "#3a1206"))
+-    verge = (f'<path d="M30,138 L91,70 L148,136" fill="none" stroke="#9c8f78" '
+-             f'stroke-width="{16 if sm else 8.5:g}" stroke-linejoin="round" stroke-linecap="round"/>'
+-             f'<path d="M30,138 L91,70 L148,136" fill="none" stroke="#f6f1e6" '
+-             f'stroke-width="{8 if sm else 5.5:g}" stroke-linejoin="round" stroke-linecap="round"/>')
+-    place(ic, walls + "".join(win) + door + tiles + chim + verge, 132, 228, 106, 11, 0.3, (3, 4, 0.32))
+-
+-
+-def pencil(ic):
+-    """a yellow pencil, sharpened, its eraser in a brass ferrule"""
+-    return (f'<path d="M0,-6 H96 V6 H0 Z" fill="'
+-            f'{ic.lin([(0, "#ffd75e"), (0.45, "#f3b72a"), (0.55, "#e2a21e"), (1, "#c4840f")])}"/>'
+-            '<path d="M0,-2 H96 M0,2 H96" stroke="#b07a10" stroke-width=".8" opacity=".6"/>'
+-            f'<path d="M96,-6 L118,0 L96,6 Z" fill="{ic.lin([(0, "#f2d3a6"), (1, "#c99b62")])}"/>'
+-            '<path d="M111,-2 L120,0 L111,2 Z" fill="#3a3a3a"/>'
+-            f'<rect x="-14" y="-6" width="14" height="12" fill="{ic.lin(BRASS)}"/>'
+-            '<path d="M-10,-6 V6 M-5,-6 V6" stroke="#8a6420" stroke-width=".8"/>'
+-            f'<path d="M-14,-6 H-24 Q-28,-6 -28,0 Q-28,6 -24,6 H-14 Z" '
+-            f'fill="{ic.lin([(0, "#f4a3a0"), (1, "#d4706c")])}"/>')
+-
+-
+-def p_desktop(ic):
+-    """the desk itself: a walnut top, its drawer, a sheet and a pencil on it"""
+-    sm = ic.small
+-    sw = 12 if sm else 1.6
+-    topq = poly((58, 82), (198, 82), (246, 174), (10, 174))
+-    frontq = poly((10, 174), (246, 174), (246, 198), (10, 198))
+-    legs = "".join(f'<path d="{poly(*q)}" fill="{ic.lin(WALNUT, 0, 0, 1, 0)}" stroke="#2e1809" stroke-width="{sw}"/>'
+-                   for q in (((18, 198), (38, 198), (35, 242), (21, 242)),
+-                             ((218, 198), (238, 198), (235, 242), (221, 242))))
+-    wood = (f'<path d="{topq}" fill="{ic.lin([(0, "#6e4122"), (1, "#8f5a32")])}" stroke="#2e1809" '
+-            f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    if not sm:
+-        wood = g(wood, grain(ic, 0.2, "0.006 0.08", 3, 101, "#2a1406", 0.5))
+-        wood += f'<path d="{topq}" fill="{ic.lin([(0, "#fff", 0.14), (0.35, "#fff", 0.02), (1, "#fff", 0)])}"/>'
+-    front = (f'<path d="{frontq}" fill="{ic.lin([(0, "#5c341a"), (1, "#3c210e")])}" stroke="#2e1809" '
+-             f'stroke-width="{sw}" stroke-linejoin="round"/>')
+-    if not sm:
+-        front = g(front, grain(ic, 0.16, "0.006 0.1", 3, 102, "#1a0c04", 0.5))
+-        front += ('<path d="M12,175.5 H244" stroke="#b07a4c" stroke-width="1.8" opacity=".8"/>'
+-                  '<rect x="98" y="179" width="60" height="15" rx="2" fill="none" stroke="#24130a" stroke-width="1.4"/>'
+-                  '<rect x="98" y="179" width="60" height="15" rx="2" fill="none" stroke="#7a4d2b" '
+-                  'stroke-width="1" transform="translate(0 1)" opacity=".6"/>'
+-                  f'<rect x="119" y="184" width="18" height="5" rx="2.5" fill="{ic.lin(BRASS)}" '
+-                  'stroke="#6b4c18" stroke-width=".8"/>')
+-    sheetq = poly((76, 102), (150, 96), (166, 150), (82, 158))
+-    paper = f'<path d="{sheetq}" fill="{ic.lin(PAPER)}" stroke="#b9ae96" stroke-width="{8 if sm else 1.2:g}"/>'
+-    if not sm:
+-        rows = []
+-        for t in (0.22, 0.36, 0.5, 0.64, 0.78):
+-            p, q = lerp((76, 102), (82, 158), t), lerp((150, 96), (166, 150), t)
+-            q = lerp(p, q, 0.8 if t < 0.7 else 0.5)
+-            p = lerp(p, q, 0.12)
+-            rows.append(f"M{p[0]:.1f},{p[1]:.1f} L{q[0]:.1f},{q[1]:.1f}")
+-        paper += (f'<path d="{" ".join(rows)}" stroke="#7b7466" stroke-width="2.6" stroke-linecap="round" '
+-                  'opacity=".7"/>')
+-        paper = g(paper, dropped(ic, 2, 2, 0.35))
+-        pen = g(g(pencil(ic), tf="translate(160 148) rotate(-24) scale(.86 .7)"), dropped(ic, 2.5, 2, 0.4))
+-    else:
+-        pen = '<path d="M150,160 L222,120" stroke="#f0b52a" stroke-width="16" stroke-linecap="round"/>'
+-    place(ic, legs + wood + front + paper + pen, 128, 238, 112, 8, 0.32, (2, 3, 0.3))
+-
+-
+-def helix(theta0, k, y0=62.0, y1=224.0, step=4.0):
+-    """a wire of the basket's mesh, round the cylinder as it goes down:
+-    its points, each with whether it is on the near side"""
+-    pts = []
+-    y = y0
+-    while y <= y1 + 0.01:
+-        t = (y - y0) / (y1 - y0)
+-        rr, ry = 82 + (60 - 82) * t, 20 + (13 - 20) * t
+-        th = theta0 + k * (y - y0)
+-        pts.append((128 + rr * math.sin(th), y + ry * math.cos(th), math.cos(th) >= 0))
+-        y += step
+-    return pts
+-
+-
+-def balls(ic, spec, sm):
+-    """screwed-up paper"""
+-    out = []
+-    for cx, cy, r, seed in spec:
+-        rnd = random.Random(seed * 7 + 1)
+-        n = 11
+-        pts = []
+-        for i in range(n):
+-            a = 2 * math.pi * i / n + rnd.uniform(-0.15, 0.15)
+-            rr = r * rnd.uniform(0.82, 1.06)
+-            pts.append((cx + rr * math.cos(a), cy + rr * 0.86 * math.sin(a)))
+-        out.append(f'<path d="{poly(*pts)}" '
+-                   f'fill="{ic.rad([(0, "#ffffff"), (0.6, "#ecebe6"), (1, "#c9c7c0")], 0.38, 0.32, 0.7)}" '
+-                   f'stroke="#9b998f" stroke-width="{8 if sm else 1.2:g}" stroke-linejoin="round"/>')
+-        if not sm:
+-            creases = []
+-            for i in range(0, n, 2):
+-                p = pts[i]
+-                q = lerp((cx, cy), pts[(i + 5) % n], rnd.uniform(0.1, 0.5))
+-                creases.append(f"M{p[0]:.1f},{p[1]:.1f} L{q[0]:.1f},{q[1]:.1f}")
+-            out.append(f'<path d="{" ".join(creases)}" stroke="#a9a69c" stroke-width="1.1" opacity=".75"/>')
+-            facet = poly(pts[1], pts[3], (cx + rnd.uniform(-4, 4), cy + rnd.uniform(-4, 4)))
+-            out.append(f'<path d="{facet}" fill="#ffffff" opacity=".55"/>')
+-    return "".join(out)
+-
+-
+-def basket(ic, full):
+-    """the wire wastebasket: a mesh you see through to its far side"""
+-    sm = ic.small
+-    body = "M46,62 L68,224 A60,13 0 0 0 188,224 L210,62 A82,20 0 0 1 46,62 Z"
+-    near, far = [], []
+-    if not sm:
+-        # each wire a line of its own, broken where it goes round the back
+-        for i in range(24):
+-            th0 = 2 * math.pi * i / 24
+-            for k in (0.0105, -0.0105):
+-                pts = helix(th0, k)
+-                run = [pts[0]]
+-                for p in pts[1:]:
+-                    if p[2] != run[-1][2]:
+-                        if len(run) > 1:
+-                            (near if run[0][2] else far).append(
+-                                "M" + " ".join(f"{q[0]:.1f},{q[1]:.1f}" for q in run))
+-                        run = [run[-1][:2] + (p[2],)]
+-                    run.append(p)
+-                if len(run) > 1:
+-                    (near if run[0][2] else far).append("M" + " ".join(f"{q[0]:.1f},{q[1]:.1f}" for q in run))
+-    s = f'<path d="{body}" fill="#2a2d31" opacity="{0.55 if sm else 0.28:g}"/>'
+-    s += f'<ellipse cx="128" cy="62" rx="82" ry="20" fill="{ic.lin([(0, "#7d828a"), (1, "#2e3135")])}"/>'
+-    if not sm:
+-        s += f'<path d="{" ".join(far)}" stroke="#a7adb5" stroke-width="1.3" opacity=".65"/>'
+-    if full:
+-        s += balls(ic, ((92, 56, 30, 1), (150, 48, 34, 2), (122, 70, 26, 3)), sm)
+-        if not sm:
+-            s += g(balls(ic, ((104, 150, 30, 4), (152, 176, 26, 5)), sm), op=0.55)
+-    if not sm:
+-        s += f'<path d="{" ".join(near)}" stroke="#6d737b" stroke-width="3" stroke-linecap="round"/>'
+-        s += (f'<path d="{" ".join(near)}" stroke="#eef1f4" stroke-width="1" stroke-linecap="round" '
+-              'opacity=".55" transform="translate(-.6 -.8)"/>')
+-        s += (f'<path d="{body}" fill="'
+-              f'{ic.lin([(0, "#000", 0.45), (0.22, "#000", 0), (0.36, "#fff", 0.22), (0.5, "#fff", 0), (0.78, "#000", 0.12), (1, "#000", 0.5)], 0, 0, 1, 0)}"/>')
+-    else:
+-        s += '<path d="M76,96 L96,214 M128,100 V222 M180,96 L160,214" stroke="#5d636b" stroke-width="12"/>'
+-    rim = ic.lin([(0, "#f7f8fa"), (0.4, "#9aa0a8"), (0.6, "#d9dde2"), (1, "#7f858d")])
+-    s += (f'<ellipse cx="128" cy="62" rx="82" ry="20" fill="none" stroke="#4f545b" stroke-width="{16 if sm else 8.5:g}"/>'
+-          f'<ellipse cx="128" cy="62" rx="82" ry="20" fill="none" stroke="{rim}" stroke-width="{8 if sm else 5.5:g}"/>'
+-          f'<path d="M68,224 A60,13 0 0 0 188,224" fill="none" stroke="#4f545b" stroke-width="{14 if sm else 8:g}"/>'
+-          f'<path d="M68,224 A60,13 0 0 0 188,224" fill="none" stroke="{rim}" stroke-width="{7 if sm else 5:g}"/>')
+-    place(ic, s, 128, 230, 72, 10, 0.34, (2, 3, 0.3))
+-
+-
+-def p_trash(ic):
+-    basket(ic, False)
+-
+-
+-def p_trash_full(ic):
+-    basket(ic, True)
+-
+-
+-def p_globe(ic):
+-    """a globe of the world on a brass stand"""
+-    sm = ic.small
+-    cx, cy, r = 128, 104, 76
+-    sea = (f'<circle cx="{cx}" cy="{cy}" r="{r}" '
+-           f'fill="{ic.rad([(0, "#9ad6f6"), (0.5, "#3687cb"), (1, "#0e3c70")], 0.36, 0.3, 0.75)}"/>')
+-    land = ("M70,70 C80,52 104,46 112,58 C118,68 106,76 110,86 C114,96 128,98 124,112 C120,124 104,122 100,136 "
+-            "C96,150 104,166 96,174 C86,170 80,150 74,136 C68,120 58,108 62,92 C64,82 66,78 70,70 Z "
+-            "M140,44 C152,38 170,42 178,52 C186,62 180,70 172,72 C164,74 160,82 166,90 C174,100 192,96 198,108 "
+-            "C202,120 192,138 180,148 C170,156 160,150 156,138 C152,126 158,118 150,110 C142,102 134,100 136,88 "
+-            "C138,76 150,72 148,62 C146,56 136,52 140,44 Z")
+-    earth = (f'<path d="{land}" fill="{ic.rad([(0, "#a9cf72"), (1, "#4f7d32")], 0.4, 0.35, 0.8)}" '
+-             f'stroke="#3d6426" stroke-width="{0 if sm else 1:g}"/>')
+-    lines = ""
+-    if not sm:
+-        earth = g(earth, grain(ic, 0.12, "0.25", 2, 111, "#2e4a1a", 0.6))
+-        lines = (f'<g fill="none" stroke="#ffffff" stroke-width=".9" opacity=".22">'
+-                 f'<ellipse cx="{cx}" cy="{cy}" rx="{r * 0.45:g}" ry="{r}"/>'
+-                 f'<ellipse cx="{cx}" cy="{cy}" rx="{r * 0.85:g}" ry="{r}"/>'
+-                 f'<path d="M{cx - r},{cy} H{cx + r} M{cx - r * 0.86:g},{cy - 38} H{cx + r * 0.86:g} '
+-                 f'M{cx - r * 0.86:g},{cy + 38} H{cx + r * 0.86:g}"/></g>')
+-    turned = g(earth + lines, tf=f"rotate(-18 {cx} {cy})",
+-               clip=ic.clip(f'<circle cx="{cx}" cy="{cy}" r="{r}"/>'))
+-    shade = (f'<circle cx="{cx}" cy="{cy}" r="{r}" '
+-             f'fill="{ic.rad([(0, "#001a33", 0), (0.62, "#001a33", 0.05), (1, "#001a33", 0.55)], 0.38, 0.32, 0.8)}"/>')
+-    if not sm:
+-        shade += (f'<ellipse cx="{cx - 24}" cy="{cy - 34}" rx="34" ry="22" '
+-                  f'transform="rotate(-30 {cx - 24} {cy - 34})" fill="{ic.rad([(0, "#fff", 0.75), (1, "#fff", 0)])}"/>')
+-    arc = f"M{cx},{cy - r - 12} A{r + 12},{r + 12} 0 0 1 {cx},{cy + r + 12}"
+-    meridian = (f'<path d="{arc}" fill="none" stroke="#6b4c18" stroke-width="{18 if sm else 10:g}" '
+-                f'transform="rotate(-18 {cx} {cy})"/>'
+-                f'<path d="{arc}" fill="none" stroke="{brass(ic)}" stroke-width="{10 if sm else 7:g}" '
+-                f'transform="rotate(-18 {cx} {cy})"/>')
+-    stand = (f'<path d="M120,190 H136 L140,214 H116 Z" fill="{brass(ic)}" stroke="#6b4c18" '
+-             f'stroke-width="{8 if sm else 1.2:g}"/>'
+-             f'<ellipse cx="128" cy="224" rx="56" ry="13" fill="{ic.lin(WALNUT)}" stroke="#2e1809" '
+-             f'stroke-width="{10 if sm else 1.4:g}"/>'
+-             f'<ellipse cx="128" cy="219" rx="52" ry="10" fill="{ic.lin([(0, "#9a653b"), (1, "#6b3f1f")])}"/>')
+-    if not sm:
+-        stand += f'<ellipse cx="128" cy="219" rx="52" ry="10" fill="none" stroke="{brass(ic)}" stroke-width="2.4"/>'
+-        stand = g(stand, edge_light(ic, 2, 2, 0.7, 24, 50, 0.4))
+-    place(ic, stand + sea + turned + shade + meridian, 128, 232, 70, 9, 0.34, (2, 3, 0.3))
+-
+-
+-def p_computer(ic):
+-    """a set in a walnut cabinet, its green screen lit, like the desk's own
+-    Control Panel"""
+-    sm = ic.small
+-    cab = (f'<rect x="28" y="30" width="200" height="178" rx="22" '
+-           f'fill="{ic.lin([(0, "#8c5a33"), (1, "#5a331a")])}" stroke="#2e1809" '
+-           f'stroke-width="{12 if sm else 1.8:g}"/>')
+-    if not sm:
+-        cab = g(g(cab, grain(ic, 0.2, "0.008 0.09", 3, 121, "#2a1406", 0.5)),
+-                edge_light(ic, 4, 4, 0.8, 26, 50, 0.5))
+-    bezel = (f'<rect x="46" y="46" width="164" height="124" rx="16" fill="#151515" stroke="#0a0a0a" '
+-             f'stroke-width="{8 if sm else 1:g}"/>')
+-    scr = (f'<rect x="56" y="55" width="144" height="106" rx="18" '
+-           f'fill="{ic.rad([(0, "#2a6a3c"), (0.7, "#11301b"), (1, "#081a0e")], 0.5, 0.45, 0.65)}"/>')
+-    if not sm:
+-        txt = []
+-        rnd = random.Random(123)
+-        for i in range(6):
+-            y = 74 + 13 * i
+-            x = 70
+-            end = rnd.uniform(110, 180)
+-            while x < end:
+-                w = min(rnd.uniform(6, 18), end - x)
+-                txt.append(f'<rect x="{x:.1f}" y="{y - 2.5:g}" width="{w:.1f}" height="5"/>')
+-                x += w + 5
+-        scr += f'<g fill="#7dff9a" opacity=".85">{"".join(txt)}</g>'
+-        scr += ('<g stroke="#000" stroke-width="1" opacity=".18">'
+-                + "".join(f'<path d="M58,{y} H198"/>' for y in range(58, 160, 3)) + "</g>")
+-        scr += (f'<path d="M66,62 Q128,52 190,62 Q186,92 128,96 Q74,94 66,62 Z" '
+-                f'fill="{ic.lin([(0, "#fff", 0.32), (1, "#fff", 0)])}"/>')
+-        scr = g(scr, pressed(ic, 3, 3, "#000", 0.7),
+-                clip=ic.clip('<rect x="56" y="55" width="144" height="106" rx="18"/>'))
+-    else:
+-        scr += '<path d="M76,92 H170 M76,124 H150" stroke="#7dff9a" stroke-width="12"/>'
+-    knobs = ""
+-    for x in (66, 190):
+-        knobs += (f'<circle cx="{x}" cy="188" r="{14 if sm else 9}" '
+-                  f'fill="{ic.rad([(0, "#5a5a5a"), (1, "#1a1a1a")], 0.4, 0.35, 0.7)}" stroke="#0a0a0a" '
+-                  f'stroke-width="{6 if sm else 1:g}"/>')
+-        if not sm:
+-            knobs += f'<path d="M{x},181 V187" stroke="#e8e8e8" stroke-width="1.6" stroke-linecap="round"/>'
+-    plate = (f'<rect x="98" y="181" width="60" height="14" rx="2" fill="{ic.lin(BRASS, 0, 0, 0, 1)}" '
+-             f'stroke="#6b4c18" stroke-width="{6 if sm else 1:g}"/>')
+-    if not sm:
+-        plate = g(plate + '<rect x="108" y="186" width="40" height="3.2" rx="1.6" fill="#6b4c18" opacity=".7"/>',
+-                  edge_light(ic, 1.5, 2, 0.8, 22, 50, 0.6))
+-    feet = ('<rect x="48" y="206" width="26" height="10" rx="3" fill="#24130a"/>'
+-            '<rect x="182" y="206" width="26" height="10" rx="3" fill="#24130a"/>')
+-    place(ic, feet + cab + bezel + scr + knobs + plate, 128, 220, 102, 9, 0.32, (3, 4, 0.34))
+-
+-
+-def screw(ic, x, y, r=5.0):
+-    return (f'<circle cx="{x}" cy="{y}" r="{r}" fill="{ic.rad(STEEL, 0.35, 0.3, 0.8)}" stroke="#6d737b" '
+-            'stroke-width="1"/>'
+-            f'<path d="M{x - r * 0.55:g},{y} H{x + r * 0.55:g} M{x},{y - r * 0.55:g} V{y + r * 0.55:g}" '
+-            'stroke="#555b63" stroke-width="1.4"/>')
+-
+-
+-def p_drive(ic, system=False):
+-    """a drive in its aluminium case: the bulge over the platters, the
+-    screws, the maker's label"""
+-    sm = ic.small
+-    case = (f'<rect x="22" y="48" width="212" height="152" rx="12" fill="{ic.lin(STEEL, 0, 0, 1, 1)}" '
+-            f'stroke="#6f757d" stroke-width="{12 if sm else 1.6:g}"/>')
+-    edge = (f'<path d="M22,190 V202 Q22,214 34,214 H222 Q234,214 234,202 V190 Z" '
+-            f'fill="{ic.lin([(0, "#9aa1a9"), (1, "#5d636b")])}" stroke="#4d525a" '
+-            f'stroke-width="{10 if sm else 1.4:g}"/>')
+-    if not sm:
+-        case = g(g(case, grain(ic, 0.08, "0.003 0.7", 2, 131, "#3a4048", 0.9)),
+-                 edge_light(ic, 3, 3, 0.8, 26, 50, 0.5))
+-        edge += "".join(f'<rect x="{x}" y="200" width="{w}" height="7" rx="1" fill="#2b2f34"/>'
+-                        for x, w in ((150, 34), (190, 22)))
+-    dome = (f'<circle cx="88" cy="122" r="54" '
+-            f'fill="{ic.rad([(0, "#f2f4f6"), (0.8, "#c3c9d0"), (1, "#a2a9b1")], 0.4, 0.35, 0.7)}" '
+-            f'stroke="#8a9098" stroke-width="{8 if sm else 1.2:g}"/>')
+-    if not sm:
+-        dome = g(dome + "".join(f'<circle cx="88" cy="122" r="{rr}" fill="none" stroke="#fff" '
+-                                'stroke-width=".7" opacity=".25"/>' for rr in range(12, 54, 6)),
+-                 edge_light(ic, 5, 5, 0.9, 28, 52, 0.55))
+-        dome += screw(ic, 88, 122, 7)
+-    label = (f'<rect x="146" y="60" width="78" height="120" rx="4" '
+-             f'fill="{ic.lin([(0, "#fdfdfb"), (1, "#e9e7e0")])}" stroke="#b5b2a8" '
+-             f'stroke-width="{8 if sm else 1:g}"/>')
+-    band = "#a8783a" if system else "#3d6ea8"
+-    if not sm:
+-        rnd = random.Random(133)
+-        bars, x = [], 154
+-        while x < 214:
+-            w = rnd.choice((1.1, 1.1, 2, 3))
+-            bars.append(f'<rect x="{x:.1f}" y="156" width="{w:g}" height="14"/>')
+-            x += w + rnd.choice((1.1, 1.8, 2.4))
+-        label += (f'<rect x="146" y="60" width="78" height="14" rx="4" fill="{band}"/>'
+-                  '<rect x="146" y="70" width="78" height="4" fill="#fdfdfb"/>'
+-                  + typed(154, 214, 86, 6, 9, 3.2, "#55524a", 134)
+-                  + f'<g fill="#2b2a26">{"".join(bars)}</g>')
+-        if system:
+-            label += seal(ic, 210, 92, 9)
+-    else:
+-        label += f'<rect x="146" y="60" width="78" height="30" fill="{band}"/>'
+-    screws = "" if sm else "".join(screw(ic, x, y) for x, y in ((36, 62), (220, 62), (36, 176), (130, 176)))
+-    place(ic, edge + case + dome + label + screws, 128, 218, 108, 9, 0.3, (3, 4, 0.34))
+-
+-
+-def p_drive_system(ic):
+-    p_drive(ic, True)
+-
+-
+-def p_usb(ic):
+-    """a memory stick: a walnut body, a brass collar, its steel plug"""
+-    sm = ic.small
+-    body = (f'<rect x="-70" y="-30" width="128" height="60" rx="16" '
+-            f'fill="{ic.lin([(0, "#9a653b"), (0.5, "#7a4825"), (1, "#4f2b13")])}" stroke="#2e1809" '
+-            f'stroke-width="{12 if sm else 1.6:g}"/>')
+-    if not sm:
+-        body = g(g(body, grain(ic, 0.2, "0.01 0.12", 3, 141, "#2a1406", 0.5)),
+-                 edge_light(ic, 4, 4, 0.9, 28, 50, 0.55))
+-        body += '<circle cx="-52" cy="0" r="7" fill="#2a1609" stroke="#1a0c04" stroke-width="1.2"/>'
+-    collar = (f'<rect x="54" y="-26" width="14" height="52" rx="2" fill="{brass(ic, True)}" stroke="#6b4c18" '
+-              f'stroke-width="{8 if sm else 1.2:g}"/>')
+-    plug = (f'<rect x="66" y="-22" width="52" height="44" rx="2" fill="{ic.lin(STEEL)}" stroke="#5d636b" '
+-            f'stroke-width="{8 if sm else 1.4:g}"/>')
+-    if not sm:
+-        plug += ('<rect x="80" y="-14" width="10" height="9" fill="#2b2f34"/>'
+-                 '<rect x="98" y="-14" width="10" height="9" fill="#2b2f34"/>'
+-                 '<path d="M68,-19 H116" stroke="#fff" stroke-width="1.4" opacity=".8"/>')
+-        plug = g(plug, edge_light(ic, 2, 2, 0.8, 24, 50, 0.5))
+-    place(ic, g(body + collar + plug, tf="translate(124 130) rotate(-32)"), 128, 206, 92, 12, 0.3, (3, 4, 0.36))
+-
+-
+-def p_optical(ic):
+-    """a disc, the light breaking into colours across it"""
+-    sm = ic.small
+-    cx, cy, r = 128, 122, 104
+-    disc_d = (f"M{cx - r},{cy} A{r},{r} 0 1 0 {cx + r},{cy} A{r},{r} 0 1 0 {cx - r},{cy} Z "
+-              f"M{cx - 10},{cy} A10,10 0 1 1 {cx + 10},{cy} A10,10 0 1 1 {cx - 10},{cy} Z")
+-    s = (f'<path d="{disc_d}" fill-rule="evenodd" '
+-         f'fill="{ic.rad([(0, "#f5f7fa"), (0.7, "#d0d5dc"), (1, "#b2b8c1")])}" stroke="#8d949e" '
+-         f'stroke-width="{12 if sm else 1.6:g}"/>')
+-    clip = ic.clip(f'<path d="{disc_d}" clip-rule="evenodd"/>')
+-
+-    def wedge(a0, a1, fill, r0=38, r1=r - 2):
+-        p = [(cx + rr * math.cos(math.radians(a)), cy + rr * math.sin(math.radians(a)))
+-             for a, rr in ((a0, r1), (a1, r1), (a1, r0), (a0, r0))]
+-        return (f'<path d="M{p[0][0]:.1f},{p[0][1]:.1f} A{r1},{r1} 0 0 1 {p[1][0]:.1f},{p[1][1]:.1f} '
+-                f'L{p[2][0]:.1f},{p[2][1]:.1f} A{r0},{r0} 0 0 0 {p[3][0]:.1f},{p[3][1]:.1f} Z" fill="{fill}"/>')
+-    rain = [(0, "#ff5b5b", 0.0), (0.2, "#ffb347", 0.42), (0.4, "#f8f06a", 0.45), (0.6, "#6be38a", 0.45),
+-            (0.8, "#5aa8ff", 0.42), (1, "#b06bff", 0.0)]
+-    if not sm:
+-        colours = ""
+-        for a0 in (-80, 100):
+-            colours += wedge(a0, a0 + 46, ic.lin(rain, 0, 0, 1, 1))
+-            colours += wedge(a0 + 6, a0 + 34, ic.lin(rain[::-1], 1, 0, 0, 1))
+-        for a0 in (-30, 150):
+-            colours += wedge(a0, a0 + 22, ic.lin([(0, "#fff", 0), (0.5, "#fff", 0.6), (1, "#fff", 0)], 0, 0, 1, 0))
+-        colours = g(colours, clip=clip)
+-    else:
+-        colours = wedge(-70, -20, "#7fc4ff") + wedge(110, 160, "#ffd27f")
+-    ring = (f"M{cx - 36},{cy} A36,36 0 1 0 {cx + 36},{cy} A36,36 0 1 0 {cx - 36},{cy} Z "
+-            f"M{cx - 10},{cy} A10,10 0 1 1 {cx + 10},{cy} A10,10 0 1 1 {cx - 10},{cy} Z")
+-    hub = (f'<path d="{ring}" fill-rule="evenodd" fill="#dfe3e8" opacity=".6"/>'
+-           f'<circle cx="{cx}" cy="{cy}" r="36" fill="none" stroke="#9aa1ab" stroke-width="{6 if sm else 1:g}"/>')
+-    if not sm:
+-        hub += (f'<circle cx="{cx}" cy="{cy}" r="27" fill="none" stroke="#ffffff" stroke-width="2" opacity=".8"/>'
+-                f'<circle cx="{cx}" cy="{cy}" r="10" fill="none" stroke="#7d848e" stroke-width="1.2"/>')
+-    place(ic, s + colours + hub, 128, 230, 92, 9, 0.3, (3, 4, 0.32))
+-
+-
+-def p_floppy(ic):
+-    """a 3.5-inch diskette: its steel shutter, a label written on in ink"""
+-    sm = ic.small
+-    d = "M42,30 H200 L226,56 V214 Q226,226 214,226 H42 Q30,226 30,214 V42 Q30,30 42,30 Z"
+-    body = (f'<path d="{d}" fill="{ic.lin([(0, "#4a5464"), (1, "#262b33")])}" stroke="#15181d" '
+-            f'stroke-width="{12 if sm else 1.6:g}" stroke-linejoin="round"/>')
+-    if not sm:
+-        body = g(body, edge_light(ic, 4, 3, 0.8, 26, 50, 0.45))
+-        body += ('<rect x="62" y="31" width="132" height="74" fill="#1f242b" opacity=".55"/>'
+-                 '<path d="M44,40 L53,49 H44 Z" fill="#8c95a3" opacity=".7"/>')
+-    shutter = (f'<rect x="80" y="30" width="96" height="72" fill="{ic.lin(STEEL, 0, 0, 1, 0)}" stroke="#6f757d" '
+-               f'stroke-width="{8 if sm else 1.2:g}"/>'
+-               '<rect x="136" y="40" width="22" height="50" rx="2" fill="#2a221c"/>')
+-    if not sm:
+-        shutter = g(g(shutter, grain(ic, 0.08, "0.003 0.7", 2, 151, "#3a4048", 0.9)),
+-                    edge_light(ic, 2, 2, 0.8, 24, 50, 0.5))
+-    label = (f'<rect x="52" y="124" width="152" height="94" rx="4" '
+-             f'fill="{ic.lin([(0, "#fdfcf8"), (1, "#ebe7dc")])}" stroke="#b9b3a3" stroke-width="{8 if sm else 1:g}"/>')
+-    if not sm:
+-        label += ('<rect x="52" y="124" width="152" height="12" rx="4" fill="#c8553f" opacity=".85"/>'
+-                  '<rect x="52" y="132" width="152" height="4" fill="#fdfcf8"/>'
+-                  '<path d="M60,168 H196 M60,192 H196 M60,208 H196" stroke="#9fb3d6" stroke-width=".8" opacity=".8"/>'
+-                  '<path d="M64,160 c6,-8 12,-8 14,-2 s4,8 10,2 s8,-10 12,-4 s6,6 12,0 s8,-6 14,-1 '
+-                  'M64,184 c5,-6 10,-6 12,-1 s5,6 10,1 s8,-8 12,-2" fill="none" stroke="#1f3f8a" '
+-                  'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>')
+-        label = g(label, grain(ic, 0.04, "0.9", 2, 152, "#4a3a20"))
+-    holes = ('<rect x="37" y="204" width="11" height="12" rx="1.5" fill="#0d0f12"/>'
+-             '<rect x="208" y="204" width="11" height="12" rx="1.5" fill="#0d0f12"/>')
+-    place(ic, body + shutter + label + holes, 128, 230, 104, 9, 0.32, (3, 4, 0.34))
+-
+-
+-def p_flash(ic):
+-    """a memory card: the clipped corner, its label, the little lock"""
+-    sm = ic.small
+-    d = "M70,30 H168 L196,58 V214 Q196,226 184,226 H70 Q58,226 58,214 V42 Q58,30 70,30 Z"
+-    card = (f'<path d="{d}" fill="{ic.lin([(0, "#3a404b"), (1, "#1a1d23")])}" stroke="#0f1115" '
+-            f'stroke-width="{12 if sm else 1.6:g}" stroke-linejoin="round"/>')
+-    if not sm:
+-        card = g(card, edge_light(ic, 4, 3, 0.8, 26, 50, 0.45))
+-        card += '<path d="M76,40 H150 M76,47 H150 M76,54 H150" stroke="#5d6571" stroke-width="2.2" opacity=".85"/>'
+-    label = f'<rect x="70" y="72" width="114" height="140" rx="6" fill="{ic.lin([(0, "#3a7cc0"), (1, "#173f6e")])}"/>'
+-    label += f'<rect x="70" y="150" width="114" height="22" fill="{ic.lin(BRASS, 0, 0, 0, 1)}"/>'
+-    if not sm:
+-        label += ('<rect x="84" y="90" width="58" height="16" rx="3" fill="#ffffff" opacity=".92"/>'
+-                  '<rect x="84" y="114" width="80" height="6" rx="3" fill="#ffffff" opacity=".6"/>'
+-                  '<rect x="84" y="126" width="52" height="6" rx="3" fill="#ffffff" opacity=".45"/>'
+-                  '<rect x="84" y="186" width="44" height="7" rx="3.5" fill="#ffffff" opacity=".6"/>'
+-                  f'<rect x="70" y="72" width="114" height="140" rx="6" '
+-                  f'fill="{ic.lin([(0, "#fff", 0.32), (0.4, "#fff", 0.04), (0.45, "#fff", 0)], 0, 0, 1, 1)}"/>')
+-    lock = (f'<rect x="50" y="94" width="12" height="28" rx="2" fill="{ic.lin([(0, "#f4f4f2"), (1, "#c9c9c4")])}" '
+-            f'stroke="#55595f" stroke-width="{6 if sm else 1:g}"/>')
+-    place(ic, card + label + lock, 128, 230, 76, 9, 0.32, (3, 4, 0.34))
+-
+-
+-PLACES = {
+-    "user-home": p_home,
+-    "user-desktop": p_desktop,
+-    "user-trash": p_trash,
+-    "user-trash-full": p_trash_full,
+-    "network-workgroup": p_globe,
+-    "network-server": p_globe,
+-}
+-DEVICES = {
+-    "computer": p_computer,
+-    "drive-harddisk": p_drive,
+-    "drive-harddisk-system": p_drive_system,
+-    "drive-removable-media": p_usb,
+-    "drive-removable-media-usb": p_usb,
+-    "media-removable": p_usb,
+-    "media-optical": p_optical,
+-    "drive-optical": p_optical,
+-    "media-floppy": p_floppy,
+-    "media-flash": p_flash,
+-}
+-# what GIO asks for by a more particular name, with no general one after it
+-# that the theme has: a disc image, a Windows program
+-MORE_MIMES = {
+-    "application-x-cd-image": p_optical,
+-    "application-x-ms-dos-executable": m_exec,
+-}
+-
+-
+-def write(sub, name, draw):
+-    for small, top in ((False, "scalable"), (True, "16x16")):
+-        ic = Icon(small)
+-        draw(ic)
+-        d = os.path.join(OUT, top, sub)
+-        os.makedirs(d, exist_ok=True)
+-        with open(os.path.join(d, name + ".svg"), "w", encoding="utf-8") as f:
+-            f.write(ic.svg())
+-
+-
+-INDEX = """[Icon Theme]
+-Name=DEsk
+-Comment=Manila folders, papers, brass and walnut: the icons of the DEsk desk
+-Inherits=Adwaita,AdwaitaLegacy,hicolor
+-Example=folder
+-Directories=16x16/places,16x16/mimetypes,16x16/devices,scalable/places,scalable/mimetypes,scalable/devices
+-
+-[16x16/places]
+-Context=Places
+-Size=16
+-MinSize=8
+-MaxSize=31
+-Type=Scalable
+-
+-[16x16/mimetypes]
+-Context=MimeTypes
+-Size=16
+-MinSize=8
+-MaxSize=31
+-Type=Scalable
+-
+-[16x16/devices]
+-Context=Devices
+-Size=16
+-MinSize=8
+-MaxSize=31
+-Type=Scalable
+-
+-[scalable/places]
+-Context=Places
+-Size=64
+-MinSize=32
+-MaxSize=512
+-Type=Scalable
+-
+-[scalable/mimetypes]
+-Context=MimeTypes
+-Size=64
+-MinSize=32
+-MaxSize=512
+-Type=Scalable
+-
+-[scalable/devices]
+-Context=Devices
+-Size=64
+-MinSize=32
+-MaxSize=512
+-Type=Scalable
+-"""
+-
+-
+-def main():
+-    if os.path.isdir(OUT):
+-        shutil.rmtree(OUT)
+-    os.makedirs(OUT)
+-    n = 0
+-    for name, em in FOLDERS.items():
+-        write("places", name, lambda ic, em=em: folder(ic, em))
+-        n += 1
+-    # open, and as one is while something is dragged over it
+-    for name in ("folder-open", "folder-drag-accept"):
+-        write("places", name, lambda ic: folder(ic, None, open_=True))
+-        n += 1
+-    for name, draw in PLACES.items():
+-        write("places", name, draw)
+-        n += 1
+-    for name, draw in DEVICES.items():
+-        write("devices", name, draw)
+-        n += 1
+-    for name, draw in list(MIMES.items()) + list(MORE_MIMES.items()):
+-        write("mimetypes", name, draw)
+-        n += 1
+-    with open(os.path.join(OUT, "index.theme"), "w", encoding="utf-8") as f:
+-        f.write(INDEX)
+-    print("wrote %d icons, twice each, to %s" % (n, OUT))
+-
+-
+-if __name__ == "__main__":
+-    main()
+diff --git a/tools/checkwords/checkwords.go b/tools/checkwords/checkwords.go
+new file mode 100644
+index 0000000..b67cda2
+--- /dev/null
++++ b/tools/checkwords/checkwords.go
+@@ -0,0 +1,257 @@
++// Package checkwords reads the desk's word tables as C does and says, for each row
++// that is wrong, what is wrong with it.
++//
++// src/i18n.c and src/index.c keep every word the desk prints in a table with a
++// column for each language (include/i18n.h, enum desk_lang): the English, which
++// is the key, then the same in each language, or NULL where there is none yet.
++// A translation that is printed with printf must take what the English takes,
++// in the same order -- %d where %d, %s where %s -- or it reads the wrong thing
++// off the stack. A row is wrong when it has
++//
++//   - not one column for each language
++//   - no English, or a key that is in the table twice
++//   - a translation whose printf conversions are not the English one's
++//   - a translation with a control character in it other than a new line
++//
++// It also lists, as information only, the TR("...") and W("...") keys the
++// sources print that have no row (they are printed in English, which may be
++// meant). This is the Go port of what was scripts/check-words.py.
++package checkwords
++
++import (
++	"fmt"
++	"os"
++	"path/filepath"
++	"regexp"
++	"sort"
++	"strconv"
++	"strings"
++)
++
++// Langs are the columns, in the order of enum desk_lang.
++var Langs = []string{"en", "ja", "zh", "ko", "es", "fr", "de"}
++
++var (
++	fmtRe   = regexp.MustCompile(`%[-+ #0]*\d*(?:\.\d+)?[hlLqjzt]*[diouxXeEfgGcsp%]`)
++	tokenRe = regexp.MustCompile(`\A(?:"((?:[^"\\]|\\.)*)"|(?s:(/\*.*?\*/))|([{},])|(NULL)|(\s+))`)
++	startRe = regexp.MustCompile(`static const char \*const WORDS\[\]\[DESK_LANG_COUNT\] = \{\n`)
++	usedRe  = regexp.MustCompile(`\b(?:TR|W)\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)\)`)
++	partRe  = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
++	letter  = regexp.MustCompile(`[A-Za-z]`)
++)
++
++// Row is one row of a table: the line it starts on and its columns (nil: NULL).
++type Row struct {
++	Line int
++	Cols []*string
++}
++
++// unescape turns the body of a C string literal into the string C makes of it.
++func unescape(body string) (string, error) {
++	var out []byte
++	for i := 0; i < len(body); i++ {
++		c := body[i]
++		if c != '\\' {
++			out = append(out, c)
++			continue
++		}
++		if i+1 >= len(body) {
++			return "", fmt.Errorf("a backslash at the end of %q", body)
++		}
++		n := body[i+1]
++		if n == 'x' {
++			j := i + 2
++			for j < len(body) && strings.IndexByte("0123456789abcdefABCDEF", body[j]) >= 0 {
++				j++
++			}
++			v, err := strconv.ParseUint(body[i+2:j], 16, 8)
++			if err != nil {
++				return "", fmt.Errorf("bad \\x escape in %q", body)
++			}
++			out = append(out, byte(v))
++			i = j - 1
++			continue
++		}
++		e, ok := map[byte]byte{'n': '\n', 't': '\t', '"': '"', '\\': '\\', '\'': '\''}[n]
++		if !ok {
++			return "", fmt.Errorf("unknown escape \\%c in %q", n, body)
++		}
++		out = append(out, e)
++		i++
++	}
++	return string(out), nil
++}
++
++// Table returns the rows of the WORDS table in the C source src (named name).
++func Table(name, src string) ([]Row, error) {
++	m := startRe.FindStringIndex(src)
++	if m == nil {
++		return nil, fmt.Errorf("%s: no WORDS table", name)
++	}
++	end := strings.Index(src[m[1]:], "\n};\n")
++	if end < 0 {
++		return nil, fmt.Errorf("%s: the WORDS table does not end", name)
++	}
++	body := src[m[1] : m[1]+end]
++	base := strings.Count(src[:m[1]], "\n") + 1
++	var (
++		rows    []Row
++		cur     []*string
++		inRow   bool
++		lit     *string
++		rowLine int
++	)
++	for pos := 0; pos < len(body); {
++		t := tokenRe.FindStringSubmatchIndex(body[pos:])
++		if t == nil {
++			return nil, fmt.Errorf("%s: cannot read the table near line %d", name,
++				base+strings.Count(body[:pos], "\n"))
++		}
++		grp := func(k int) (string, bool) {
++			if t[2*k] < 0 {
++				return "", false
++			}
++			return body[pos+t[2*k] : pos+t[2*k+1]], true
++		}
++		if s, ok := grp(1); ok {
++			u, err := unescape(s)
++			if err != nil {
++				return nil, fmt.Errorf("%s: %v", name, err)
++			}
++			if lit == nil {
++				lit = new(string)
++			}
++			*lit += u
++		} else if _, ok := grp(4); ok {
++			cur = append(cur, nil)
++		} else if p, ok := grp(3); ok {
++			switch p {
++			case "{":
++				cur, inRow = nil, true
++				rowLine = base + strings.Count(body[:pos], "\n")
++			case ",", "}":
++				if lit != nil {
++					cur = append(cur, lit)
++					lit = nil
++				}
++				if p == "}" && inRow {
++					rows = append(rows, Row{rowLine, cur})
++					cur, inRow = nil, false
++				}
++			}
++		}
++		pos += t[1]
++	}
++	return rows, nil
++}
++
++func conversions(s string) (plain []string, percents int) {
++	for _, f := range fmtRe.FindAllString(s, -1) {
++		if f == "%%" {
++			percents++
++		} else {
++			plain = append(plain, f)
++		}
++	}
++	return plain, percents
++}
++
++// Check checks the rows of one table (name is its file, for the messages) and
++// returns what is wrong, one line each, and the keys it holds.
++func Check(name string, rows []Row) (bad []string, keys map[string]bool) {
++	keys = map[string]bool{}
++	seen := map[string]int{}
++	for _, r := range rows {
++		where := fmt.Sprintf("%s:%d", name, r.Line)
++		if len(r.Cols) != len(Langs) {
++			bad = append(bad, fmt.Sprintf("%s: %d columns, not %d", where, len(r.Cols), len(Langs)))
++			continue
++		}
++		if r.Cols[0] == nil {
++			bad = append(bad, where+": no English")
++			continue
++		}
++		key := *r.Cols[0]
++		if l, ok := seen[key]; ok {
++			bad = append(bad, fmt.Sprintf("%s: %q is in the table already (line %d)", where, key, l))
++		}
++		seen[key] = r.Line
++		keys[key] = true
++		english := key
++		if i := strings.Index(key, "|"); i >= 0 {
++			english = key[i+1:]
++		}
++		want, wantPct := conversions(english)
++		for i, text := range r.Cols[1:] {
++			if text == nil {
++				continue
++			}
++			got, gotPct := conversions(*text)
++			if strings.Join(got, " ") != strings.Join(want, " ") || gotPct != wantPct {
++				bad = append(bad, fmt.Sprintf("%s: %s takes %v, the English %v: %q",
++					where, Langs[i+1], got, want, key))
++			}
++			for _, ch := range *text {
++				if ch < 0x20 && ch != '\n' {
++					bad = append(bad, fmt.Sprintf("%s: %s has a control character in it: %q",
++						where, Langs[i+1], key))
++					break
++				}
++			}
++		}
++	}
++	return bad, keys
++}
++
++// Tree checks src/i18n.c and src/index.c under root. It returns what is wrong,
++// and (information only) the printed keys that have no row.
++func Tree(root string) (bad, missing []string, err error) {
++	keys := map[string]bool{}
++	for _, name := range []string{"src/i18n.c", "src/index.c"} {
++		b, err := os.ReadFile(filepath.Join(root, name))
++		if err != nil {
++			return nil, nil, err
++		}
++		rows, err := Table(name, string(b))
++		if err != nil {
++			return nil, nil, err
++		}
++		if len(rows) == 0 {
++			return nil, nil, fmt.Errorf("%s: the WORDS table has no rows", name)
++		}
++		wrong, k := Check(name, rows)
++		bad = append(bad, wrong...)
++		for key := range k {
++			keys[key] = true
++		}
++	}
++	srcs, err := filepath.Glob(filepath.Join(root, "src", "*.c"))
++	if err != nil {
++		return nil, nil, err
++	}
++	used := map[string]bool{}
++	for _, p := range srcs {
++		b, err := os.ReadFile(p)
++		if err != nil {
++			return nil, nil, err
++		}
++		for _, m := range usedRe.FindAllStringSubmatch(string(b), -1) {
++			var k strings.Builder
++			for _, part := range partRe.FindAllStringSubmatch(m[1], -1) {
++				u, err := unescape(part[1])
++				if err != nil {
++					return nil, nil, fmt.Errorf("%s: %v", p, err)
++				}
++				k.WriteString(u)
++			}
++			used[k.String()] = true
++		}
++	}
++	for k := range used {
++		if !keys[k] && letter.MatchString(k) {
++			missing = append(missing, k)
++		}
++	}
++	sort.Strings(missing)
++	return bad, missing, nil
++}
+diff --git a/tools/checkwords/checkwords_test.go b/tools/checkwords/checkwords_test.go
+new file mode 100644
+index 0000000..a2e1726
+--- /dev/null
++++ b/tools/checkwords/checkwords_test.go
+@@ -0,0 +1,67 @@
++package checkwords
++
++import (
++	"strings"
++	"testing"
++)
++
++// TestWordTables is what `meson test` ran: the tables in this tree are right.
++func TestWordTables(t *testing.T) {
++	bad, missing, err := Tree("../..")
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, b := range bad {
++		t.Error(b)
++	}
++	t.Logf("%d printed keys with no row (shown in English)", len(missing))
++	for _, k := range missing {
++		t.Logf("  %q", k)
++	}
++}
++
++const fixture = `/* words */
++static const char *const WORDS[][DESK_LANG_COUNT] = {
++	{ "Open", "開く", NULL, NULL, "Abrir", "Ouvrir", "Öffnen" },
++	{ "%d letters", "%d 通", NULL, NULL, "%d cartas", "%d lettres", "%d Briefe" },
++	{ "verb|Save %s to %s", NULL, NULL, NULL, NULL, "Enregistrer %s dans %s", NULL },
++	{ "100%% done", NULL, NULL, NULL, NULL, NULL, "100\x25% fertig" },
++};
++`
++
++// TestCheckCatchesEachFault is the mutation proof: a right table passes, and
++// each fault the check exists for, put into it, is reported.
++func TestCheckCatchesEachFault(t *testing.T) {
++	check := func(src string) []string {
++		t.Helper()
++		rows, err := Table("fixture.c", src)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if len(rows) != 4 {
++			t.Fatalf("read %d rows, want 4", len(rows))
++		}
++		bad, _ := Check("fixture.c", rows)
++		return bad
++	}
++	if bad := check(fixture); len(bad) != 0 {
++		t.Fatalf("a right table is reported wrong: %v", bad)
++	}
++	for _, c := range []struct{ name, from, to, says string }{
++		{"a column short", `"Öffnen" }`, `}`, "6 columns, not 7"},
++		{"a key twice", `"%d letters"`, `"Open"`, "is in the table already"},
++		{"a conversion changed", `"%d Briefe"`, `"%s Briefe"`, "de takes [%s], the English [%d]"},
++		{"conversions reordered", `"Enregistrer %s dans %s"`, `"Enregistrer %d dans %s"`, "fr takes"},
++		{"a %% lost", `"100\x25% fertig"`, `"100 fertig"`, "de takes"},
++		{"a control character", `"Abrir"`, `"Ab\trir"`, "es has a control character"},
++		{"no English", `{ "Open",`, `{ NULL,`, "no English"},
++	} {
++		if !strings.Contains(fixture, c.from) {
++			t.Fatalf("%s: the fixture has no %q", c.name, c.from)
++		}
++		bad := check(strings.Replace(fixture, c.from, c.to, 1))
++		if !strings.Contains(strings.Join(bad, "\n"), c.says) {
++			t.Errorf("%s: not reported (want %q), got %v", c.name, c.says, bad)
++		}
++	}
++}
+diff --git a/tools/glsl2c.c b/tools/glsl2c.c
+new file mode 100644
+index 0000000..15ca8d1
+--- /dev/null
++++ b/tools/glsl2c.c
+@@ -0,0 +1,71 @@
++/* Wrap a GLSL file as a C string, so the shader ships inside the binary.
++ *
++ *     glsl2c NAME in.glsl out.h
++ *
++ * Built and run by the build itself (meson.build, native: true), so the build
++ * needs nothing beyond the C compiler it already has. The shader is kept as a
++ * .glsl file rather than as a C string because it is two thousand lines of
++ * code that a person has to read against draw.c, and quotes on every line do
++ * not help with that. */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++int main(int argc, char **argv)
++{
++	if (argc != 4) {
++		fprintf(stderr, "usage: glsl2c NAME in.glsl out.h\n");
++		return 2;
++	}
++	FILE *in = fopen(argv[2], "rb");
++	if (!in) {
++		perror(argv[2]);
++		return 1;
++	}
++	FILE *out = fopen(argv[3], "wb");
++	if (!out) {
++		perror(argv[3]);
++		return 1;
++	}
++	const char *base = strrchr(argv[2], '/');
++	base = base ? base + 1 : argv[2];
++	fprintf(out, "/* generated from %s by glsl2c -- edit that, not this */\n", base);
++	fprintf(out, "static const char %s[] =\n", argv[1]);
++	int c, open = 0;
++	while ((c = fgetc(in)) != EOF) {
++		if (c > 0x7f) {
++			fprintf(stderr, "%s: not ASCII (byte 0x%02x)\n", argv[2], c);
++			return 1;
++		}
++		if (!open) {
++			fputs("\t\"", out);
++			open = 1;
++		}
++		if (c == '\n') {
++			fputs("\\n\"\n", out);
++			open = 0;
++		} else if (c == '\r') {
++			/* a CRLF line ends at the \n; the \r is not part of it */
++		} else if (c == '\\' || c == '"') {
++			fputc('\\', out);
++			fputc(c, out);
++		} else if (c == '?') {
++			/* -std=c11 still reads trigraphs, and a "??/" in a comment
++			 * would eat the next character */
++			fputs("\\?", out);
++		} else {
++			fputc(c, out);
++		}
++	}
++	if (open) {
++		fputs("\\n\"\n", out);
++	}
++	fputs("\t;\n", out);
++	if (ferror(in) || fclose(out) != 0) {
++		fprintf(stderr, "glsl2c: could not write %s\n", argv[3]);
++		return 1;
++	}
++	fclose(in);
++	return 0;
++}
+diff --git a/tools/go.mod b/tools/go.mod
+new file mode 100644
+index 0000000..976a71d
+--- /dev/null
++++ b/tools/go.mod
+@@ -0,0 +1,3 @@
++module github.com/org-runink/desk/tools
++
++go 1.22
+diff --git a/tools/room-key.c b/tools/room-key.c
+new file mode 100644
+index 0000000..0bc5a0a
+--- /dev/null
++++ b/tools/room-key.c
+@@ -0,0 +1,56 @@
++/* What the room looks like, as numbers, for the cache of traced rooms.
++ *
++ *     room-key out.h room.glsl gpu.c
++ *
++ * A traced room is kept on disk from one login to the next, and is traced
++ * again only when it would come out different. Every change to the scene has
++ * to reach the shader -- room.glsl is the C tracer's double, and checked
++ * against it -- so a hash of the shader stands for the room; a change on the
++ * C side alone (a camera, the resolve, the sidecar) bumps ROOM_LOOK in
++ * draw.c. Whether this machine's GPU traces it right is asked again when
++ * gpu.c changes as well. Built and run by the build itself (native: true). */
++
++#include <stdint.h>
++#include <stdio.h>
++
++/* 32-bit FNV-1a over the file, starting from h */
++static int fnv(const char *path, uint32_t *h)
++{
++	FILE *f = fopen(path, "rb");
++	if (!f) {
++		perror(path);
++		return -1;
++	}
++	int c;
++	while ((c = fgetc(f)) != EOF) {
++		*h = (*h ^ (uint32_t)c) * 16777619u;
++	}
++	int bad = ferror(f);
++	fclose(f);
++	return bad ? -1 : 0;
++}
++
++int main(int argc, char **argv)
++{
++	if (argc != 4) {
++		fprintf(stderr, "usage: room-key out.h room.glsl gpu.c\n");
++		return 2;
++	}
++	uint32_t room = 2166136261u;
++	if (fnv(argv[2], &room) < 0) {
++		return 1;
++	}
++	uint32_t both = room;
++	if (fnv(argv[3], &both) < 0) {
++		return 1;
++	}
++	FILE *out = fopen(argv[1], "w");
++	if (!out) {
++		perror(argv[1]);
++		return 1;
++	}
++	fprintf(out, "/* generated by room-key: a hash of room.glsl, and of gpu.c after it */\n");
++	fprintf(out, "#define DESK_ROOM_GLSL_KEY 0x%08xu\n", (unsigned)room);
++	fprintf(out, "#define DESK_ROOM_GPU_KEY 0x%08xu\n", (unsigned)both);
++	return fclose(out) != 0;
++}
+-- 
+2.56.0
+

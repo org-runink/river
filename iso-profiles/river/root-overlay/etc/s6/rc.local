@@ -8,7 +8,7 @@
 # downstream distribution that needs them ships its own rc.local in its own profile
 # (docs/BUILD.md, "Downstream distributions").
 #
-# The desktop itself is NOT started here. SDDM is an s6 service declared in profile.yaml's
+# The desktop itself is NOT started here. greetd is an s6 service declared in profile.yaml's
 # live-session.services and enabled at install by 80-enable-s6.sh — starting a display
 # manager from rc.local would race the one s6 already supervises. The host firewall
 # (runink-fw), the ZFS datasets (zfs-mount) and the shadow-grade modes (river-perms) are s6
@@ -18,7 +18,7 @@ set -eu
 log() { echo "rc.local: $*"; }
 
 # 0. Boot splash fallback ----------------------------------------------------
-# The plymouth-quit oneshot (a dependency of sddm-srv) normally ends the splash. If SDDM
+# The plymouth-quit oneshot (a dependency of greetd) normally ends the splash. If greetd
 # is disabled or failed, nothing would, and the splash would sit over the text console.
 # This runs BEFORE the live guard below: a live medium whose desktop fails needs the splash
 # gone just as much as an installed machine does — more, because the console underneath is
@@ -46,7 +46,7 @@ log() { echo "rc.local: $*"; }
 #
 # WHAT. A background watcher: once a DRM card exists and seat0 is still not graphical, ask
 # udev to re-classify the DRM devices (at most five times). If the seat turned graphical that
-# way and no compositor has appeared 15s later, restart sddm-srv once — SDDM may already have
+# way and no compositor has appeared 15s later, restart the display manager once — it may already have
 # given up on the seat. It never blocks boot, does nothing on a machine that comes up
 # graphical on its own, and records what it did in /run/river-gpu-seat.log.
 #

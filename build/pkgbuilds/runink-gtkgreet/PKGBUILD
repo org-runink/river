@@ -1,0 +1,31 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-gtkgreet — gtkgreet, the graphical greetd greeter: user name and password, and which
+# session (DEsk). It runs fullscreen inside runink-cage, so it is built without layer-shell.
+#
+# Not in Artix's repositories. GTK 3 is already in the image (Firefox needs it). Built with muon
+# (builder/Containerfile), since meson is Python and the build carries none; -Dwerror=false
+# because upstream's werror=true turns a newer GTK's deprecation warnings into a failed build.
+pkgname=runink-gtkgreet
+pkgver=0.8
+pkgrel=1
+pkgdesc="gtkgreet: a GTK greeter for greetd, for the login screen"
+arch=('x86_64')
+url="https://git.sr.ht/~kennylevinsen/gtkgreet"
+license=('GPL3')
+depends=('gtk3' 'json-c' 'greetd')
+provides=('gtkgreet')
+conflicts=('gtkgreet')
+source=("gtkgreet-${pkgver}.tar.gz::https://git.sr.ht/~kennylevinsen/gtkgreet/archive/${pkgver}.tar.gz")
+sha256sums=('e5c70219da191a60e2e009412603e05c36cee15bbbf7657dbbeaa1d21a692873')
+
+build() {
+	cd "gtkgreet-${pkgver}"
+	muon setup -Dprefix=/usr -Dbuildtype=release -Dwerror=false -Dlayershell=disabled \
+		-Dman-pages=disabled build
+	muon -C build samu
+}
+
+package() {
+	cd "gtkgreet-${pkgver}"
+	DESTDIR="$pkgdir" muon -C build install
+}

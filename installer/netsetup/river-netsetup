@@ -418,7 +418,7 @@ interactive() {
 	intro="Set up the network FIRST. Every outcome is fine: online, LAN only, or offline. The install copies this live system and needs no network; the network is for remote help, guide bundles and your platform."
 	[ "$MODE" = desktop ] && intro="$intro
 
-The network icon in the panel (the Plasma network applet) does the same graphically; close this window if you prefer it."
+The network icon in the tray (the network applet) does the same graphically; close this window if you prefer it."
 	while :; do
 		reset_net
 		wait_settle

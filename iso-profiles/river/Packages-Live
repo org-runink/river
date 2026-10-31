@@ -27,8 +27,8 @@ runink-grub-live
 ## window in it. So does this now. weston's kiosk-shell exists for exactly this -- one
 ## application, fullscreen, no desktop furniture -- and weston is the REFERENCE compositor, so
 ## it is the one most likely to come up on odd hardware. It renders through pixman when there
-## is no GPU, which is the simpledrm case. Inside it runs the SAME river-installer-desktop the
-## Plasma session runs, so there is one browser, one launcher and one definition of what the
+## is no GPU, which is the simpledrm case. Inside it runs river-installer-desktop, the one
+## launcher, so there is one browser and one definition of what the
 ## installer looks like.
 ##
 ## NOT cage: cage is not in Artix's repos. The ISO installs from system/world/galaxy, and cage
@@ -39,7 +39,7 @@ runink-grub-live
 ## firefox is already in Packages-Root, so this swap ADDS a small compositor and REMOVES a
 ## whole second browser engine.
 ##
-## It is LIVE-ONLY on purpose. An installed workstation has Plasma and a browser and no use for
+## It is LIVE-ONLY on purpose. An installed workstation has DEsk and a browser and no use for
 ## the kiosk; 20-clone-rootfs removes this layer from the installed machine, so the installed
 ## footprint is unchanged. The cost is paid only on the medium that needs a graphical installer
 ## without a desktop.

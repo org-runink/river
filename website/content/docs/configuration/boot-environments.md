@@ -60,7 +60,7 @@ A rollback returns the BE to the snapshot and discards every change made to it s
 from the live USB stick, so the system you roll back is not the one running:
 
 ```bash
-# in the live session (Konsole)
+# in the live session (a terminal)
 sudo zpool import -N zriver
 sudo zfs load-key zriver                            # your passphrase or recovery key
 sudo zfs rollback -r zriver/ROOT/runink@pre-update

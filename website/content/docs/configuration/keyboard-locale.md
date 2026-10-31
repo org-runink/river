@@ -8,8 +8,8 @@ SPDX-License-Identifier: MIT
 -->
 
 The installer applies the language and keyboard layout you picked on its first screen to the
-installed system (install step `32-locale-keyboard`), for the console, the SDDM login screen
-and Plasma, so the password you typed during the install works from the first boot.
+installed system (install step `32-locale-keyboard`), for the console, the login screen
+and DEsk, so the password you typed during the install works from the first boot.
 
 The installer offers English (US), Spanish (Spain), French (France) and Portuguese (Brazil)
 as system languages, and a list of common keyboard layouts.
@@ -20,12 +20,12 @@ as system languages, and a list of common keyboard layouts.
 |---|---|
 | `/etc/locale.conf` | the system language (`LANG=`) |
 | `/etc/vconsole.conf` | the console keymap (`KEYMAP=`), also used when you type the disk passphrase |
-| `/etc/X11/xorg.conf.d/00-keyboard.conf` | the keyboard layout for the login screen |
-| `/etc/xdg/kxkbrc` | the default layout for Plasma sessions |
+| `/etc/X11/xorg.conf.d/00-keyboard.conf` | the system keyboard layout, which DEsk (its `system` setting) and X11 programs read |
+| `/etc/greetd/config.toml` | the login screen's layout (`XKB_DEFAULT_LAYOUT` on its `command` line) |
 
 ## Change the keyboard layout
 
-- **For your Plasma session:** System Settings → Keyboard → Layouts. This is per user.
+- **For your DEsk session:** Shell Settings (the `keyboard_layout` row), or `keyboard_layout` in `~/.config/desk/shell.conf`. This is per user.
 - **For the console and the disk-unlock prompt:** edit `KEYMAP=` in `/etc/vconsole.conf`
   (for example `KEYMAP=fr-latin9`), then rebuild the initramfs so the passphrase prompt uses
   it:

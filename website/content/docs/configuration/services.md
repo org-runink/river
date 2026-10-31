@@ -35,15 +35,15 @@ On a fresh workstation `s6-rc -a list` includes, among others:
 | `river-perms` | re-asserts the modes of secret files |
 | `NetworkManager-srv` | the network |
 | `sshd-srv` | the SSH server (the firewall keeps port 22 closed until you open it) |
-| `sddm-srv` | the login screen |
+| `greetd` | the login screen (greetd, from `runink-greetd-s6`) |
 | `bluetoothd-srv`, `cupsd` | Bluetooth and printing |
 | `rc-local` | runs `/etc/s6/rc.local` at the end of boot |
 
 ## Start and stop a service now
 
 ```bash
-sudo s6-rc -d change sddm-srv    # bring a service (and everything that depends on it) down
-sudo s6-rc -u change sddm-srv    # bring it (and everything it depends on) up again
+sudo s6-rc -d change greetd      # bring a service (and everything that depends on it) down
+sudo s6-rc -u change greetd      # bring it (and everything it depends on) up again
 ```
 
 `-d` and `-u` follow the dependency graph: stopping `runink-fw` would also stop
@@ -69,9 +69,9 @@ A service is a directory, not a unit file. Runink River's own services live in t
   that `exec`s the daemon in the foreground.
 - **`dependencies.d/`** holds one empty file per service that must be up first.
 
-A dependency can be added to a packaged service the same way. Runink River does that to order
-the desktop after its filesystems: `sddm-srv/dependencies.d/` contains `zfs-mount` and
-`plymouth-quit`, and `NetworkManager-srv` and `sshd-srv` each get a `runink-fw` file. The
+A dependency can be added to a packaged service the same way. Runink River orders the network
+after its firewall: `NetworkManager-srv` and `sshd-srv` each get a `runink-fw` file (the login
+screen's own package orders it after `zfs-mount`, `plymouth-quit` and `elogind`). The
 sources are under {{< repo "iso-profiles/river/root-overlay/etc/s6/" >}}.
 
 Two rules the project's own services follow, and yours should too:

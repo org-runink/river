@@ -94,7 +94,7 @@ live medium and run `sudo zpool import` to see the pool's state and which device
 missing ([rescue below](#rescue-from-the-live-medium)). The boot entry already passes
 `zfs_force=1`, so a pool that was not exported cleanly after a crash still imports.
 
-**The desktop login screen appears, but signing in returns to it, or Plasma does not
+**The desktop login screen appears, but signing in returns to it, or DEsk does not
 start.** Usually `/home` is not mounted. The `zfs-mount` service reports
 `zfs-mount: some ZFS datasets did not mount (zfs mount -a failed)` and lets the boot continue.
 From a text console (Ctrl+Alt+F2 or F3):
@@ -179,7 +179,7 @@ sudo river-perms --check     # exit status 1 if anything has drifted
 
 ## Rescue from the live medium
 
-When the installed system does not boot, start the Runink River USB stick and open Konsole in
+When the installed system does not boot, start the Runink River USB stick and open a terminal in
 the live session (the live user has `sudo` without a password). This is the same sequence the
 installer uses:
 

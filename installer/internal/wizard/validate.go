@@ -23,7 +23,7 @@ var (
 var reservedUsers = map[string]bool{
 	"root": true, "bin": true, "daemon": true, "mail": true, "ftp": true, "http": true,
 	"nobody": true, "dbus": true, "polkitd": true, "sshd": true, "git": true, "uuidd": true,
-	"river-kiosk": true, "river-pair": true, "sddm": true, "avahi": true, "rtkit": true,
+	"river-kiosk": true, "river-pair": true, "sddm": true, "greeter": true, "avahi": true, "rtkit": true,
 	"systemd-network": true, "elogind": true, "tss": true, "nm-openconnect": true,
 }
 
