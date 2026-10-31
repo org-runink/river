@@ -87,16 +87,16 @@ gpu_seat_watch() {
 	echo "t=$((n * 2))s seat0 CanGraphical=$(can) after $tries re-trigger(s)" >>"$log_f"
 	[ "$tries" -gt 0 ] && [ "$(can)" = yes ] || return 0
 	sleep 15
-	# The display manager's longrun (sddm's pipeline, or greetd's plain longrun), and the
+	# The display manager this image runs (the s6 bundles 80-enable-s6 knows), and the
 	# compositors its greeter or session can be.
 	dm=""
-	for d in sddm-srv greetd; do [ -d "/run/service/$d" ] && { dm=$d; break; }; done
+	for d in sddm greetd; do [ -d "/run/service/$d-srv" ] && { dm=$d; break; }; done
 	[ -n "$dm" ] || return 0
-	for c in kwin_wayland Xorg cage desk weston; do
+	for c in kwin_wayland Xorg cage desk; do
 		pgrep -x "$c" >/dev/null 2>&1 && { echo "a compositor ($c) is up: $dm did not need a restart" >>"$log_f"; return 0; }
 	done
-	echo "no compositor 15s after the seat turned graphical: restarting $dm" >>"$log_f"
-	s6-svc -r "/run/service/$dm"
+	echo "no compositor 15s after the seat turned graphical: restarting $dm-srv" >>"$log_f"
+	s6-svc -r "/run/service/$dm-srv"
 }
 ( gpu_seat_watch ) >/dev/null 2>&1 &
 
