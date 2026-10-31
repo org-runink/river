@@ -146,3 +146,20 @@ func TestUsage(t *testing.T) {
 		t.Fatalf("no job, or an unknown one, is not a usage error: %s", e.String())
 	}
 }
+
+// Only the programs river-desk is written to start reach exec; anything else is refused before it.
+func TestOnlyListedProgramsStart(t *testing.T) {
+	for _, p := range []string{"foot", "xdg-open", "udisksctl", "gdbus", "notify-send"} {
+		if err := allowed(p); err != nil {
+			t.Errorf("allowed(%q) = %v, want nil", p, err)
+		}
+	}
+	for _, p := range []string{"sh", "bash", "/bin/sh", "rm", ""} {
+		if allowed(p) == nil {
+			t.Errorf("allowed(%q) = nil, want a refusal", p)
+		}
+	}
+	if _, err := (execRunner{}).output(context.Background(), "sh", "-c", "true"); err == nil {
+		t.Error("execRunner.output ran a program outside the list")
+	}
+}

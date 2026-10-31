@@ -76,19 +76,33 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 // printersURL is CUPS's web interface, on the loopback address cupsd listens on by default.
 const printersURL = "http://localhost:631/"
 
+// programs is every program river-desk starts. Anything else is refused, so a name that
+// reaches exec here is always one of these, and arguments always go as argv, never a shell.
+var programs = map[string]bool{"foot": true, "xdg-open": true, "udisksctl": true, "gdbus": true, "notify-send": true}
+
+func allowed(prog string) error {
+	if !programs[prog] {
+		return fmt.Errorf("river-desk does not start %q", prog)
+	}
+	return nil
+}
+
 // become replaces this process with the program, so DEsk's launcher sees it directly.
 func become(prog string, args ...string) error {
+	if err := allowed(prog); err != nil {
+		return err
+	}
 	p, err := exec.LookPath(prog)
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(p, append([]string{prog}, args...), os.Environ())
+	return syscall.Exec(p, append([]string{prog}, args...), os.Environ()) // #nosec G204 -- prog is one of `programs`; argv, never a shell
 }
 
 // notify puts a letter in DEsk's post box (DEsk is the session's notification server). A
 // variable, so the tests read the letters instead.
 var notify = func(summary, body string) {
-	_ = exec.Command("notify-send", "--app-name=Runink River", summary, body).Run()
+	_ = exec.Command("notify-send", "--app-name=Runink River", summary, body).Run() // #nosec G204 -- fixed program; the letter's text is argv, never a shell
 }
 
 // runner runs a program and returns its standard output (the seam the tests replace).
@@ -100,13 +114,19 @@ type runner interface {
 type execRunner struct{}
 
 func (execRunner) output(ctx context.Context, name string, args ...string) (string, error) {
-	b, err := exec.CommandContext(ctx, name, args...).Output()
+	if err := allowed(name); err != nil {
+		return "", err
+	}
+	b, err := exec.CommandContext(ctx, name, args...).Output() // #nosec G204 -- name is one of `programs`; argv, never a shell
 	return strings.TrimSpace(string(b)), err
 }
 
 // lines runs a long-lived program and hands each line of its output to each, until it exits.
 func (execRunner) lines(ctx context.Context, each func(string), name string, args ...string) error {
-	c := exec.CommandContext(ctx, name, args...)
+	if err := allowed(name); err != nil {
+		return err
+	}
+	c := exec.CommandContext(ctx, name, args...) // #nosec G204 -- name is one of `programs`; argv, never a shell
 	out, err := c.StdoutPipe()
 	if err != nil {
 		return err
