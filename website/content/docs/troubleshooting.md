@@ -27,6 +27,18 @@ collect before you open an issue.
 **`preflight: FAIL — not booted in UEFI mode (EFI required)`**: the stick was started from a
 legacy (CSM) boot entry. Restart and pick its UEFI entry.
 
+**The installer does not appear; a text screen describes the machine instead.** The stick
+waits six minutes for a graphical session. If none starts (a GPU the kernel cannot drive, a
+compositor that dies), `river-live-fallback` shows a one-screen hardware summary (the GPU and
+its seat, every network device and its rfkill state, devices with no driver, the kernel
+messages that matter), says *"The installer starts in 30s. Photograph this screen now if you
+will report the problem."*, and then opens the installer without a desktop, or the text
+installer if that cannot draw either. The full report is saved on the stick's `RIVER_EFI`
+partition as `river-report.txt` (`river-report-early.txt` after 90 seconds of waiting), so
+you can read it on another computer and attach it to a
+[bug report]({{< relref "/docs/contributing-issues" >}}). `river-live-fallback --report`
+prints it in a live terminal.
+
 ## The installer
 
 **"This computer is not supported"**, or a plan with the verdict `refused`: the machine is

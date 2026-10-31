@@ -65,10 +65,15 @@ sh scripts/ci-tier1.sh   # shellcheck and the hermetic lints, in a rootless cont
 make lint                # adds the package-closure lint
 make test                # Go tests of the hardware probe and planner
 make test-guide          # Go tests of river-guide
+make test-bench          # Go tests of riverbench (bench/analytics)
 make docs                # build this website (Hugo)
 ```
 
-Shell scripts are POSIX `sh` where possible, `set -eu`, and clean under `shellcheck`. There is
+New logic is Go, as a subcommand of the one `river` CLI (`cli/`); `river lint shell-ratchet`
+refuses a new shell script. Shell that remains is POSIX `sh` where possible, `set -eu`, and
+clean under `shellcheck`. Go modules use the standard library plus, where needed, first-party
+modules with no dependencies of their own: river-guide and riverbench import
+[runi](https://github.com/org-runink/runi) and nothing else. There is
 **no Python** anywhere in the build path or the image. New GitHub Actions steps pin the action
 by full commit SHA.
 

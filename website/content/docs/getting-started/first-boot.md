@@ -31,12 +31,12 @@ built.
 ### Sign in
 
 The Runink River login screen (greetd) appears. Sign in with the account you created in the
-installer. You get DEsk on Wayland: windows are sheets of paper on a desk, with a drawer, a
-bookcase of programs, a post box for notifications and a clock. Its standard programs are
-foot (terminal), Thunar (files), Mousepad (text), Firefox, Ristretto (pictures), Atril
-(PDF), Engrampa (archives) and Parole (music and video). The first login traces the room
-once (seconds on a GPU, minutes on the CPU; a 2D level is chosen on the CPU) and keeps it.
-The network the installer set up is already connected.
+installer; the same password unlocks your keyring. You get DEsk on Wayland: windows are
+sheets of paper on a desk, with a drawer, a bookcase of programs, a post box for
+notifications and a clock. The first login traces the room once (seconds on a GPU, minutes
+on the CPU; a 2D level is chosen on the CPU) and keeps it. The network the installer set up
+is already connected. The programs and everyday tasks are on
+[Using the desktop]({{< relref "desktop" >}}).
 
 {{% /steps %}}
 

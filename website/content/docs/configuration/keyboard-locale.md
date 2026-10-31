@@ -34,7 +34,11 @@ as system languages, and a list of common keyboard layouts.
   sudo mkinitcpio -P
   ```
 
-- **For the login screen:** edit `XkbLayout` in `/etc/X11/xorg.conf.d/00-keyboard.conf`.
+- **For the login screen:** edit `XKB_DEFAULT_LAYOUT` (and `XKB_DEFAULT_VARIANT`) on the
+  `command` line in `/etc/greetd/config.toml` (the installer writes them as `env
+  XKB_DEFAULT_LAYOUT=… XKB_DEFAULT_VARIANT=… cage …`); it applies from the next login screen. For
+  DEsk's `system` setting and X11 programs, edit `XkbLayout` in
+  `/etc/X11/xorg.conf.d/00-keyboard.conf` as well.
 
 {{< callout type="warning" >}}
 Your disk passphrase is typed at boot with the **console** keymap. If you change it, make sure
@@ -47,6 +51,5 @@ the new layout before you reboot.
 1. Uncomment the locale in `/etc/locale.gen` (for example `de_DE.UTF-8 UTF-8`) and run
    `sudo locale-gen`.
 2. Set `LANG=de_DE.UTF-8` in `/etc/locale.conf`.
-3. For your own session, System Settings → Region & Language.
 
 Sign out and in again (or reboot) for the change to apply everywhere.
