@@ -1,7 +1,7 @@
 name: Images (public, payload-free)
 
-# Builds the PUBLIC Runink River image on GitHub-hosted ubuntu-24.04 runners (pinned, not
-# ubuntu-latest: build/ci-runner-prep.sh installs Ubuntu 24.04 package names): the Runink
+# Builds the PUBLIC Runink River image on the self-hosted `public-ci` runners (it was
+# ubuntu-24.04: build/ci-runner-prep.sh installs Ubuntu 24.04 package names): the Runink
 # River ISO (iso-profiles/river, runink-river-<date>-x86_64.iso), with NO downstream payload
 # and NO model payload (MODEL_PAYLOAD=no). The Compute Engine image (build/cloud-image.sh)
 # is a server image; it is built downstream, from a server profile that no longer lives here.
@@ -11,6 +11,10 @@ name: Images (public, payload-free)
 #
 # Heavy (kernel ~4 h on a 4-vCPU runner, then the ISO): manual dispatch, or a pushed
 # `runink-os-*` tag. Never on pull requests, so fork code never reaches it.
+#
+# NOTE (2026-10-31): GitHub-hosted runners are no longer used. public-ci has no sudo, no
+# container engine and none of the disk below, so this workflow fails there until a
+# public-ci runner with them exists. The constraints below are the hosted ones.
 #
 # Runner constraints (docs/CLOUD-IMAGES.md, "Building in GitHub Actions"). A standard hosted
 # runner has 4 vCPU, 16 GB of RAM and ~14 GB free on /; build/ci-runner-prep.sh makes it fit:
@@ -54,8 +58,8 @@ env:
 jobs:
   kernel:
     name: linux-runink + runink-zfs
-    if: github.repository_owner == 'org-runink'
-    runs-on: ubuntu-24.04
+    if: (github.repository_owner == 'org-runink') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,7 +91,8 @@ jobs:
   iso:
     name: ISO (${{ matrix.profile }})
     needs: kernel
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 300
     strategy:
       fail-fast: false
@@ -149,8 +154,8 @@ jobs:
     # cannot build one; cloud-image.sh marks one PRIVATE).
     # Off unless the owner sets the repository variable RIVER_RELEASE_PUBLISH=true, and even
     # then it only fails: nothing is published by accident.
-    if: vars.RIVER_RELEASE_PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/runink-os-')
-    runs-on: ubuntu-24.04
+    if: (vars.RIVER_RELEASE_PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/runink-os-')) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, public-ci]
     steps:
       - run: |
           echo "::error::publishing is not implemented here: sign SHA256SUMS offline and run release-gate.yml (RELEASE.md)"

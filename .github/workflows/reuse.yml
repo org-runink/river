@@ -11,8 +11,8 @@
 #
 # The check is `river lint reuse` (cli/internal/lint/reuse.go), a Go port of `reuse lint`:
 # standard library only, run as a plain process from the vendored cli/ module, so it needs no
-# container, no Python and no network after setup-go. No secrets: it runs on GitHub-hosted
-# ubuntu-latest for every event, fork pull requests included (docs/governance/CI.md, "Runners").
+# container, no Python and no network after setup-go. No secrets: it runs on the self-hosted
+# `public-ci` runners, owner-only; fork pull requests never run (docs/governance/CI.md, "Runners").
 name: REUSE
 
 on:
@@ -30,7 +30,8 @@ concurrency:
 jobs:
   reuse:
     name: REUSE lint
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

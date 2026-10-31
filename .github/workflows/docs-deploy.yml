@@ -1,6 +1,6 @@
 name: Build and commit docs
 
-# Push to main only (never pull requests), on GitHub-hosted ubuntu-latest. It needs git,
+# Push to main only (never pull requests), on the self-hosted `public-ci` runners. It needs git,
 # curl, tar and outbound HTTPS to github.com; no sudo (Hugo is unpacked into RUNNER_TEMP,
 # pinned by sha256, the same pin docs.yml uses).
 #
@@ -24,8 +24,8 @@ permissions:
 
 jobs:
   build:
-    if: vars.RIVER_DOCS_COMMIT == 'true'
-    runs-on: ubuntu-latest
+    if: (vars.RIVER_DOCS_COMMIT == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     permissions:
       contents: write

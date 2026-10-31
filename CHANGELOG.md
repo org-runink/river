@@ -73,6 +73,16 @@ None.
 
 ### Changed
 
+- **CI runs on the project's own runners, owner-only.** Every job now asks for
+  `[self-hosted, public-ci]` and no job uses a GitHub-hosted runner. Every job runs only for
+  pushes to this repository's branches and for pull requests whose head branch is here; a
+  fork's pull request starts no job. `river lint ci-runners` (Tier 1) enforces both, and
+  `river lint public-leak` accepts the public pool's label. The kernel, ZFS, image, release
+  and Tier 2 workflows need sudo, a container engine or KVM, which `public-ci` does not
+  have, so they fail there until it does. Scorecard no longer publishes results (its API
+  accepts only GitHub-hosted runs), so the badge stops updating
+  ([docs/governance/CI.md](docs/governance/CI.md)).
+
 - **DEsk replaces KDE Plasma** (owner decision 2026-10-30; docs/DESKTOP-DESK-PLAN.md). The
   desktop is [DEsk](https://github.com/fyzugx/DEsk) (MIT, by fyzugx and the DEsk authors) on
   wlroots, with the Runink fork's patches; the login screen is greetd (gtkgreet in cage),

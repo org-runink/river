@@ -70,12 +70,15 @@ env:
 
 jobs:
   attest:
-    # workflow_dispatch only, so no pull-request code reaches it. GitHub-hosted ubuntu-latest
+    # workflow_dispatch only, so no pull-request code reaches it. Was GitHub-hosted ubuntu-latest
     # (a fresh VM per job; it holds contents: write). It needs apt and passwordless sudo
     # (libarchive-tools, squashfs-tools, unsquashfs as root), docker (syft), gh, outbound
     # HTTPS, and ~20 GB of disk, the ISO plus its unpacked root (the reclaim step below
     # makes room).
-    runs-on: ubuntu-latest
+    # public-ci (2026-10-31) has no sudo and no docker: this job fails there until a runner
+    # with them exists.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 90
     permissions:
       contents: write       # gh release download / upload (upload gated below)

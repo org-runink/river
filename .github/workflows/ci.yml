@@ -4,13 +4,12 @@ name: CI
 # scripts/ci-tier1.sh inside an EPHEMERAL ROOTLESS PODMAN container (no network, source
 # mounted read-only, a tmpfs /tmp, all capabilities dropped); plus the Go checks of
 # installer/, guide/ and the security analysers. No job needs a secret or another
-# repository, so every job behaves identically for pull requests from forks.
+# repository.
 #
-# Where it runs (docs/governance/CI.md, "Runners"): GitHub-hosted ubuntu-latest, for every
-# event. This public repository never runs a job on a self-hosted runner. Pull requests from
-# forks wait for a maintainer's approval before any workflow runs ("Require approval for all
-# external contributors"), then get exactly the checks a same-repository pull request gets,
-# with a read-only token and no secrets (GitHub withholds both from fork runs).
+# Where it runs (docs/governance/CI.md, "Runners"): the project's own self-hosted
+# `public-ci` runners, owner-only. A job runs for pushes to this repository's branches and
+# for pull requests whose head branch is in this repository; a fork's pull request never
+# runs (every job's `if:`). No job uses a GitHub-hosted runner (`river lint ci-runners`).
 #
 # What runs: shellcheck (warning and up) over every script, installer/overlay sync,
 # branding sync + size budget, the no-python guard, the k0s pin cross-check, the AUR
@@ -22,8 +21,8 @@ name: CI
 # install guide agent's (guide/) in the river-guide job. The REUSE lint is its own
 # workflow, reuse.yml, so the README badge can show its status on main.
 #
-# Rule for every workflow in this repository: GitHub-hosted runners only, and nothing uses
-# pull_request_target.
+# Rule for every workflow in this repository: `runs-on: [self-hosted, public-ci]`, the
+# owner-only `if:` on every job, and nothing uses pull_request_target.
 
 on:
   pull_request:
@@ -40,11 +39,12 @@ concurrency:
 jobs:
   tier1:
     name: tier1 (lint, rootless podman)
-    # The CONTAINER mode (as Tier 1 ran until 2026-09-28, and again now): GitHub-hosted
-    # ubuntu-latest has rootless podman, so every event (fork pull requests included) runs the
-    # checks with --network=none, the source read-only and every capability dropped.
+    # The CONTAINER mode (as Tier 1 ran until 2026-09-28, and again now): the runner needs
+    # rootless podman, so the checks run with --network=none, the source read-only and every
+    # capability dropped. The step below fails at once on a runner without it.
     # RIVER_TIER1_NO_CONTAINER=1 (host mode) stays for laptops without podman.
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,7 +68,8 @@ jobs:
     # The planner's decisions are pinned by table-driven tests on
     # fixture probes (installer/internal/planner/testdata), so a change to a minimum or to
     # the layout table shows up here, not on someone's hardware. Same checks as `make test`.
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,7 +101,8 @@ jobs:
     # Outside the Tier 1 container, for the same reason as installer-go (network, gcc).
     # guide/ is a standard-library Go module with no network, no Artix tooling and no
     # secrets. Its tests run against a fake GitHub and a fake model server.
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -138,7 +140,8 @@ jobs:
     #               in the tree, including the Go standard library it is built with.
     # Both tools are pinned by version; `go install` verifies them against the Go checksum
     # database. The toolchain is the current stable Go, the one release builds use.
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

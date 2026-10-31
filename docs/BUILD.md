@@ -350,7 +350,8 @@ kernel outside the range the OpenZFS release declares in its `META` file.
   buildiso's initcpio step, which assumes the mainline kernel's version file, and adds a
   GRUB default and timeout to the live menu so a headless machine boots unattended.
 - The kernel and ZFS packages are built by two `workflow_dispatch` workflows on
-  GitHub-hosted runners: `kernel-build.yml`, then `zfs-build.yml`, which compiles against
+  the `public-ci` runners (where they fail today, [CI.md](governance/CI.md), "The heavy
+  jobs"): `kernel-build.yml`, then `zfs-build.yml`, which compiles against
   the kernel run's headers. Download their artifacts into `build/artifacts/` before
   `make localrepo`, or build the PKGBUILDs locally with `makepkg`.
 - `[runink]` is injected before the distribution repos so its kernel and ZFS win version
@@ -414,8 +415,8 @@ their own build before signing ([RELEASE.md](../RELEASE.md)), and the provenance
 installer/overlay sync check, and the hermetic lints: branding sync, the no-python guard,
 the k0s pin, the one-engine check), `installer-go` (gofmt, vet, the planner's table-driven
 tests, a `GOAMD64=v1` build), `river-guide` and `go-security` (gosec, govulncheck). This
-public repository runs only on GitHub-hosted runners, never on a self-hosted one; a fork's
-pull request runs the same jobs once a maintainer approves the run. `kernel-build.yml` and
+public repository runs only on its own `[self-hosted, public-ci]` runners, never GitHub-hosted, and only
+for its own branches (a fork's pull request starts no job). `kernel-build.yml` and
 `zfs-build.yml` are manual dispatch on standard runners (the kernel job first removes the
 runner's unused preinstalled toolchains to get ~30 GB of disk). `images.yml` builds the
 public ISO on a hosted `ubuntu-24.04` runner the same way (`build/local-iso.sh` with

@@ -118,6 +118,7 @@ func TestPublicLeakFlagsEachRule(t *testing.T) {
 		"ula":           {"cluster at fd42:dead:beef::/48", "ula"},
 		"runner":        {"runs-on: [self-hosted, zorb-egress]", "runner-label"},
 		"label":         {"the job needs zorb-egress", "runner-label"},
+		"pool-extra":    {"runs-on: [self-hosted, public-ci, zorb-egress]", "runner-label"},
 		"hardware":      {"sized on the ZorbTech box", "target-hw"},
 		"server":        {"the runink-server ISO", "server-name"},
 		"email":         {"mail someone@runink.org", "email"},
@@ -136,6 +137,22 @@ func TestPublicLeakFlagsEachRule(t *testing.T) {
 				t.Fatalf("report does not name file, line and rule %s:\n%s", c.rule, errs)
 			}
 		})
+	}
+}
+
+// The public pool's runs-on (and its label in prose) passes, even with the label in the digest set.
+func TestPublicLeakAllowsThePublicPool(t *testing.T) {
+	withLeakTerms(t)
+	if d := leakDigest("public-ci"); !leakRunnerLabels[d] {
+		leakRunnerLabels[d] = true
+		t.Cleanup(func() { delete(leakRunnerLabels, d) })
+	}
+	dir := leakRepo(t)
+	writeLeak(t, dir, ".github/workflows/ci.yml", "jobs:\n  a:\n    runs-on: [self-hosted, public-ci]\n  b:\n    runs-on: [ self-hosted,public-ci ]\n")
+	writeLeak(t, dir, "docs/ci.md", "Every job runs on the `public-ci` runners.\n")
+	gitLeak(t, dir, "add", "-A")
+	if err, errs, _ := runLeak(t, dir); err != nil {
+		t.Fatalf("the public pool failed: %v\n%s", err, errs)
 	}
 }
 

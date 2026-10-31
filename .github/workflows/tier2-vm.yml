@@ -3,7 +3,7 @@ name: Tier 2 (VM boot)
 # Tier 2 of docs/governance/CI.md: build the ISO and boot it in a short-lived QEMU/KVM
 # microVM.
 #
-# DOES NOT FIT A STANDARD GITHUB-HOSTED RUNNER, so it is workflow_dispatch ONLY and is never
+# DID NOT FIT A STANDARD GITHUB-HOSTED RUNNER, so it is workflow_dispatch ONLY and is never
 # triggered by a pull request. `make iso-in-builder` compiles every component from source
 # (the kernel alone took ~4 h 10 min on a hosted runner's 4 vCPUs), then builds the ISO, in
 # ONE job: it needs ~40 GB of disk (a hosted runner has ~14 GB free, ~38 GB after reclaiming
@@ -14,10 +14,10 @@ name: Tier 2 (VM boot)
 # build/local-iso.sh (docs/BUILD.md), then tests/tier2-boot-smoke.sh <iso> or
 # build/qemu-gui-test.sh on the workstation.
 #
-# Runner: GitHub-hosted ubuntu-latest only. This public repository runs no job on a
-# self-hosted runner (docs/governance/CI.md, "Runners"). The runner has /dev/kvm; the udev
-# rule below (GitHub's documented one) makes it usable by the runner user. No secrets are
-# used, and nothing uses pull_request_target.
+# Runner: the self-hosted `public-ci` runners, owner-only (docs/governance/CI.md, "Runners");
+# GitHub-hosted runners are no longer used (2026-10-31). The public-ci pod has no /dev/kvm,
+# no sudo and none of the disk above, so this job fails there until a public-ci runner with
+# KVM exists. No secrets are used, and nothing uses pull_request_target.
 
 on:
   workflow_dispatch:
@@ -32,8 +32,8 @@ concurrency:
 jobs:
   boot:
     name: tier2 (ISO build + VM boot smoke)
-    if: github.repository_owner == 'org-runink'
-    runs-on: ubuntu-latest
+    if: (github.repository_owner == 'org-runink') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
