@@ -218,8 +218,8 @@ A **workstation** has none of this: it starts to its login screen, as above.
 - **Testing.** `build/qemu-gui-test.sh ISO` installs Runink River with no human: it drives the
   API with the same calls the UI makes (`river-installer drive`), photographs every screen in
   the live desktop, reboots into the installed system, unlocks it, checks that `/home` is
-  mounted, the firewall loaded and the machine-id set, types the password at the login screen and waits
-  for the desktop (`plasma-login`: still Plasma-specific until the harness is rewritten for DEsk), then checks the network (`net-ready`). `--profile server`
+  mounted, the firewall loaded and the machine-id set, types the user name and password at the login screen and waits
+  for DEsk (`desk-login`; the greeter and desktop screendumps judged by `river test screen`), then checks the network (`net-ready`). `--profile server`
   (with `RIVER_PROFILE_DIR`) does the same for a downstream server medium: the kiosk, a mouse
   click in it (`gui-pointer`), the
   first boot to *ready* (k0s Ready) and Finish removing the kiosk. A profile's own checks in

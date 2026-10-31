@@ -124,8 +124,7 @@ build/qemu-test.sh     ~/.cache/river-build/iso-out/runink-river-<date>-x86_64.i
 ```
 
 `qemu-gui-test.sh` installs through every installer screen unattended, reboots, unlocks,
-logs in at the login screen and prints `RIVERTEST OK|FAIL <check>` per check (its desktop checks still expect
-Plasma and are being rewritten for DEsk; the full list is the
+logs in at the login screen and prints `RIVERTEST OK|FAIL <check>` per check (the full list is the
 `want=` line near the end of the script; screenshots under
 `~/.cache/river-build/qemu-gui-test/<time>/`). For a downstream **server** image:
 `RIVER_PROFILE_DIR=<the staged branded profile> build/qemu-gui-test.sh --profile server --offline <iso>`
