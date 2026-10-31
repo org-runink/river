@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package testcmd holds the host-side checks that were tests/*.sh, as `river test <name>`:
-// the Tier 1 contract tests (scripts/ci-tier1.sh) and the developer's SDDM render check.
+// the Tier 1 contract tests (scripts/ci-tier1.sh) and the VM medium checks.
 //
 // Most of them test SHELL code that is not ported yet (a sourced library, a first-boot hook
 // runner, the image's zram script). They drive that code exactly as the scripts did, as a
@@ -43,7 +43,6 @@ func init() {
 			simpleCmd(v, "installed-hooks", "the profile-hook contract of qemu-gui-test (build/qemu-hooks.sh), without a VM", InstalledHooks),
 			simpleCmd(v, "models-required", "the model payload step's required mode (72-models-payload), with fake zfs", ModelsRequired),
 			simpleCmd(v, "models-fetch", "build/models-fetch.sh: MODELS_ONLY and HF_TOKEN_FILE, against a local upstream", ModelsFetch),
-			sddmThemeCmd(v),
 			mediumUnaidedCmd(v),
 		)
 		return c

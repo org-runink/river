@@ -43,7 +43,7 @@ fi
 # The runink home lives on the $POOL/home dataset (created in 10-disk-zfs); models + the
 # rootless container store go here, off the BE snapshot. Every level is created owned by
 # runink: `install -d` makes missing parents as root, and a root-owned ~/.local left the
-# desktop session unable to write ~/.local/share (SDDM's session log, Plasma's state).
+# desktop session unable to write ~/.local/share (DEsk's calendar and memo, its state).
 chroot_run "install -d -o runink -g runink -m 0755 /home/runink/.local /home/runink/.local/share /home/runink/.local/share/containers"
 # edge/ receives oidc.env at enrollment: shadow-grade from the start (river-perms re-asserts).
 chroot_run "install -d -o runink -g runink -m 0700 /home/runink/edge"

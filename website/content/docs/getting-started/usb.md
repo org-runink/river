@@ -84,7 +84,7 @@ Plug the stick in, open your firmware's boot menu (often F12, F11, F8 or Esc at 
 and pick the USB stick's **UEFI** entry. Turn Secure Boot off first: the image does not boot
 with Secure Boot on yet ([Secure Boot]({{< relref "/docs/security/secure-boot" >}})).
 
-The stick's live system then starts Plasma and opens the installer by itself:
+The stick's live system then opens the installer by itself:
 [Install]({{< relref "install" >}}). It does not start?
 [Troubleshooting]({{< relref "/docs/troubleshooting#the-usb-stick" >}}).
 
@@ -92,4 +92,4 @@ The stick's live system then starts Plasma and opens the installer by itself:
 
 The installer never offers the stick as a target and never saves the recovery key to it. To
 use the stick for files again, recreate a partition table and a filesystem on it with
-KDE Partition Manager (on the installed system) or any partitioning tool.
+`parted` or `gdisk` (on the installed system) or any partitioning tool.

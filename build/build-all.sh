@@ -103,8 +103,9 @@ if command -v makepkg >/dev/null 2>&1; then
 	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
 
 	# The desktop (docs/DESKTOP-DESK-PLAN.md), integrity-checked, with muon (builder/Containerfile).
-	# wlroots first, installed into this throwaway builder so cage and DEsk build against it.
-	for p in runink-wlroots0.18 runink-cage runink-gtkgreet runink-desk; do
+	# wlroots first, installed into this throwaway builder so cage and DEsk build against it;
+	# runink-greetd-s6 is the greetd s6 service and builds nothing.
+	for p in runink-wlroots0.18 runink-cage runink-gtkgreet runink-desk runink-greetd-s6; do
 		echo "  makepkg $p (integrity-checked)"
 		( cd "$HERE/pkgbuilds/$p" && \
 		  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --noconfirm ) \

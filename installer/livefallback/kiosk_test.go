@@ -167,3 +167,19 @@ func TestKioskDoesNotChownWhenNotRoot(t *testing.T) {
 		t.Errorf("chown ran although the script is not root; recorded:\n%s", rec)
 	}
 }
+
+// The fallback stops whichever display manager is up before the kiosk takes the display, and
+// never one that is not: s6-rc -a list names atomic services, so a pipeline shows as <name>-srv.
+func TestActiveDisplayManagers(t *testing.T) {
+	for _, c := range []struct{ list, want string }{
+		{"dbus-srv\nsddm-srv\nsddm-log\nNetworkManager-srv\n", "sddm"},
+		{"greetd-srv\nelogind-srv\n", "greetd"},
+		{"greetd\n", "greetd"},
+		{"dbus-srv\nsddm-log\nnot-greetd-srv\n", ""},
+		{"", ""},
+	} {
+		if got := strings.Join(activeDisplayManagers(c.list), " "); got != c.want {
+			t.Errorf("activeDisplayManagers(%q) = %q, want %q", c.list, got, c.want)
+		}
+	}
+}

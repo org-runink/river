@@ -171,11 +171,17 @@ func TestProfileKind(t *testing.T) {
 	}
 }
 
-// TestProfileManifestSDDMTTY1 is a mutation proof, not a presence check: the same fixture must
-// FAIL with SPAWN="yes" on tty1 and PASS with SPAWN="no". A getty there starves the SDDM
-// greeter on VT 1 (HELPER_TTY_ERROR, endless respawn), which is how the 2026-10-18 ISO booted
-// to a text console instead of the desktop.
-func TestProfileManifestSDDMTTY1(t *testing.T) {
+// TestProfileManifestDisplayManagerTTY1 is a mutation proof, not a presence check: the same
+// fixture must FAIL with SPAWN="yes" on tty1 and PASS with SPAWN="no", for every display manager
+// the lint knows. A getty there starves the SDDM greeter on VT 1 (HELPER_TTY_ERROR, endless
+// respawn), which is how the 2026-10-18 ISO booted to a text console instead of the desktop.
+func TestProfileManifestDisplayManagerTTY1(t *testing.T) {
+	for _, dm := range pmDisplayManagers {
+		t.Run(dm, func(t *testing.T) { testDisplayManagerTTY1(t, dm) })
+	}
+}
+
+func testDisplayManagerTTY1(t *testing.T, dm string) {
 	fixture := func(spawn string) string {
 		dir := pmFixture(t, false)
 		lbWrite(t, dir, "iso-profiles/river/profile.yaml", `rootfs:
@@ -190,7 +196,7 @@ livefs:
     - river-live
 live-session:
   services:
-    - sddm
+    - `+dm+`
 `)
 		lbWrite(t, dir, "iso-profiles/river/live-overlay/etc/s6/config/tty1.conf",
 			"# live tty1\nSPAWN=\""+spawn+"\"\nGETTY=\"agetty\"\n")
@@ -199,9 +205,9 @@ live-session:
 
 	out, err := pmRun(t, fixture("yes"))
 	if err == nil {
-		t.Fatalf("SPAWN=\"yes\" alongside sddm must fail the lint, but it passed:\n%s", out)
+		t.Fatalf("SPAWN=\"yes\" alongside %s must fail the lint, but it passed:\n%s", dm, out)
 	}
-	if !strings.Contains(out, "starves the SDDM greeter") {
+	if !strings.Contains(out, "enables "+dm+" ") || !strings.Contains(out, "starves the display manager's greeter") {
 		t.Fatalf("failure does not name the cause:\n%s", out)
 	}
 

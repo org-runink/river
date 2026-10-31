@@ -3,10 +3,10 @@
   "id": "river",
   "title": "Runink River",
   "description": {
-    "en": "A developer workstation: the KDE Plasma desktop on an encrypted disk, with the tools to build software, kept fast and private.",
-    "es": "Una estación de trabajo para desarrolladores: el escritorio KDE Plasma en un disco cifrado, con las herramientas para crear software, rápida y privada.",
-    "fr": "Un poste de travail pour développeurs : le bureau KDE Plasma sur un disque chiffré, avec les outils pour créer des logiciels, rapide et privé.",
-    "pt": "Uma estação de trabalho para desenvolvedores: o ambiente KDE Plasma em um disco criptografado, com as ferramentas para criar software, rápida e privada."
+    "en": "A developer workstation: the DEsk desktop on an encrypted disk, with the tools to build software, kept fast and private.",
+    "es": "Una estación de trabajo para desarrolladores: el escritorio DEsk en un disco cifrado, con las herramientas para crear software, rápida y privada.",
+    "fr": "Un poste de travail pour développeurs : le bureau DEsk sur un disque chiffré, avec les outils pour créer des logiciels, rapide et privé.",
+    "pt": "Uma estação de trabalho para desenvolvedores: o ambiente DEsk em um disco criptografado, com as ferramentas para criar software, rápida e privada."
   },
   "medium_label": "RIVER",
   "plan_profile": "workstation",

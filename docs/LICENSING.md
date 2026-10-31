@@ -32,7 +32,7 @@ SPDX-License-Identifier: MIT
 
 `LICENSES/` holds the text of every license used: MIT, GPL-2.0-only and CDDL-1.0, plus the
 Apache-2.0 for `validation/`, and the existing third-party ones (0BSD, BSD-2-Clause,
-GPL-2.0-or-later, GPL-3.0-only,
+GPL-3.0-only,
 CC-BY-4.0 for the Runink River artwork and the Code of Conduct, `LicenseRef-Public-Key`, `LicenseRef-Runink-Trademark`),
 and the `Linux-syscall-note` exception for the kernel uapi header in bpfdoc's test fixtures.
 
@@ -68,7 +68,6 @@ complete and fully open.
 | `branding/**` + overlay copies (`usr/share/runink/branding/**`, `usr/share/plymouth/themes/river/**`, `usr/share/wallpapers/River/**`) | Runink original artwork | CC-BY-4.0 for the files (as `REUSE.toml` maps them), trademarks reserved | Medium. Depends on the trademark plan (§5). `branding/render.sh` and `branding/**/*.md` are MIT. |
 | `branding/mascot/**`, `branding/logo/river-{mark,mark-small,lockup,lockup-dark}.svg`, `branding/icons/**`, `branding/ascii/**`, `branding/plymouth/river/logo.png`, `branding/splash/**`, `branding/grub/river/background.jpg`, the Runink River wallpaper (`branding/wallpapers/River/**`) + their overlay copies, and the profile's `/etc/issue` | The **Runink River community mark** (the M2 mascot, `branding/mascot/**`: mark, small mark, lockups, ASCII) and everything rendered from it (the Runink River edition's icons, favicons, splash images, GRUB background, wallpaper and terminal banner) | **`LicenseRef-Runink-Trademark`** (all rights reserved) | High. Owner's instruction (2026-09-24). See §5: a community image may need to swap them out. |
 | `branding/wallpapers/emerald/*/**` + overlay copies `usr/share/wallpapers/{Abstract,…,Spectrum}/**` | **CachyOS Emerald KDE** wallpapers by Dharam Dhurandhar, JPEG derivatives of upstream `CachyOS/CachyOS-Emerald-KDE@d61d1dd0` | **GPL-3.0-only** | Medium. Upstream has no LICENSE/README; each `metadata.desktop` says `GPLv3` (no "or later") and the CachyOS package says `GPL3`. The transform and per-file upstream and derived sha256 are in `branding/wallpapers/emerald/PROVENANCE`. Shipping GPL-3.0 images in the image is fine; they are separate works. `derive.sh` and the sha files are MIT. |
-| `iso-profiles/river/.../plasma/look-and-feel/org.runink.river.desktop/**` | Runink original | **GPL-2.0-or-later** (the splash image: `LicenseRef-Runink-Trademark`) | **Flag:** its own `metadata.json` declares `"License": "GPLv2+"` (probably copied from a Breeze template). It is mapped as declared. Change the field to `MIT` if the owner agrees. It is a small config package (defaults, layout script, splash QML) with no Breeze code. |
 | `docs/**`, `*.md` | Runink original | MIT | High. `docs/boot-test/*.png` are QEMU screenshots of Runink River's own boot output. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 | CC-BY-4.0 (© Contributor Covenant) | High. Upstream's license; not relicensed. |
 
@@ -180,8 +179,8 @@ foundation and the trademark transfer are covered in
 (the M2 mascot `branding/mascot/river-mascot.svg`, the marks generated from it,
 `branding/logo/river-mark.svg`, `river-mark-small.svg`, `river-lockup*.svg`, and the ASCII
 rendition `branding/ascii/river-mark-small.txt`) and everything rendered from it (the GRUB
-background, the Plymouth and Plasma splash logo, the Runink River wallpaper, the
-`runink-river` hicolor icons: Kickoff button, `LOGO=` in os-release, SDDM, the installer's
+background, the Plymouth logo, the Runink River wallpaper, the
+`runink-river` hicolor icons: `LOGO=` in os-release, the installer's
 edition icon; `branding/icons/favicon/*`; `/etc/issue`) are mapped to
 `LicenseRef-Runink-Trademark`: all rights reserved, trademark of Runink. A public or
 community Runink River image that is not published by Runink **may need to swap them out**. Replace
@@ -195,15 +194,14 @@ Linux® is the registered trademark of Linus Torvalds in the U.S. and other coun
 1. **archzfs**: confirm the MIT claim upstream, or replace the hook with Runink River's own.
 2. **AUR `linux-xanmod-lts`** derivation in the kernel PKGBUILD: confirm the license,
    or drop the XanMod switch in the zen move.
-3. **The plasma LnF `metadata.json`** says GPLv2+. Keep it or change it to MIT.
-4. **`runtime/` dependencies.** `riverd` may link only code available under an
+3. **`runtime/` dependencies.** `riverd` may link only code available under an
    OSI-approved license compatible with MIT. Anything that is not must be re-implemented
    in this repository.
-5. **AI-assisted history.** Many commits were made with AI coding tools. The copyright
+4. **AI-assisted history.** Many commits were made with AI coding tools. The copyright
    position of AI-generated portions is unsettled. The LF's generative-AI policy asks
    contributors to make sure the output can be licensed under the project license. The
    project's position is in [CONTRIBUTING.md](../CONTRIBUTING.md).
-6. **The ZFS legal opinion** (§4) before any foundation application.
+5. **The ZFS legal opinion** (§4) before any foundation application.
 
 ## 7. How to check
 

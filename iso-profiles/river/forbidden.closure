@@ -2,10 +2,10 @@
 # closure of Packages-Root.
 #
 # THIS LIST IS DELIBERATELY SHORT. A developer workstation needs mesa, xorg, cairo, pango,
-# pipewire and base-devel: KDE Plasma is built on them. Padding this list with
+# pipewire and base-devel: its desktop is built on them. Padding this list with
 # plausible-looking entries would fail legitimate builds.
 #
-# So this bans only what is genuinely wrong on Runink River (items 1-2 here, item 3
+# So this bans only what is genuinely wrong on Runink River (items 1-2 here, items 3-4
 # at the end of the file):
 #
 #   1. A SECOND KERNEL. The profile installs exactly one (see Packages-Root). Two kernels
@@ -34,3 +34,7 @@ azure-cli
 #      Plasma list in Packages-Root replaces plasma-meta precisely to keep these out.
 #      (kuserfeedback is NOT listed: plasma-workspace, dolphin and kate hard-depend on it.)
 flatpak flatpak-kcm discover packagekit packagekit-qt6
+#   4. THE DESKTOP THAT WAS REPLACED (owner decision 2026-10-30). DEsk is the one desktop; a
+#      package that drags Plasma, KWin or SDDM back in would bring a second desktop and its
+#      whole Qt/KF6 stack (most of a gigabyte) with it.
+plasma-workspace kwin sddm

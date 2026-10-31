@@ -40,8 +40,11 @@ NODE_SERVICES="NetworkManager sshd rc-local"
 # is built HERE, and the check below is what proves it arrived.
 [ -d "$TARGET/etc/s6/sv/chrony-srv" ] && NODE_SERVICES="chrony $NODE_SERVICES"
 # The workstation's desktop services (profile.yaml live-session.services): the display manager,
-# Bluetooth and printing. Each is present only where its -s6 package is installed.
-for _svc in sddm bluetoothd cupsd; do
+# Bluetooth and printing. Each is present only where its s6 service is installed.
+# DISPLAY_MANAGERS: every display manager an image may enable, by its s6 bundle name. Both take
+# VT 1 (below), so the VT 1 rule follows whichever is enabled rather than one literal name.
+DISPLAY_MANAGERS="sddm greetd"
+for _svc in $DISPLAY_MANAGERS bluetoothd cupsd; do
 	if [ -d "$TARGET/etc/s6/sv/$_svc-srv" ] || [ -d "$TARGET/etc/s6/sv/$_svc" ]; then
 		NODE_SERVICES="$NODE_SERVICES $_svc"
 	fi
@@ -62,7 +65,9 @@ LIVE_ONLY_SERVICES="river-guide-model river-installer artix-live"
 # 0 crashes, "Greeter session started successfully", the greeter connects and stays up.
 # tty2-tty6 keep their gettys, so a text console is still one Ctrl-Alt-F2 away.
 DM_VT1_CONFLICT=""
-case " $NODE_SERVICES " in *" sddm "*) DM_VT1_CONFLICT="tty1" ;; esac
+for _dm in $DISPLAY_MANAGERS; do
+	case " $NODE_SERVICES " in *" $_dm "*) DM_VT1_CONFLICT="tty1" ;; esac
+done
 
 mounted=""
 cleanup() { for fs in $mounted; do umount -R "$TARGET/$fs" 2>/dev/null || true; done; }
@@ -86,7 +91,7 @@ done
 
 for svc in $DM_VT1_CONFLICT; do
 	if chroot_run "s6 set status" | grep -q "^$svc/"; then
-		echo "s6: disabling $svc -- sddm takes VT 1 and a getty there starves its greeter"
+		echo "s6: disabling $svc -- the display manager takes VT 1 and a getty there starves its greeter"
 		chroot_run "s6 set disable $svc"
 	fi
 done
@@ -114,7 +119,7 @@ done
 # The conflicting getty must be gone, or the node boots to the crash loop described above.
 for svc in $DM_VT1_CONFLICT; do
 	if printf '%s\n' "$db" | grep -qx "$svc"; then
-		echo "s6: $svc is still in the boot database; it would starve the sddm greeter on VT 1" >&2
+		echo "s6: $svc is still in the boot database; it would starve the display manager's greeter on VT 1" >&2
 		exit 1
 	fi
 done

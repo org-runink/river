@@ -71,6 +71,8 @@ var (
 	pmArtixRe   = regexp.MustCompile(`^artix-live(-[a-z0-9]+)?$`)
 	// an uncommented SPAWN="yes" in an Artix s6 getty config.
 	pmSpawnYesRe = regexp.MustCompile(`(?m)^[ \t]*SPAWN="?yes"?`)
+	// every display manager a profile may enable, by s6 bundle name; each takes VT 1.
+	pmDisplayManagers = []string{"sddm", "greetd"}
 )
 
 // pmYAMLLists reads the block lists of an artools profile file (block lists of scalars,
@@ -230,11 +232,14 @@ func ProfileManifest(_ context.Context, repo string, dirs []string, errw, outw i
 		// always fell through to the text console -- the "it gets into the console" report. The
 		// live medium needs no getty there: river-live-fallback opens /dev/tty1 itself when no
 		// desktop appears. This fails the build rather than shipping that loop again.
-		if slices.Contains(pmListOf(prof, "live-session/services"), "sddm") {
+		for _, dm := range pmDisplayManagers {
+			if !slices.Contains(pmListOf(prof, "live-session/services"), dm) {
+				continue
+			}
 			ttyConf := filepath.Join(d, "live-overlay", "etc", "s6", "config", "tty1.conf")
 			if b, err := os.ReadFile(ttyConf); err == nil && pmSpawnYesRe.Match(b) {
-				r.fail("%s: live-session enables sddm and live-overlay tty1.conf has SPAWN=\"yes\"; "+
-					"the getty on VT 1 starves the SDDM greeter (set SPAWN=\"no\")", p)
+				r.fail("%s: live-session enables %s and live-overlay tty1.conf has SPAWN=\"yes\"; "+
+					"the getty on VT 1 starves the display manager's greeter (set SPAWN=\"no\")", p, dm)
 			}
 		}
 		livefs := pmListOf(prof, "livefs/packages")

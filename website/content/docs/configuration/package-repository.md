@@ -40,7 +40,7 @@ holds equal to what those PKGBUILDs produce:
 | `runink-core`, `runink-runtime` | placeholders filled only by a downstream build; the published ones hold a marker file and a models manifest at most |
 
 Nothing built by anyone else is published, and nothing a downstream distribution adds to its
-own images. The distribution's everyday packages (Plasma, Firefox, libraries, tools) keep
+own images. The distribution's everyday packages (Firefox, the desktop's programs, libraries, tools) keep
 coming from the distribution's repositories, as before ([Updates]({{< relref "updates" >}})).
 
 ## How the image configures it

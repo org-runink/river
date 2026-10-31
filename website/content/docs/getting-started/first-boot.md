@@ -30,16 +30,19 @@ built.
 
 ### Sign in
 
-The Runink River login screen (SDDM) appears. Sign in with the account you created in the
-installer. You get a KDE Plasma session on Wayland with Konsole, Dolphin, Kate and Firefox,
-plus Okular, Gwenview, Spectacle, Ark, KCalc, Elisa, Dragon Player and KDE Partition Manager.
+The Runink River login screen (greetd) appears. Sign in with the account you created in the
+installer. You get DEsk on Wayland: windows are sheets of paper on a desk, with a drawer, a
+bookcase of programs, a post box for notifications and a clock. Its standard programs are
+foot (terminal), Thunar (files), Mousepad (text), Firefox, Ristretto (pictures), Atril
+(PDF), Engrampa (archives) and Parole (music and video). The first login traces the room
+once (seconds on a GPU, minutes on the CPU; a 2D level is chosen on the CPU) and keeps it.
 The network the installer set up is already connected.
 
 {{% /steps %}}
 
-Konsole opens fish, your login shell, which greets you with the Runink River mark and a
-summary of the machine (fastfetch). `set -Ux RUNINK_GREETING static` keeps the summary
-without the animation; `set -Ux RUNINK_GREETING off` turns the greeting off.
+The terminal opens bash, your login shell, which greets you with the Runink River mark and a
+summary of the machine (fastfetch). `export RUNINK_GREETING=static` in `~/.bash_profile` keeps the summary
+without the animation; `RUNINK_GREETING=off` turns the greeting off.
 
 ## What is installed for development
 

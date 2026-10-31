@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# greetd on the Runink River LIVE medium (live overlay only; 20-clone-rootfs deletes it, so an
+# installed machine uses /etc/greetd/config.toml). The greetd service (runink-greetd-s6) picks this file when it
+# exists.
+#
+# The first session needs no login: weston, as the live user, whose weston.ini
+# (etc/xdg/weston/weston.ini) runs the installer full screen and ends when it is closed. Then
+# the ordinary login screen, from which the live user (password "runink") can open DEsk.
+# river-live-fallback still takes over (river-kiosk, then the text installer) when no
+# compositor ever appears.
+[terminal]
+vt = 1
+
+[initial_session]
+command = "weston --continue-without-input"
+user = "runink"
+
+[default_session]
+command = "cage -s -- gtkgreet -c desk-session"
+user = "greeter"

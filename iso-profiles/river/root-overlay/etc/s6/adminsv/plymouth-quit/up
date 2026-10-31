@@ -1,6 +1,6 @@
 #!/bin/execlineb -P
-# Hand the display from the Plymouth splash to SDDM. sddm-srv depends on this oneshot
-# (etc/s6/sv/sddm-srv/dependencies.d/plymouth-quit), because nothing else under s6 stops
-# plymouthd: on systemd that is plymouth-quit.service, and SDDM 0.21 has no Plymouth
-# integration of its own (sddm#1932 is an unmerged draft).
+# Hand the display from the Plymouth splash to the display manager. greetd depends on this
+# oneshot (runink-greetd-s6's dependencies.d/plymouth-quit), because nothing else under s6 stops
+# plymouthd: on systemd that is plymouth-quit.service, and greetd has no Plymouth
+# integration of its own.
 /usr/local/bin/runink-plymouth-quit
