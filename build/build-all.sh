@@ -101,6 +101,19 @@ if command -v makepkg >/dev/null 2>&1; then
 	( cd "$HERE/pkgbuilds/runink-grub-live" && \
 	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
 	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
+
+	# The desktop (docs/DESKTOP-DESK-PLAN.md), integrity-checked, with muon (builder/Containerfile).
+	# wlroots first, installed into this throwaway builder so cage and DEsk build against it.
+	for p in runink-wlroots0.18 runink-cage runink-gtkgreet runink-desk; do
+		echo "  makepkg $p (integrity-checked)"
+		( cd "$HERE/pkgbuilds/$p" && \
+		  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --noconfirm ) \
+		  || { echo "  makepkg $p FAILED" >&2; exit 1; }
+		if [ "$p" = runink-wlroots0.18 ]; then
+			sudo pacman -U --noconfirm "$HERE"/pkgbuilds/runink-wlroots0.18/runink-wlroots0.18-*.pkg.tar.zst \
+			  || { echo "  installing runink-wlroots0.18 into the builder FAILED" >&2; exit 1; }
+		fi
+	done
 else
 	echo "build-all: makepkg not found (not on Arch/Artix) — artifacts staged in $OUT_DIR,"
 	echo "           run packaging on an Arch/Artix builder to produce *.pkg.tar.zst"

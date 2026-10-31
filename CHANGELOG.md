@@ -33,6 +33,12 @@ None.
 
 ### Added
 
+- **DEsk packages.** `[runink]` gains `runink-wlroots0.18` (wlroots 0.18.3), `runink-desk`
+  (DEsk 0.1.4 with the Runink fork's patches: no Python in its build, elogind instead of
+  systemd, the weather off until a user turns it on), and the login screen's `runink-cage`
+  and `runink-gtkgreet`. All are built from sha256-pinned sources with muon, a C
+  implementation of meson, which the builder image now bootstraps. The image does not install
+  them yet.
 - **The desktop is a desk.** A new default wallpaper, *Runink River Desk*
   (`org.runink.river.desk`): your picture stands on a surface in a frame — mat, bevel, glass
   and a shadow cast away from a single desk lamp — instead of being the surface. Six

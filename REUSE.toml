@@ -367,3 +367,10 @@ SPDX-License-Identifier = "MIT AND Apache-2.0"
 path = ["cli/vendor/modules.txt", "cli/vendor/github.com/org-runink/river/pkg/**", "scripts/shell-ratchet.txt"]
 SPDX-FileCopyrightText = "2026 The RIVER Authors"
 SPDX-License-Identifier = "MIT"
+
+# The Runink fork's changes to DEsk (github.com/fyzugx/DEsk, MIT), carried as patches until the
+# fork's repository exists. They are diffs of DEsk's own files, so both holders are named.
+[[annotations]]
+path = "build/pkgbuilds/runink-desk/*.patch"
+SPDX-FileCopyrightText = ["2026 The DEsk authors", "2026 The RIVER Authors"]
+SPDX-License-Identifier = "MIT"

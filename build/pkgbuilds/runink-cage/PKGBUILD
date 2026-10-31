@@ -1,0 +1,31 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-cage — cage, the one-window Wayland kiosk compositor the login screen runs in: greetd
+# starts `cage -s -- gtkgreet` as its greeter (docs/DESKTOP-DESK-PLAN.md, "Login manager").
+#
+# Not in Artix's repositories. Built against runink-wlroots0.18 (cage 0.2 needs wlroots 0.18),
+# with muon (builder/Containerfile), since meson is Python and the build carries none.
+pkgname=runink-cage
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="cage: a Wayland kiosk compositor, for the login screen"
+arch=('x86_64')
+url="https://github.com/cage-kiosk/cage"
+license=('MIT')
+depends=('runink-wlroots0.18' 'wayland' 'libxkbcommon')
+makedepends=('wayland-protocols')
+provides=('cage')
+conflicts=('cage')
+source=("https://github.com/cage-kiosk/cage/releases/download/v${pkgver}/cage-${pkgver}.tar.gz")
+sha256sums=('557c194d18af7202a9ec2e8be6dd7129f6c16d0f4528f4079ba26ccd57b6ef88')
+
+build() {
+	cd "cage-${pkgver}"
+	muon setup -Dprefix=/usr -Dbuildtype=release -Dman-pages=disabled build
+	muon -C build samu
+}
+
+package() {
+	cd "cage-${pkgver}"
+	DESTDIR="$pkgdir" muon -C build install
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

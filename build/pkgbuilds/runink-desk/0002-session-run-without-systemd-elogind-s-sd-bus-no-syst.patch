@@ -1,0 +1,221 @@
+From e1377cfde25c63337d03cf92e7a9d2bc55ee1744 Mon Sep 17 00:00:00 2001
+From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 23:37:45 +0000
+Subject: [PATCH 2/4] session: run without systemd (elogind's sd-bus, no
+ --systemd off systemd)
+
+DEsk already worked without libsystemd, but a machine that runs elogind
+instead of systemd (s6, OpenRC, runit) lost the post box, the tray, MPRIS
+and power-off through logind, and was told at every login that systemd
+"said no".
+
+- meson: sd-bus comes from libsystemd or, failing that, libelogind, which
+  installs the same <systemd/sd-bus.h>. -Dpost works on elogind.
+- session.c: `dbus-update-activation-environment --systemd` and
+  `systemctl --user unset-environment` only where systemd is init
+  (/run/systemd/system, what sd_booted() asks); elsewhere the D-Bus update
+  alone, which is all there is to update.
+- power.c: without sd-bus, power off and restart through loginctl
+  (systemd's or elogind's) before systemctl.
+
+Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+---
+ README.md            |  2 +-
+ SHA256SUMS           | 14 +++++++-------
+ docs/ARCHITECTURE.md |  5 +++--
+ docs/MODDING.md      |  2 +-
+ meson.build          |  6 ++++--
+ meson_options.txt    |  2 +-
+ src/power.c          |  8 ++++++--
+ src/session.c        | 14 ++++++++++++--
+ 8 files changed, 35 insertions(+), 18 deletions(-)
+
+diff --git a/README.md b/README.md
+index c7930df..5fc0916 100644
+--- a/README.md
++++ b/README.md
+@@ -394,7 +394,7 @@ brings everything. To build it yourself:
+   installers build 0.18.3 from its release into `/opt/desk-wlroots`, used by
+   DEsk alone through its run path)
+ - wayland, wayland-protocols, xkbcommon, cairo, pixman, fontconfig, libdrm, PAM
+-- libsystemd (optional): the notification daemon and the system tray.
++- libsystemd, or libelogind (optional): the notification daemon and the system tray.
+   Build with `-Dpost=disabled` to leave them out.
+ - libpulse (optional): the desk's sounds (`-Dsound=disabled`)
+ - libinput (optional): touchpad and mouse settings
+diff --git a/SHA256SUMS b/SHA256SUMS
+index 707495f..0cceb62 100644
+--- a/SHA256SUMS
++++ b/SHA256SUMS
+@@ -3,15 +3,15 @@ f23feed53be20d224688cb6cbd0a1e7ae0f68f9254ab74bf78d420b2825b71e7  ./.gitignore
+ 9ca2f8afe06176db8b331513b4c67681c6923b3414e194fe6ef66eb8c8fa6e44  ./Dockerfile
+ 87dd199cc6c7a1fd1fefb42f86d924b11a053ef5444dfd5cbf479dd22d6dbc15  ./LICENSE
+ 46a60065cad2a794d5c5752a52acab57455da55c3647ab37830c22812d767754  ./README.ja.md
+-dfdf12bb2f5e0aa60a7c8be3559fff7e3f6aed99e9c6c04636c36afcc6ead026  ./README.md
++2cb55baae9e927a8fa58254fa1ba40d6977da2a4ef5f6baede942c96aed9fb04  ./README.md
+ 6c979e967af7262f245367474aabb8479640a00107db06b503f78defe1d6def4  ./RELEASE-NOTES.ja.md
+ d41d53b642b8d333b1cc63e5d7f50834891882618bb1b9fb8045fdb43d1e73ba  ./RELEASE-NOTES.md
+ 95ec560c0517006961566f73ef2ae19b8f3dbe8b70b90366f0b908599957e49b  ./applications/meson.build
+ 039bbe804b06a40fee57f89b32d69bdee2f7f5b1e787fa8a39e4fc7368915a5b  ./docs/ARCHITECTURE.ja.md
+-a8664529d074dae23e396b4363c2391185cb2f5bc3f6892471e6725858030d7a  ./docs/ARCHITECTURE.md
++7fcd784dc2c23fbda9590635e240e60eb1e68d4ba599f16a89a679aa43fd85c0  ./docs/ARCHITECTURE.md
+ 93d95a6f095b4275071e565cdb5e571316c43b05f20db8cd0b3357757e9a3d65  ./docs/CONFIGURATION.md
+ 6f0aabf374290ad64fcc723caebd8033362258b5e2c52fc5a9673e1f9d11262e  ./docs/MODDING.ja.md
+-493ff5a2ba215b2275c8776db798a9d913aef24bca80ef72aa6520a4093a8982  ./docs/MODDING.md
++a9a64fc6d9c7532be104e3d5a4fdf340211159bfdc36eee1fb361fac24aef43a  ./docs/MODDING.md
+ 9847130f420eafa7c413afd5bf9cdddcbd7948d073dcc9334aa072766aec0e08  ./docs/design.md
+ c4efeabc60bc2cac593492b3b7e4c141a6f643819c83c9a5cd741d397a19c1a2  ./docs/screenshots/book-search.jpg
+ 5cebb4ef413b30a48fd63d511ecdfcdb9d2daebe175fd79f94e288ac50099548  ./docs/screenshots/book.jpg
+@@ -44,8 +44,8 @@ c7824c26e80784ca6886a159209c787234667ed59f47c86481583daa680bf8d3  ./include/powe
+ 1083f28a3c8ec0b481cc342f45d442e521b313c5675efd70e95b856c49b617db  ./include/session.h
+ 2cbb569c046ab4be0b5be26795bd32e8724997407f095486a99f7e8ad0ba9895  ./include/sound.h
+ c66ceb68f5593ae2fb99a3f849694af74cf9e53173ff734a5038d8d47507cd81  ./include/tray.h
+-20c325efa43f44ab03e75afcc90317c8d8743b073b8e7e77347c6a8a26fbe396  ./meson.build
+-d71a97f44854ceed9b3c1c68506b083ce22099977388599e1eabaed37002deed  ./meson_options.txt
++00888175acd1eaa64d2fab177de6c3af95f804fc68b69db3f865935de2bad1cd  ./meson.build
++37fa2d0124ab1d5e76a4a7e4ec3aadd5b98afa1a1b5533ad87f6d292762a8f18  ./meson_options.txt
+ 950ba49090168acdb352ee484939507b8077400d2ba017b1e2d7bb61b2189aa2  ./packaging/debian/desk-desktop.equivs
+ 65b0f82a6cf129bf1a1c31a2428795abd33886c15ddd5f3ad97e5922d7bdc3a7  ./protocols/wlr-output-management-unstable-v1.xml
+ 7ebd98f3449d246a57829e4b4dd9fbc3ef98e3dd42fa94ea102f14f490eb20de  ./protocols/wlr-output-power-management-unstable-v1.xml
+@@ -100,10 +100,10 @@ c70d0e3f0721cf8dcee45bddd1fbf9e8d20b875bf4d1654428dac764c13e6ead  ./src/memo.c
+ 3c25e272a179885d591a442a0d4d24678ac4d17d4a647473ab6a8670803673bd  ./src/occasion.c
+ 330a310b1f1d2b78afb574a53f9b2697aab1dd0cda3c38dfa7b83128808dddc8  ./src/panel.c
+ 3504ead3ffbc250a3dd2e8a38ebc43550c279a2de1c3d15b6d44ea3753f06b16  ./src/post.c
+-aa52cd739f4f8d8c9be3fb657a94892af7d9c5f73d0fa47fbab5a3f8a7e6dff5  ./src/power.c
++9b6fdf0cb623a032caa595f33d42ff618dda83240cbc6068e05dd3ae15ddc7b5  ./src/power.c
+ 19732cbfcb8226a5ec53a4a8bd0746b4f4bc20fe3e8398274cebe915c63d98c1  ./src/preview.c
+ 707031a01a2b69257d24aa891b6cbe73ed7026f9d23870667a53f877e53af25a  ./src/room.glsl
+-c0c1d288860308d83a7fbd718ae11cce3e3ff95d24693ead1d3332926125a327  ./src/session.c
++95299633bbc782863119c83469bc5d2afb35ca1cccfce613ec4bacd64dbc1f28  ./src/session.c
+ 2a2d0b8c66a47345ed2fb4f244e7eabdc8eabd36f8b75aa4e97ad9bb5c3aafed  ./src/settings.c
+ 4c4e6cbe6b4e8eb5f0445f2ae831a40fc536e0f0a73898fae868bbbca80f4286  ./src/sfx.c
+ c5062fe9f23c69c728ed2505188f2bd5791a9072d1d013a073346dd79110646e  ./src/sound.c
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index d3ce27b..9085246 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -67,7 +67,8 @@ These decide most questions about where code goes and what it does.
+    per user; `DESK_ALLOW_MULTIPLE=1` to override), starts wlroots, and
+    paints the first frame while the room is read from the cache or traced.
+ 4. Once the display exists, `src/session.c` tells D-Bus and systemd where it
+-   is (`dbus-update-activation-environment --systemd`) and runs the XDG
++   is (`dbus-update-activation-environment`, with `--systemd` where systemd is
++   init) and runs the XDG
+    autostart entries, leaving out ones that would fight DEsk (another
+    notification daemon, an X screen locker, other desktops' polkit agents).
+ 5. DEsk's own autostart entries (`session/autostart/*.desktop`,
+@@ -239,7 +240,7 @@ Not yet provided: layer-shell, session-lock, gamma-control, input-method-v2.
+ 
+ ### 4.8 D-Bus
+ 
+-With libsystemd (`-Dpost=enabled`), DEsk uses sd-bus on the event loop's
++With libsystemd or libelogind (`-Dpost=enabled`), DEsk uses sd-bus on the event loop's
+ thread:
+ 
+ - `org.freedesktop.Notifications` server (`post.c`): letters in the post box.
+diff --git a/docs/MODDING.md b/docs/MODDING.md
+index 26b9c80..068aa5a 100644
+--- a/docs/MODDING.md
++++ b/docs/MODDING.md
+@@ -52,7 +52,7 @@ stderr when nested). `DESK_PROFILE=1` adds frame timings.
+   `wm.c` and `draw.c` and write like them.
+ - **No new libraries** without a strong reason. The required set is
+   wlroots, wayland, xkbcommon, cairo, pixman, fontconfig, libdrm and PAM;
+-  libsystemd, libpulse, libinput, EGL/GLES/gbm and Xwayland are optional and
++  libsystemd (or libelogind), libpulse, libinput, EGL/GLES/gbm and Xwayland are optional and
+   must stay optional (`#ifdef DESK_HAVE_POST`, `DESK_HAVE_GPU` and so on).
+ - **The compositor thread never blocks**: no disk walks, process waits or
+   network on it. Use a thread and hand the result back (see
+diff --git a/meson.build b/meson.build
+index 5dbceb9..93399b3 100644
+--- a/meson.build
++++ b/meson.build
+@@ -36,8 +36,10 @@ xkbcommon = dependency('xkbcommon')
+ libdrm = dependency('libdrm')
+ wayland_protos = dependency('wayland-protocols')
+ # The post box is the machine's notification daemon, so it needs a bus.
+-# -Dpost=disabled leaves it out even where libsystemd is installed.
+-sdbus = dependency('libsystemd', required: get_option('post'))
++# sd-bus is libsystemd's, or elogind's (libelogind, which installs the same
++# <systemd/sd-bus.h>) on a machine without systemd. -Dpost=disabled leaves
++# it out even where either is installed.
++sdbus = dependency('libsystemd', 'libelogind', required: get_option('post'))
+ if sdbus.found()
+   add_project_arguments('-DDESK_HAVE_POST=1', language: 'c')
+ endif
+diff --git a/meson_options.txt b/meson_options.txt
+index 50ff6e7..6003ab7 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -1,6 +1,6 @@
+ option('xwayland', type: 'feature', value: 'auto',
+   description: 'Open X11 programs through Xwayland (needs wlroots built with it, and xcb)')
+ option('post', type: 'feature', value: 'auto',
+-  description: 'Take the post (notifications) and keep the tray, over the session bus (needs libsystemd)')
++  description: 'Take the post (notifications) and keep the tray, over the session bus (needs libsystemd, or libelogind)')
+ option('sound', type: 'feature', value: 'auto',
+   description: 'The desk\'s sounds to the sound server, through libpulse (PulseAudio or PipeWire); without it, ALSA is tried at run time')
+diff --git a/src/power.c b/src/power.c
+index 0b1e6da..b57a3da 100644
+--- a/src/power.c
++++ b/src/power.c
+@@ -6,8 +6,9 @@
+  * PolicyKit may still put a password in the way, which is its business and
+  * not ours -- we get told no, and say so.
+  *
+- * Where there is no libsystemd to build against, the same request goes out
+- * through systemctl, which does the same thing the long way round. */
++ * Where there is no sd-bus to build against, the same request goes out
++ * through loginctl (systemd's or elogind's), else systemctl, which do the same
++ * thing the long way round. */
+ 
+ #include "power.h"
+ #include "panel.h"
+@@ -51,6 +52,9 @@ bool desk_power_request(enum desk_power what)
+ 	}
+ 	if (pid == 0) {
+ 		setsid();
++		execlp("loginctl", "loginctl",
++			what == DESK_POWER_REBOOT ? "reboot" : "poweroff", (char *)NULL);
++		/* only here when there is no loginctl */
+ 		execlp("systemctl", "systemctl",
+ 			what == DESK_POWER_REBOOT ? "reboot" : "poweroff", (char *)NULL);
+ 		_exit(127);
+diff --git a/src/session.c b/src/session.c
+index 33e9a17..27085a7 100644
+--- a/src/session.c
++++ b/src/session.c
+@@ -167,10 +167,18 @@ static const char *const ACTIVATION_VARS[] = {
+  * dbus-update-activation-environment can only set; systemd can unset. */
+ static const char *const UNSET_VARS[] = { "GTK_IM_MODULE", "QT_IM_MODULE" };
+ 
++/* Whether systemd is the init system (what sd_booted() asks). Without it
++ * there is no systemd user manager to tell or untell -- elogind and s6, say
++ * -- and asking one only fails, every login. */
++static bool systemd_booted(void)
++{
++	return access("/run/systemd/system", F_OK) == 0;
++}
++
+ static void unset_activation_environment(void)
+ {
+ 	char prog[1024];
+-	if (!on_path("systemctl", prog, sizeof prog)) {
++	if (!systemd_booted() || !on_path("systemctl", prog, sizeof prog)) {
+ 		return;
+ 	}
+ 	char *argv[8];
+@@ -217,7 +225,9 @@ static pid_t update_activation_environment(void)
+ 	char *argv[4 + sizeof ACTIVATION_VARS / sizeof ACTIVATION_VARS[0]];
+ 	int n = 0;
+ 	argv[n++] = prog;
+-	argv[n++] = "--systemd";
++	if (systemd_booted()) {
++		argv[n++] = "--systemd";
++	}
+ 	for (size_t i = 0; i < sizeof ACTIVATION_VARS / sizeof ACTIVATION_VARS[0]; i++) {
+ 		if (getenv(ACTIVATION_VARS[i])) {
+ 			argv[n++] = (char *)ACTIVATION_VARS[i];
+-- 
+2.56.0
+
