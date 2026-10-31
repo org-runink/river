@@ -1,0 +1,33 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-bluetuith — bluetuith, a terminal program for Bluetooth devices (scan, pair, connect,
+# trust, send files), by darkhz (MIT). DEsk's Bluetooth settings row and its Control Panel lever
+# open it in foot (river-bluetooth, runink-installer). It replaces blueman, which is Python.
+#
+# Not in Arch's or Artix's repositories. Built from the release tarball (sha256 below); its Go
+# modules are fetched by `go build` and checked against the tarball's go.sum, so they are
+# pinned by version and hash as well. Pure Go: no cgo, nothing but bluez on the bus.
+pkgname=runink-bluetuith
+pkgver=0.2.7
+pkgrel=1
+pkgdesc="bluetuith: Bluetooth devices from a terminal, for DEsk's Bluetooth settings"
+arch=('x86_64')
+url="https://github.com/darkhz/bluetuith"
+license=('MIT')
+depends=('bluez')
+makedepends=('go')
+provides=('bluetuith')
+conflicts=('bluetuith')
+source=("bluetuith-${pkgver}.tar.gz::https://github.com/darkhz/bluetuith/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('9586383c1703dd4e12e81f5f68e5144481aed8fb0526ee046dc3a80558d0f0dc')
+
+build() {
+	cd "bluetuith-${pkgver}"
+	CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+		go build -trimpath -ldflags "-s -w" -o bluetuith .
+}
+
+package() {
+	cd "bluetuith-${pkgver}"
+	install -Dm755 bluetuith "$pkgdir/usr/bin/bluetuith"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

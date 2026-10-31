@@ -128,11 +128,15 @@ runink-gtkgreet
 libelogind
 # What DEsk's session helper starts (its autostart entries) and what it opens. Each is a
 # small GTK or C program; none is Python, which the image does not carry: so no udiskie
-# (automounting), blueman (Bluetooth: bluetoothctl), system-config-printer (CUPS's own page
-# on localhost:631) or ibus (152 MiB, Python setup).
+# (automounting and the low-battery letter are river-desk's, runink-installer), blueman
+# (Bluetooth: runink-bluetuith, below), system-config-printer (CUPS's own pages on
+# localhost:631) or ibus (152 MiB, Python setup).
 mate-polkit
 network-manager-applet
 nm-connection-editor
+# Bluetooth devices: bluetuith (Go, MIT) in a terminal, built in [runink]; DEsk's Bluetooth row
+# opens it (river-bluetooth).
+runink-bluetuith
 gnome-keyring
 xdg-desktop-portal
 xdg-desktop-portal-wlr

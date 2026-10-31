@@ -372,6 +372,11 @@ cat > "$WPB/metadata.json" <<'JSON'
 JSON
 ship "$WPB" "$WS/usr/share/wallpapers/River"
 
+# ── the login screen (gtkgreet, in cage) ────────────────────────────────────────────────────
+# Its stylesheet is written by hand (no render): the dark wallpaper above as the background,
+# so the login screen carries the community mark, and the palette for the form.
+ship "$B/greeter" "$WS/usr/share/runink/branding/greeter"
+
 # CachyOS Emerald (GPL-3.0, third party). The JPEGs under branding/wallpapers/emerald are
 # derived from the pinned upstream by branding/wallpapers/emerald/derive.sh (which needs
 # the upstream tree, so it is NOT run here); this only verifies them and ships them.

@@ -23,11 +23,14 @@
 # install pairing (docs/INSTALL.md, "LAN installs"): the operator machine and the target.
 #
 # Output: $OUT_DIR/installer-bin/{river-hwprobe,river-plan,river-modelpack,river-payloadpack,
-#   river-cloud-init,river-netcheck,river-netsetup,river-pair,river-pair-announce,river-installer}
+#   river-cloud-init,river-netcheck,river-netsetup,river-pair,river-pair-announce,river-installer,
+#   river-live-fallback,river-desk}
 #
 # river-installer (same module, same flags) is the graphical installer's backend and web UI, and
 # the graphical first boot of an installed server (docs/INSTALL.md, "Installing with the
 # graphical installer").
+#
+# river-desk (same module, same flags) runs the DEsk session's small jobs (installer/desk).
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -43,7 +46,7 @@ LDFLAGS="-s -w"
 
 for b in hwprobe:river-hwprobe plan:river-plan modelpack:river-modelpack payloadpack:river-payloadpack \
 	cloudinit:river-cloud-init netcheck:river-netcheck pair:river-pair pairannounce:river-pair-announce \
-	gui:river-installer livefallback:river-live-fallback; do
+	gui:river-installer livefallback:river-live-fallback desk:river-desk; do
 	echo "  building ${b#*:} from installer/${b%%:*} (GOAMD64=v1)"
 	( cd "$HERE/../installer" && CGO_ENABLED=0 GOAMD64=v1 \
 		go build -trimpath -ldflags="$LDFLAGS" -o "$DEST/${b#*:}" "./${b%%:*}" )

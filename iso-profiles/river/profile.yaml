@@ -173,6 +173,7 @@ rootfs:
     - mate-polkit
     - network-manager-applet
     - nm-connection-editor
+    - runink-bluetuith
     - gnome-keyring
     - xdg-desktop-portal
     - xdg-desktop-portal-wlr

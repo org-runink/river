@@ -398,10 +398,10 @@ row below names what it will find on the image.
 | Displays | kscreen | Shell Settings → `wdisplays` (wlr-output-management) | `wdisplays` |
 | Portals | xdg-desktop-portal-kde | `desk-portals.conf` (wlr, gtk) | `-wlr`, `-gtk` |
 | Input methods | plasma-keyboard / none | helper `ime`, only for CJK/VI/TH locales | **none shipped** (ibus is 152 MiB and its setup is Python). `fcitx5` is documented as an opt-in |
-| Media automount | plasma (device notifier) | helper `media` → `udiskie` | **gap**: udiskie is Python. Thunar mounts on click (gvfs/udisks2) |
-| Low-battery letter | powerdevil | helper `power` → `poweralertd`/`batsignal` | **gap**: neither is in Artix. Later, a small Go notifier (`notify-send` on a `/sys` threshold) |
-| Bluetooth UI | bluedevil | Shell Settings → `blueman-manager` | **gap**: blueman is Python. `bluetoothctl` (bluez-utils, present) for now |
-| Printers UI | print-manager | Shell Settings → `system-config-printer` | **gap**: Python. CUPS's own web UI on `localhost:631` |
+| Media automount | plasma (device notifier) | helper `media` → `udiskie` | `river-desk automount` (Go, runink-installer; autostart `river-automount.desktop`): udisks2's own hints, `udisksctl mount`, a letter |
+| Low-battery letter | powerdevil | helper `power` → `poweralertd`/`batsignal` | `river-desk battery` (Go; autostart `river-battery.desktop`): `/sys/class/power_supply`, letters at 15% and 5% |
+| Bluetooth UI | bluedevil | Shell Settings → `blueman-manager` | `runink-bluetuith` (Go TUI, MIT) in foot, as `river-bluetooth`; runink-desk patch 0005 adds it to the row and the lever |
+| Printers UI | print-manager | Shell Settings → `system-config-printer` | `river-printers`: CUPS's own pages (`localhost:631`) in the browser; patch 0005 adds it to the row; `cupsd` enabled under s6 |
 | Sound devices UI | plasma-pa | Shell Settings → `pavucontrol` | not shipped (needs gtk4). `wpctl` and DEsk's volume control |
 | Partitions | partitionmanager | none | not shipped. `parted`/`gptfdisk` (present) |
 | Screen-share chooser | kde portal | `desk-screen-chooser` → `zenity` | not shipped (gtk4). xdpw shares the only/first output |

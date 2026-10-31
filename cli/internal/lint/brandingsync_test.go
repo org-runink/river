@@ -43,6 +43,7 @@ func brandFixture(t *testing.T) string {
 	w("branding/wallpapers/River/contents/images_dark/1920x1080.jpg", "jpeg")
 	rows := strings.Repeat("row\n", 22)
 	w("branding/fastfetch/river-mark.ansi", rows)
+	w("branding/greeter/gtkgreet.css", "window { background-image: url(\"file:///usr/share/wallpapers/River/contents/images_dark/1920x1080.jpg\"); }\n")
 
 	w("branding/wallpapers/emerald/Abstract/contents/images/960x540.jpg", "emerald")
 	e := sha256.Sum256([]byte("emerald"))
@@ -54,6 +55,7 @@ func brandFixture(t *testing.T) string {
 		"branding/icons/hicolor":               O + "usr/share/icons/hicolor",
 		"branding/wallpapers/River":            O + "usr/share/wallpapers/River",
 		"branding/fastfetch":                   O + "usr/share/runink/fastfetch",
+		"branding/greeter":                     O + "usr/share/runink/branding/greeter",
 		"branding/wallpapers/emerald/Abstract": O + "usr/share/wallpapers/Abstract",
 	} {
 		brandMirror(t, dir, src, dst)
@@ -61,6 +63,7 @@ func brandFixture(t *testing.T) string {
 	w(O+"etc/profile.d/runink-greeting.sh", "case $- in *i*) ;; *) return 0 ;; esac\n[ \"${RUNINK_GREETING:-}\" = off ] && return 0\nfastfetch\n")
 	w(O+"etc/xdg/fastfetch/config.jsonc", "{\"logo\": {\"source\": \"/usr/share/runink/fastfetch/river-mark.ansi\"},\n\"modules\": [\"os\", \"kernel\"]}\n")
 	w(O+"etc/os-release", "NAME=\"Runink River\"\nLOGO=runink-river\n")
+	w(O+"etc/greetd/config.toml", "[default_session]\ncommand = \"cage -s -- gtkgreet -s /usr/share/runink/branding/greeter/gtkgreet.css -c desk-session\"\n")
 	w("iso-profiles/river/live-overlay/usr/share/river/installer/editions/river.json", "{\"icon\": \"/usr/share/icons/hicolor/scalable/apps/runink-river.svg\"}\n")
 	w("installer/internal/wizard/web/style.css", "body { color: #E6E8E3; }\n")
 	return dir
@@ -99,7 +102,7 @@ func TestBrandingSyncClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clean tree failed: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "lint-branding-sync: 6 shipped branding copies match branding/") {
+	if !strings.Contains(out, "lint-branding-sync: 7 shipped branding copies match branding/") {
 		t.Fatalf("unexpected OK line: %q", out)
 	}
 }
@@ -154,6 +157,13 @@ func TestBrandingSyncFailures(t *testing.T) {
 		}},
 		{"os-release", "os-release LOGO is not runink-river", func(t *testing.T, d string) {
 			lbWrite(t, d, O+"etc/os-release", "LOGO=archlinux\n")
+		}},
+		{"greeter unstyled", "does not run gtkgreet with -s /usr/share/runink/branding/greeter/gtkgreet.css", func(t *testing.T, d string) {
+			lbWrite(t, d, O+"etc/greetd/config.toml", "[default_session]\ncommand = \"cage -s -- gtkgreet -c desk-session\"\n")
+		}},
+		{"greeter background", "the greeter's background '/usr/share/wallpapers/Gone.jpg' is not in the overlay", func(t *testing.T, d string) {
+			lbWrite(t, d, "branding/greeter/gtkgreet.css", "window { background-image: url(\"file:///usr/share/wallpapers/Gone.jpg\"); }\n")
+			brandMirror(t, d, "branding/greeter", O+"usr/share/runink/branding/greeter")
 		}},
 		{"edition icon", "river.json names icon /usr/share/icons/nope.svg, which the overlay does not ship", func(t *testing.T, d string) {
 			lbWrite(t, d, "iso-profiles/river/live-overlay/usr/share/river/installer/editions/river.json", "{\"icon\": \"/usr/share/icons/nope.svg\"}\n")

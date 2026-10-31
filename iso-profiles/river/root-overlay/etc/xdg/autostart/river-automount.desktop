@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# DEsk session: memory sticks and disks are opened as they are put in, with a letter in the
+# post box (river-desk automount, through udisks2). DEsk's own entry for this runs udiskie,
+# which is Python and not on the image.
+[Desktop Entry]
+Type=Application
+Name=Removable media
+Comment=Opens memory sticks and disks as they are put in
+Exec=/usr/local/bin/river-desk automount
+TryExec=/usr/local/bin/river-desk
+OnlyShowIn=DEsk;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

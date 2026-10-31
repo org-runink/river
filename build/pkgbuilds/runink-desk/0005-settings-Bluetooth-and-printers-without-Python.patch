@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 09:00:00 +0000
+Subject: [PATCH 5/5] settings: Bluetooth and printers without Python
+
+blueman and system-config-printer are Python programs, so a distribution
+without Python has neither, and Shell Settings' Bluetooth and Printers rows
+(and the Control Panel's Bluetooth lever) open nothing. After them, in the
+order they are preferred, come Runink River's own launchers: river-bluetooth
+(bluetuith, a Go TUI, in a terminal) and river-printers (CUPS's own pages,
+http://localhost:631, in the default browser). A machine with blueman or
+system-config-printer still gets those.
+
+Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
+---
+  SHA256SUMS     | 4 ++--
+  src/settings.c | 8 ++++++--
+  src/wm.c       | 3 ++-
+  3 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/SHA256SUMS b/SHA256SUMS
+index fb1e70f..fba435a 100644
+--- a/SHA256SUMS
++++ b/SHA256SUMS
+@@ -105,12 +105,12 @@ c70d0e3f0721cf8dcee45bddd1fbf9e8d20b875bf4d1654428dac764c13e6ead  ./src/memo.c
+ 19732cbfcb8226a5ec53a4a8bd0746b4f4bc20fe3e8398274cebe915c63d98c1  ./src/preview.c
+ 707031a01a2b69257d24aa891b6cbe73ed7026f9d23870667a53f877e53af25a  ./src/room.glsl
+ 95299633bbc782863119c83469bc5d2afb35ca1cccfce613ec4bacd64dbc1f28  ./src/session.c
+-e074d32c219bf647855b1e09558bbda1153ec38771aa5caac92556919e3bf51d  ./src/settings.c
++903bf51eaba509ffa90badc04369a3b8c1a1cf2405057b55f776760c9896a4be  ./src/settings.c
+ 4c4e6cbe6b4e8eb5f0445f2ae831a40fc536e0f0a73898fae868bbbca80f4286  ./src/sfx.c
+ c5062fe9f23c69c728ed2505188f2bd5791a9072d1d013a073346dd79110646e  ./src/sound.c
+ 2c6a618dae877ea979543d050d2073e40513237d6fcf93fd8cbd3450bbf3fbaa  ./src/tray.c
+ b5839f73e869853bfa7a39143d642e98e8a28cd88a4157358b2c21477d7cd949  ./src/user.c
+-11e6381df0a53206a172554ffaf7bdf456fff4204180a3917cd1da6cb4aaf2cb  ./src/wm.c
++3b03817832a9150256598070c4643642d57de6167753b64492058019d75f9cf2  ./src/wm.c
+ ccd7f9403ebc18dc92d8e84cbb112ed43b9ed5af04368a40f0429320d0032b0d  ./themes/gtk/DEsk/gtk-3.0/gtk.css
+ 934eb863fca7e67237ad54b439a88fb6f1bb44d339409784ddaf20262e9ec8fd  ./themes/gtk/DEsk/gtk-4.0/gtk.css
+ 15bd26eeb1073c7f06109c16d9fe4ffccb834aee6dbe1d628a07ffae675e2e37  ./themes/gtk/DEsk/gtk-4.0/paper.css
+diff --git a/src/settings.c b/src/settings.c
+index 4953ddb..b6366d8 100644
+--- a/src/settings.c
++++ b/src/settings.c
+@@ -237,11 +237,15 @@ static const char *const SWITCH_VALS[] = { "alt_shift", "super_space", "ctrl_shi
+ 
+ /* The programs the rest of the machine is set in (see the top). */
+ static const struct prog P_NETWORK[] = { { "nm-connection-editor" }, { NULL } };
+-static const struct prog P_BLUETOOTH[] = { { "blueman-manager" }, { NULL } };
++/* after the GTK programs, the ones a Python-free distribution opens instead:
++ * Runink River's river-bluetooth (bluetuith in a terminal) and river-printers
++ * (CUPS's own pages, http://localhost:631, in the browser) */
++static const struct prog P_BLUETOOTH[] = { { "blueman-manager" }, { "river-bluetooth" }, { NULL } };
+ static const struct prog P_SOUND[] = { { "pavucontrol" }, { "pavucontrol-qt" },
+ 	{ "mate-volume-control" }, { NULL } };
+ static const struct prog P_DISPLAYS[] = { { "wdisplays" }, { NULL } };
+-static const struct prog P_PRINTERS[] = { { "system-config-printer" }, { NULL } };
++static const struct prog P_PRINTERS[] = { { "system-config-printer" }, { "river-printers" },
++	{ NULL } };
+ static const struct prog P_LOOK[] = { { "nwg-look" }, { "gnome-tweaks" }, { NULL } };
+ static const struct prog P_DEFAULTS[] = { { "xfce4-mime-settings" },
+ 	{ "mate-default-applications-properties" }, { NULL } };
+diff --git a/src/wm.c b/src/wm.c
+index 90089b1..812ff6b 100644
+--- a/src/wm.c
++++ b/src/wm.c
+@@ -8316,7 +8316,8 @@ static void console_press(struct desk_server *server, int which)
+ static void console_open_settings(struct desk_server *server, int which)
+ {
+ 	static const char *const NETWORK[] = { "nm-connection-editor.desktop", NULL };
+-	static const char *const BLUETOOTH[] = { "blueman-manager.desktop", NULL };
++	static const char *const BLUETOOTH[] = { "blueman-manager.desktop", "river-bluetooth.desktop",
++		NULL };
+ 	/* pavucontrol's desktop file has had both names */
+ 	static const char *const SOUND[] = { "org.pulseaudio.pavucontrol.desktop",
+ 		"pavucontrol.desktop", "pavucontrol-qt.desktop", "mate-volume-control.desktop",
+-- 
+2.51.0
