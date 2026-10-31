@@ -76,7 +76,7 @@ secret, or anything that names a specific downstream product.
 
 ```bash
 RIVER_TIER1_NO_CONTAINER=1 sh scripts/ci-tier1.sh   # Tier 1 on the host (needs shellcheck, go)
-sh scripts/ci-tier1.sh      # the same inside an ephemeral rootless podman container (fork PRs in CI)
+sh scripts/ci-tier1.sh      # the same inside an ephemeral rootless podman container (as CI runs it)
 make test                   # gofmt + go vet + go test of installer/
 make test-guide             # the same for guide/ (river-guide)
 make test-bench             # bench/analytics;  make test-bpfdoc: build/tools/bpfdoc
@@ -258,12 +258,15 @@ instead; several of the existing linters assert their own inputs for exactly tha
   internal hostnames or personal data. Use documentation ranges (`192.0.2.0/24`,
   `203.0.113.0/24`, `2001:db8::/32`) and `example.org` in examples.
 - Workflows: least-privilege `permissions:`, actions pinned by SHA,
-  `persist-credentials: false`, no `pull_request_target`. This public repository runs only on
-  GitHub-hosted runners (`ubuntu-latest`, or `ubuntu-24.04` where a job needs that
-  release); no job ever runs on a self-hosted runner, and no workflow names a self-hosted
-  label. Pull requests from forks run the same jobs once a maintainer approves the run
-  ("Require approval for all external contributors"), with a read-only token and no
-  secrets. Jobs that write (Pages deploy, releases) never run on `pull_request`
+  `persist-credentials: false`, no `pull_request_target`. Every job runs on the project's
+  own runners, `runs-on: [self-hosted, public-ci]`, never on a GitHub-hosted runner, and
+  only for the owner: every job carries
+  `if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository`
+  (ANDed after a job's own condition), so pushes to this repository's branches and pull
+  requests from them run, and a fork's pull request never does (`river lint ci-runners`).
+  The runners serve no private repository and hold no secret, and fork runs
+  still need a maintainer's approval, so a fork that edits a workflow reaches no other
+  runner. Jobs that write (Pages deploy, releases) never run on `pull_request`
   ([docs/governance/CI.md](docs/governance/CI.md), "Runners").
 - Do not add third-party AI SDKs, telemetry or phone-home behaviour to the image.
 - Report vulnerabilities privately ([SECURITY.md](SECURITY.md)), never in a public issue.
@@ -272,11 +275,12 @@ instead; several of the existing linters assert their own inputs for exactly tha
 
 1. Branch (or worktree) from `main`; sign off every commit: `git commit -s` (`dco.yml`
    rejects a pull request with an unsigned commit).
-2. Open a pull request. CI runs on GitHub-hosted runners (a fork's pull request once a
-   maintainer approves the run): `ci.yml` (`tier1`, `installer-go`,
-   `river-guide`, `go-security`), `reuse.yml`, `dco.yml`, and `docs.yml` for website changes.
+2. Open a pull request. CI runs on the `public-ci` runners for a branch of this repository
+   (a fork's pull request runs no CI; a maintainer re-pushes it to a branch here): `ci.yml`
+   (`tier1`, `installer-go`, `river-guide`, `go-security`), `reuse.yml`, `dco.yml`, and
+   `docs.yml` for website changes.
    Changes that touch boot, the installer, ZFS or the kernel also need a VM boot, which
-   does not fit a GitHub-hosted runner: build with `build/local-iso.sh` and run the QEMU
+   does not fit a CI runner: build with `build/local-iso.sh` and run the QEMU
    harnesses (`tests/tier2-boot-smoke.sh`, `build/qemu-gui-test.sh`) yourself. Say in the PR
    how you tested.
 3. A maintainer merges (squash). Agents never merge, push to `main`, force-push shared

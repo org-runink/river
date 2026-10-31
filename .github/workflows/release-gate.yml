@@ -71,13 +71,16 @@ env:
 jobs:
   gate:
     # workflow_dispatch only (a maintainer, with a tag), so no pull-request code reaches it.
-    # GitHub-hosted ubuntu-latest: a fresh VM per job, so this job, which holds contents:
+    # Was GitHub-hosted ubuntu-latest: a fresh VM per job, so this job, which holds contents:
     # write and publishes the release, never shares a machine with an earlier job. It needs
     # apt and passwordless sudo (libarchive-tools, squashfs-tools; it unpacks the image as
     # root), docker (syft), gh, gpg and curl, outbound HTTPS (release assets, the Arch
     # security tracker, the Go vulnerability database, Sigstore), and ~20 GB of disk (the
     # reclaim step below makes room).
-    runs-on: ubuntu-latest
+    # public-ci (2026-10-31) has no sudo and no docker: this job fails there until a runner
+    # with them exists.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 120
     permissions:
       contents: write       # read the draft, upload evidence, publish (publish only on success)

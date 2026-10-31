@@ -109,7 +109,7 @@ OVMF, `go`, GNU tar, and about 40 GB free under `~/.cache` with the model payloa
 ### Building in GitHub Actions
 
 `.github/workflows/images.yml` builds the **public, payload-free** artifacts on
-GitHub-hosted `ubuntu-24.04` runners (this public repository never uses a self-hosted runner;
+the `public-ci` runners (GitHub-hosted until 2026-10-31; it fails on `public-ci` today, see [CI.md](governance/CI.md), "The heavy jobs";
 the workflow header lists how each job fits a standard runner's 4 vCPU, 16 GB of RAM and
 ~14 GB of free disk): the server ISO, the workstation ISO (both with
 `MODEL_PAYLOAD=no`), and the GCE base image (`cloud-image.sh --no-models --expect-payload

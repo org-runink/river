@@ -32,7 +32,7 @@ What Runink River promises an operator:
 | R5 | What an operator installs is what the project built from reviewed source. | Pinned and verified upstreams; signed release checksums; `install.sh` fails closed ([RELEASE-SIGNING.md](RELEASE-SIGNING.md)) |
 | R6 | The installer never destroys data the operator did not choose to destroy. | Serial-typed disk confirmation, boot-medium exclusion, re-probe before writing ([INSTALLER-HARDWARE.md](INSTALLER-HARDWARE.md)) |
 | R7 | The install guide agent can neither run a destructive command nor leak site data. | Step machine and redaction in `guide/` ([INSTALL-GUIDE-AGENT.md](INSTALL-GUIDE-AGENT.md)) |
-| R8 | Pull-request code, including from forks, cannot reach a machine that holds anything of value. | CI tiers on GitHub-hosted runners only, maintainer approval of fork runs, no secrets in pull-request jobs ([governance/CI.md](governance/CI.md)) |
+| R8 | Pull-request code, including from forks, cannot reach a machine that holds anything of value. | CI on the project's own `public-ci` runners, which serve no private repository and hold no secret; owner-only jobs (a fork's pull request never runs), maintainer approval of fork runs, no secrets in pull-request jobs ([governance/CI.md](governance/CI.md)) |
 
 ## 2. Threat model summary
 
@@ -48,7 +48,7 @@ hostnames, serials) during an install.
 | Network attacker | Reach the node's interfaces; tamper with downloads in transit | Reach a port the enrollment did not open (R3); make `install.sh` accept an unsigned or altered ISO (R5) |
 | Thief of a powered-off disk or node | Read every block of the disk | Read any dataset without the key (R1); the ESP holds only the kernel and initramfs |
 | Malicious workload or pipeline step | Run arbitrary code as confined by the sandbox or the container runtime | Read `/etc/runink`, runner credentials, the `runink` user's secret dirs or k0s state; create nested user namespaces (R4) |
-| Malicious pull request author | Put arbitrary code in a PR | Run it anywhere but a throwaway GitHub-hosted VM (this repository has no self-hosted runner) or before a maintainer approves the run; reach any secret (R8) |
+| Malicious pull request author | Put arbitrary code in a PR | Run it anywhere but a one-job, secret-free `public-ci` runner that serves no private repository, or before a maintainer approves the run (unedited workflows start no job for a fork at all); reach any secret (R8) |
 | Compromised upstream mirror or release | Serve altered source or binaries | Pass a sha256 pin and, where upstream signs, a signature check (R5) |
 | Remote commenter on the guide's issue channel | Ask questions; approve a step the console proposed, if the console enabled approvals | Propose or run a destructive step; make the guide execute model output (R7) |
 | Hallucinating or prompt-injected model | Produce any text | Have that text executed, or have an invented command shown as guidance (R7) |
@@ -77,8 +77,8 @@ network (documented weakness, see §6); vulnerabilities in unchanged upstream so
    partly; GitHub, the network and model output not at all
    ([INSTALL-GUIDE-AGENT.md](INSTALL-GUIDE-AGENT.md), "Threat model").
 7. **Pull request → CI.** Tier 1 runs in an ephemeral rootless container with no network
-   and a read-only source mount; every job runs on a throwaway GitHub-hosted VM, never a
-   self-hosted runner, and a fork's run waits for a maintainer's approval; Tier 2 never runs
+   and a read-only source mount; every job runs on a one-job `public-ci` runner of the
+   project's, only for this repository's own branches (a fork's pull request never runs); Tier 2 never runs
    on a pull request; no workflow uses `pull_request_target`.
 
 ## 4. Secure design principles applied

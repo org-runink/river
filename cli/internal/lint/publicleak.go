@@ -126,6 +126,8 @@ var (
 	leakRepoRE      = regexp.MustCompile(`(?i)\borg-runink/([a-z0-9._-]+)`)
 	leakSelfHosRE   = regexp.MustCompile(`(?i)runs-on:[^#]*self-hosted|\[\s*self-hosted\s*,`)
 	leakLanRE       = regexp.MustCompile(`(?i)\brunink\.lan\b`)
+	// leakPublicPoolRE is the one self-hosted runs-on a public workflow may carry.
+	leakPublicPoolRE = regexp.MustCompile(`(?i)\[\s*self-hosted\s*,\s*public-ci\s*\]`)
 )
 
 // leakRules are the publication rules (AGENTS.md, "Public repository").
@@ -145,7 +147,15 @@ var leakRules = []leakRule{
 	{"ula", "an IPv6 unique-local prefix (only the documented example and test prefixes)",
 		reFind(`(?i)\bfd[0-9a-f]{2}:[0-9a-f]{0,4}`)},
 	{"runner-label", "a self-hosted runner label", func(l string) []string {
-		return append(wordsIn(l, leakLabelRE, leakRunnerLabels, true), leakSelfHosRE.FindAllString(l, -1)...)
+		// The public pool is published on purpose (ci-runners requires it on every job).
+		l = leakPublicPoolRE.ReplaceAllString(l, "")
+		var out []string
+		for _, w := range wordsIn(l, leakLabelRE, leakRunnerLabels, true) {
+			if !strings.EqualFold(w, "public-ci") {
+				out = append(out, w)
+			}
+		}
+		return append(out, leakSelfHosRE.FindAllString(l, -1)...)
 	}},
 	{"target-hw", "the private deployment's hardware", func(l string) []string {
 		return wordsIn(l, leakWholeWordRE, leakTargetHW, true)

@@ -14,9 +14,9 @@
 # Commits authored by GitHub bot accounts (login ending in "[bot]", e.g. Dependabot)
 # are exempt, matching the DCO GitHub App's default.
 #
-# Runners (docs/governance/CI.md, "Runners"): GitHub-hosted ubuntu-latest, one job for every
-# pull request. A fork's pull request runs it once a maintainer approves the run, with a
-# read-only token and no secrets; fork PRs are exactly the ones the DCO is for.
+# Runners (docs/governance/CI.md, "Runners"): self-hosted `public-ci`, owner-only: it runs for
+# a pull request whose head branch is in this repository. A fork's pull request never runs
+# here, so a fork contributor's sign-off is checked by the maintainer who lands the change.
 name: DCO
 
 on:
@@ -32,7 +32,8 @@ concurrency:
 jobs:
   dco:
     name: DCO sign-off
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

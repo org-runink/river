@@ -5,8 +5,8 @@
 # GitHub Pages (the site's baseURL: https://docs.runink.org/river/).
 #
 #   * pull requests: build only (the job fails on any Hugo warning). Nothing is published
-#     and no secret is used. One job for every pull request on GitHub-hosted ubuntu-latest;
-#     a fork's pull request runs once a maintainer approves it, with a read-only token.
+#     and no secret is used. One job per same-repository pull request on `public-ci`;
+#     a fork's pull request never runs (owner-only `if:`).
 #   * pushes to main: build, then deploy with actions/deploy-pages (OIDC; the deploy job
 #     alone holds pages: write and id-token: write, and never runs for a pull request).
 #     Pages must be enabled with "GitHub Actions" as its source; on a private repository of
@@ -51,7 +51,8 @@ env:
 jobs:
   build:
     name: build (Hugo 0.147.3)
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,9 +99,9 @@ jobs:
 
   deploy:
     name: deploy to GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 10
     permissions:
       pages: write

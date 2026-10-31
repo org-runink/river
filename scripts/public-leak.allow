@@ -17,6 +17,7 @@
 # The lint's tests use made-up terms and addresses; this file describes the patterns. (The
 # lint itself keeps its names as digests, so it needs no entry.)
 * | cli/internal/lint/publicleak_test.go | * | the lint's tests
+runner-label | cli/internal/lint/cirunners_test.go | * | the ci-runners tests: a runs-on that lint rejects
 * | scripts/public-leak.allow            | * | this file
 
 # Documented example and test IPv6 unique-local prefixes: k0s's pod and service ranges

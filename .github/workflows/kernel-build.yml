@@ -5,7 +5,11 @@ name: build linux-runink — sovereign kernel (Artix container)
 # Artix container (pacman/makepkg native), and uploads the .pkg.tar.zst so it can be repo-add'd
 # into localrepo + baked into the next golden ISO. Manual-dispatch only — a kernel build is heavy.
 #
-# Runs on GitHub-hosted ubuntu-latest (workflow_dispatch only, so no pull-request code
+# NOTE (2026-10-31): GitHub-hosted runners are no longer used. This job now asks for the
+# self-hosted `public-ci` runner, which has no sudo, no container engine and no /dev/kvm, so
+# it fails there until a public-ci runner with them exists. The sizing below is the hosted one.
+#
+# Ran on GitHub-hosted ubuntu-latest (workflow_dispatch only, so no pull-request code
 # reaches it). A standard hosted runner has 4 vCPU, 16 GB of RAM and ~14 GB free on /; the
 # build needs ~30 GB (source + objects ~25-30 GB plus compiler temps), so the first step
 # removes the preinstalled toolchains it never uses. On 2026-09-05 that took the runner from
@@ -23,7 +27,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 300   # kernel compile on a 4-vCPU hosted runner (~4 h 10 min, 2026-09-05)
     env:
       # Through env, never spliced into a script (template injection).

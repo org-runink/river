@@ -1,7 +1,7 @@
 #!/bin/sh
 # ci-tier1.sh — Tier 1 CI (lint + hermetic checks) in an EPHEMERAL ROOTLESS PODMAN container.
 #
-# Runs the same way on a laptop and on a GitHub-hosted runner:
+# Runs the same way on a laptop and on a CI runner:
 #   sh scripts/ci-tier1.sh
 # Outside the container it re-executes itself inside one: rootless podman, no network,
 # the source tree mounted READ-ONLY, a tmpfs /tmp, all capabilities dropped, removed on
@@ -101,6 +101,8 @@ run "$RIVER" lint reuse --repo .
 # 10c. the public tree names no downstream product, private repository, internal address, runner
 #      label or personal mailbox (AGENTS.md, "Public repository"; scripts/public-leak.allow).
 run "$RIVER" lint public-leak --repo .
+# 10d. every workflow job runs on [self-hosted, public-ci] and only for the owner (CI.md, "Runners").
+run "$RIVER" lint ci-runners --repo .
 # The host-side contract tests (were tests/*.sh), run by the binary step 0 built. Each keeps its
 # own run line, so a failure names the test.
 # 8. the first-boot hook contract (done / registered / deferred / failed), in a scratch root.
