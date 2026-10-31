@@ -47,7 +47,7 @@ SPDX-License-Identifier = "MIT"
 
 # Runink BRAND assets: the Runink River community mark (the M2 mascot, a puppy on a raft) and
 # everything rendered from it: the hicolor icons and favicons, the GRUB background, the
-# Plymouth and Plasma splash logo, the Runink River wallpaper, /etc/issue. All rights
+# Plymouth logo, the Runink River wallpaper, /etc/issue. All rights
 # reserved, trademark of Runink. A community build must replace them (docs/LICENSING.md).
 [[annotations]]
 path = [
@@ -62,7 +62,6 @@ path = [
   "branding/fastfetch/**",
   "branding/mascot/**",
   "branding/plymouth/river/logo.png",
-  "branding/splash/**",
   "branding/grub/river/background.jpg",
   "branding/wallpapers/River/contents/images*/**",
   "branding/wallpapers/River/contents/screenshot.png",
@@ -112,62 +111,6 @@ path = [
 ]
 SPDX-FileCopyrightText = "2026 The RIVER Authors"
 SPDX-License-Identifier = "MIT"
-
-# Plasma look-and-feel package: its own metadata.json declares "GPLv2+". Mapped as declared.
-[[annotations]]
-path = "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/**"
-SPDX-FileCopyrightText = "2026 The RIVER Authors"
-SPDX-License-Identifier = "GPL-2.0-or-later"
-
-# ...except its splash images, the layers of the community mark and the wordmark (brand assets, as above).
-[[annotations]]
-path = "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/images/**"
-SPDX-FileCopyrightText = "2026 Runink"
-SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
-
-# The animated community mark: the SDDM greeter theme `runink-river` and the Plasma splash
-# (branding/render.sh). Their QML, the theme's metadata and configuration are code, MIT; the
-# splash's Splash.qml keeps the look-and-feel package's declared GPL-2.0-or-later.
-[[annotations]]
-path = [
-  "branding/src/qml/**",
-  "branding/src/sddm/**",
-  "branding/sddm/runink-river/*.qml",
-  "branding/sddm/runink-river/metadata.desktop",
-  "branding/sddm/runink-river/theme.conf",
-  "branding/splash/RiverLockup.qml",
-  "branding/splash/LockupGeometry.qml",
-  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/*.qml",
-  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/metadata.desktop",
-  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/theme.conf",
-  "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/RiverLockup.qml",
-  "iso-profiles/river/root-overlay/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash/LockupGeometry.qml",
-]
-SPDX-FileCopyrightText = "2026 The RIVER Authors"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = ["branding/src/splash/Splash.qml", "branding/splash/Splash.qml"]
-SPDX-FileCopyrightText = "2026 The RIVER Authors"
-SPDX-License-Identifier = "GPL-2.0-or-later"
-
-# ...the greeter's background (the dark wallpaper's river lines, no mark) is River artwork...
-[[annotations]]
-path = [
-  "branding/sddm/runink-river/background.jpg",
-  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/background.jpg",
-]
-SPDX-FileCopyrightText = "2026 The RIVER Authors"
-SPDX-License-Identifier = "CC-BY-4.0"
-
-# ...and the mark's layers and the wordmark it animates are Runink brand assets.
-[[annotations]]
-path = [
-  "branding/sddm/runink-river/images/**",
-  "iso-profiles/river/root-overlay/usr/share/sddm/themes/runink-river/images/**",
-]
-SPDX-FileCopyrightText = "2026 Runink"
-SPDX-License-Identifier = "LicenseRef-Runink-Trademark"
 
 # ── Third-party derived files ───────────────────────────────────────────────────────────
 # Adapted from Artix iso-profiles (BSD-2-Clause). Upstream notice kept to be safe; drops when
@@ -366,4 +309,11 @@ SPDX-License-Identifier = "MIT AND Apache-2.0"
 [[annotations]]
 path = ["cli/vendor/modules.txt", "cli/vendor/github.com/org-runink/river/pkg/**", "scripts/shell-ratchet.txt"]
 SPDX-FileCopyrightText = "2026 The RIVER Authors"
+SPDX-License-Identifier = "MIT"
+
+# The Runink fork's changes to DEsk (github.com/fyzugx/DEsk, MIT), carried as patches until the
+# fork's repository exists. They are diffs of DEsk's own files, so both holders are named.
+[[annotations]]
+path = "build/pkgbuilds/runink-desk/*.patch"
+SPDX-FileCopyrightText = ["2026 The DEsk authors", "2026 The RIVER Authors"]
 SPDX-License-Identifier = "MIT"

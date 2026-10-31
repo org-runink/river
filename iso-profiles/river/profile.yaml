@@ -7,14 +7,14 @@
 # INSTALLED package set too. Adding a package to Packages-Root without adding it here
 # changes nothing that ships.
 #
-# Artix + s6 + encrypted ZFS root + linux-runink + grub + KDE Plasma on Wayland. Deliberately
+# Artix + s6 + encrypted ZFS root + linux-runink + grub + DEsk on Wayland. Deliberately
 # ABSENT: a Kubernetes node, NAT64 and any platform runtime; a downstream distribution that
 # needs them builds its own profile (docs/BUILD.md, "Downstream distributions").
 #
 # TWO LAYERS (the `livefs:` key at the bottom turns the second one on):
 #   rootfs  LiveOS/rootfs.img: the golden system. Installed machines are a clone of it.
 #   livefs  LiveOS/livefs.img: live-medium only, an overlay on rootfs. It holds live-overlay/
-#           (the live SDDM autologin, the tty2 autologin, the live user's sudo, the live
+#           (the live greetd session, the tty2 autologin, the live user's sudo, the live
 #           hostname), the livefs packages (Packages-Live), and artools' live-session
 #           configuration (the live user, the enabled services).
 # Without a `livefs:` key artools builds rootfs alone and NEVER copies live-overlay/, and runs
@@ -32,12 +32,12 @@ live-session:
   user: runink
   password: runink
   # artools' `autologin` only reaches artix-live's live.conf, which this image does not read.
-  # The live session logs in through live-overlay/etc/sddm.conf.d/50-live-autologin.conf
-  # (Plasma) and live-overlay/etc/s6/config/tty2.conf (a console on Ctrl+Alt+F2);
-  # 20-clone-rootfs removes both from installed machines.
+  # The live session logs in through live-overlay/etc/greetd/live.toml (greetd's initial
+  # session: the installer, full screen in weston) and live-overlay/etc/s6/config/tty2.conf (a
+  # console on Ctrl+Alt+F2); 20-clone-rootfs removes both from installed machines.
   autologin: true
-  # false selects common.yaml's packages-xorg set (X11 + XWayland), which is what a Plasma
-  # Wayland session needs underneath it. Matches the upstream plasma profile.
+  # false selects common.yaml's packages-xorg set (X11 + XWayland), which DEsk's X11 programs
+  # run on.
   use-xlibre: false
   # Enabled with `s6 set enable` in the live set, which 20-clone-rootfs carries to the target;
   # 80-enable-s6 re-asserts them there. s6 refuses a set where an enabled service depends on a
@@ -49,9 +49,9 @@ live-session:
     - runink-fw
     # zfs-mount: `zfs mount -a` at boot. The initramfs mounts only the boot environment; the
     # pool's other datasets (<pool>/home at /home) are its siblings and nothing else mounts
-    # them. mount-filesystems and sddm-srv depend on it: without it /home was an empty
-    # directory on the installed machine, SDDM's helper could not chdir to the user's home
-    # and Plasma never started (qemu-gui-test plasma-login, 2026-09-26). On the live medium
+    # them. mount-filesystems and greetd-srv depend on it: without it /home was an empty
+    # directory on the installed machine and no desktop session could start (qemu-gui-test
+    # plasma-login, 2026-09-26, under the previous desktop). On the live medium
     # no pool is imported and it mounts nothing.
     - zfs-mount
     # river-perms: the shadow-grade modes oneshot (invariant 4).
@@ -84,12 +84,13 @@ live-session:
     # If the live medium ever needs a synced clock, chrony + chrony-s6 have to go into
     # Packages-Live and the livefs package list, not into an overlay directory.
     # The display manager is declared HERE, as a service name — artools 0.39 has no
-    # `displaymanager:` key. Its s6 unit comes from packages-init.s6 below. sddm-srv also
-    # depends on the plymouth-quit oneshot (root-overlay/etc/s6/adminsv/plymouth-quit).
-    - sddm
+    # `displaymanager:` key. Its s6 service comes from runink-greetd-s6 (packages-init.s6
+    # below; Artix has no greetd-s6), which also depends on the plymouth-quit oneshot
+    # (root-overlay/etc/s6/adminsv/plymouth-quit).
+    - greetd
     # s6-rc bundle names from bluez-s6 (bluetoothd) and cups-s6 (cupsd), declared in
     # packages-init.s6 below. Enabled in the live default bundle, which 20-clone-rootfs.sh
-    # carries to the installed target, exactly as sddm is; 80-enable-s6 re-asserts all three
+    # carries to the installed target, exactly as greetd is; 80-enable-s6 re-asserts all three
     # there.
     - bluetoothd
     - cupsd
@@ -160,75 +161,41 @@ rootfs:
     - runink-installer
     - artools-base
     - nftables
-    # ── desktop: KDE Plasma on Wayland ────────────────────────────────────────────────
-    # Matches the reference workstation: Plasma 6, Wayland session, SDDM.
-    # EXPLICIT Plasma list instead of plasma-meta (no discover/flatpak-kcm/plasma-welcome/
-    # krdp/plasma-vault/plasma-firewall/oxygen). Rationale in Packages-Root.
-    - aurorae
-    - bluedevil
-    - breeze
-    - breeze-gtk
-    - kactivitymanagerd
-    - kde-cli-tools
-    - kde-gtk-config
-    - kdecoration
-    # NO kdeplasma-addons (removed 2026-10-01): extra plasmoids and wallpaper plugins this
-    # image's default layout never loads. Rationale in Packages-Root.
-    - kglobalacceld
-    - kinfocenter
-    - kmenuedit
-    - knighttime
-    - kpipewire
-    - kscreen
-    - kscreenlocker
-    - ksshaskpass
-    - ksystemstats
-    - kwallet-pam
-    - kwayland
-    - kwin
-    - kwrited
-    - layer-shell-qt
-    - libkscreen
-    - libksysguard
-    - libplasma
-    - milou
-    - ocean-sound-theme
-    - plasma-activities
-    - plasma-activities-stats
-    - plasma-browser-integration
-    - plasma-desktop
-    - plasma-disks
-    - plasma-integration
-    - plasma-keyboard
-    - plasma-nm
-    - plasma-pa
-    - plasma-systemmonitor
-    - plasma-thunderbolt
-    - plasma-workspace
-    - polkit-kde-agent
-    - powerdevil
-    - print-manager
-    - systemsettings
-    - xdg-desktop-portal-kde
-    - sddm-kcm
-    - sddm
-    - konsole
-    - dolphin
-    - kate
-    # KDE applications for the daily desktop. See Packages-Root for why video is dragon
-    # (haruna is not in the Artix repos).
-    - dragon
-    - elisa
-    - gwenview
-    - okular
-    - ark
-    - spectacle
-    - kcalc
-    - partitionmanager
-    # Telemetry off via root-overlay/etc/firefox/policies/policies.json.
+    # ── desktop: DEsk on Wayland ──────────────────────────────────────────────────────
+    # DEsk replaced KDE Plasma (owner decision 2026-10-30): the desktop, the login screen
+    # (greetd + gtkgreet in cage) and the GTK programs it opens. Rationale in Packages-Root.
+    - runink-desk
+    - runink-wlroots0.18
+    - greetd
+    - runink-cage
+    - runink-gtkgreet
+    - libelogind
+    - mate-polkit
+    - network-manager-applet
+    - nm-connection-editor
+    - gnome-keyring
+    - xdg-desktop-portal
+    - xdg-desktop-portal-wlr
+    - xdg-desktop-portal-gtk
+    - xorg-xwayland
+    - xdg-user-dirs
+    - xdg-utils
+    - wdisplays
+    - grim
+    - wl-clipboard
+    - libnotify
+    - gsfonts
+    - foot
+    - thunar
+    - tumbler
+    - gvfs
+    - udisks2
+    - mousepad
+    - ristretto
+    - atril
+    - engrampa
+    - parole
     - firefox
-    # NO plasma-workspace-wallpapers (removed 2026-10-01): 255 MiB of KDE's own wallpapers
-    # on an image that ships its own. Rationale in Packages-Root.
     # Boot splash — the Runink River Plymouth theme. See Packages-Root for why it is s6-clean.
     - plymouth
     # ── graphics: mesa ────────────────────────────────────────────────────────────────
@@ -256,7 +223,7 @@ rootfs:
     - wireplumber
     - pipewire-jack
     # ── bluetooth + printing ─────────────────────────────────────────────────────────
-    # bluedevil and print-manager (the Plasma front ends) are in the Plasma list.
+    # No Bluetooth or printer program (blueman and system-config-printer are Python); see Packages-Root.
     - bluez
     - bluez-utils
     - cups
@@ -303,11 +270,8 @@ rootfs:
     s6:
       - openssh-s6
       - networkmanager-s6
-      # sddm needs an s6 service, not a systemd unit. Same convention as elogind-s6 and
-      # dbus-s6 already in Packages-Root. This is the constraint that rules out simply
-      # lifting a mainstream KDE spin: the image is s6-init, and a desktop is mostly
-      # services.
-      - sddm-s6
+      # greetd, the display manager: Runink River's own -s6 package (Artix has none).
+      - runink-greetd-s6
       # bluetoothd and cupsd s6-rc services (see live-session.services above).
       - bluez-s6
       - cups-s6
@@ -333,9 +297,9 @@ livefs:
     # all open their installer without trouble. Those distributions do the boring thing: boot a
     # session and run the installer as a window in it. weston's kiosk-shell is exactly that --
     # one application, fullscreen -- and weston renders through pixman where there is no GPU.
-    # It runs the SAME river-installer-desktop the Plasma session runs. firefox is already in
-    # Packages-Root, so this adds a small compositor and drops a whole second browser engine.
-    # NOT cage: cage is an Arch package and is not in Artix's system/world/galaxy, which is
-    # what the ISO installs from. weston 15.0.1 is in `world`. Live-only: an installed
-    # workstation has Plasma and a browser and no use for the kiosk.
+    # Since DEsk replaced Plasma it is also the live medium's FIRST path: greetd's initial
+    # session runs weston as the live user (live-overlay/etc/greetd/live.toml), and weston.ini
+    # autolaunches river-installer-desktop. firefox is already in Packages-Root, so this adds a
+    # small compositor and drops a whole second browser engine. weston 15.0.1 is in `world`.
+    # Live-only: an installed workstation has DEsk and a browser and no use for the kiosk.
     - weston

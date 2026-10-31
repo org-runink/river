@@ -52,5 +52,5 @@ advisory unless you prefer otherwise, and a CVE through GitHub's CNA where warra
 
 Known and documented, no report needed: the **live** medium has a default `runink`/`runink`
 account with autologin (never boot it on an untrusted network; the installed system does not
-carry it). Vulnerabilities in upstream projects packaged unchanged (Linux, OpenZFS, KDE, ...)
+carry it). Vulnerabilities in upstream projects packaged unchanged (Linux, OpenZFS, wlroots, ...)
 go to those projects. The full policy: {{< repo "SECURITY.md" >}}.

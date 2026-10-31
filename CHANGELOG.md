@@ -33,6 +33,12 @@ None.
 
 ### Added
 
+- **DEsk packages.** `[runink]` gains `runink-wlroots0.18` (wlroots 0.18.3), `runink-desk`
+  (DEsk 0.1.4 with the Runink fork's patches: no Python in its build, elogind instead of
+  systemd, the weather off until a user turns it on), and the login screen's `runink-cage`
+  and `runink-gtkgreet`. All are built from sha256-pinned sources with muon, a C
+  implementation of meson, which the builder image now bootstraps. The image does not install
+  them yet.
 - **The desktop is a desk.** A new default wallpaper, *Runink River Desk*
   (`org.runink.river.desk`): your picture stands on a surface in a frame — mat, bevel, glass
   and a shadow cast away from a single desk lamp — instead of being the surface. Six
@@ -64,6 +70,24 @@ None.
   only while inference is idle or scaled down. The plan's `build` object and `build` budget
   line say which and why; a workstation plans none
   ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
+
+### Changed
+
+- **DEsk replaces KDE Plasma** (owner decision 2026-10-30; docs/DESKTOP-DESK-PLAN.md). The
+  desktop is [DEsk](https://github.com/fyzugx/DEsk) (MIT, by fyzugx and the DEsk authors) on
+  wlroots, with the Runink fork's patches; the login screen is greetd (gtkgreet in cage),
+  from a new `runink-greetd-s6` package; the standard programs are the GTK ones DEsk lays
+  on its desk (foot, Thunar, Mousepad, Ristretto, Atril, Engrampa, Parole). The live medium
+  opens the installer in weston first. Installer contract change for downstream profiles:
+  `20-clone-rootfs` deletes `/etc/greetd/live.toml` and fails on any greetd
+  `initial_session` left on the target, and `32-locale-keyboard` keys on DEsk's session.
+  The QEMU harnesses' desktop checks still expect Plasma until they are rewritten.
+
+### Removed
+
+- KDE Plasma, KWin, SDDM, Breeze and the KDE applications; the SDDM theme and Plasma splash,
+  with `river test sddm-theme`; and the *Runink River Desk* wallpaper plugin listed under
+  Added, which was a Plasma plugin and never shipped in a release.
 
 ### Fixed
 

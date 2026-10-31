@@ -13,7 +13,7 @@ workstation (unlike a locked-down appliance, which would be updated only as a wh
 Two kinds of repository feed `pacman -Syu`:
 
 - **The distribution's repositories.** Today the image is assembled from Artix Linux
-  packages, so everyday packages (Plasma, Firefox, libraries, tools) update from those
+  packages, so everyday packages (Firefox, the desktop's programs, libraries, tools) update from those
   repositories.
 - **`[runink]`**, Runink River's own signed repository, for the packages it builds
   (`linux-runink`, `runink-zfs`, `runink-zfs-utils`, `runink-installer`, ...). The image

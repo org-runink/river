@@ -204,7 +204,6 @@ var (
 	brandIconRe    = regexp.MustCompile(`.*"icon": *"([^"]*)".*`)
 	brandNetModRe  = regexp.MustCompile(`(?i)"(publicip|weather|dns|netio)"|"type": *"(publicip|weather|netio)"`)
 	brandRetiredRe = regexp.MustCompile(`(?i)#(D9764E|C4623A|FBF7F1|1A1614|241F1B|EDE2D3|3F382D|ABA397|C2BBB0)`)
-	brandImportsOK = regexp.MustCompile(`^import (QtQuick|QtQml|QtQuick\.Controls\.Basic)$`)
 )
 
 const (
@@ -239,8 +238,6 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	}
 	same("branding/grub/river", O+"/usr/share/runink/branding/grub/river")
 	same("branding/plymouth/river", O+"/usr/share/plymouth/themes/river")
-	same("branding/splash", O+"/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash")
-	same("branding/sddm/runink-river", O+"/usr/share/sddm/themes/runink-river")
 	same("branding/icons/hicolor", O+"/usr/share/icons/hicolor")
 	same("branding/wallpapers/River", O+"/usr/share/wallpapers/River")
 	same("branding/fastfetch", O+"/usr/share/runink/fastfetch")
@@ -316,84 +313,6 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	if !brandLineMatch(at(O+"/etc/os-release"), regexp.MustCompile(`^LOGO=runink-river$`)) {
 		r.fail("os-release LOGO is not runink-river")
 	}
-	if !brandLineMatch(at(O+"/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"), regexp.MustCompile(`"runink-river"`)) {
-		r.fail("the Kickoff button does not show runink-river")
-	}
-	// SDDM: the image selects the Runink River greeter theme, which is a Qt 6 theme that draws
-	// the animated community mark (all five layers of river-mark.svg, the M2 mascot) and imports
-	// nothing beyond QtQuick and QtQuick.Controls.Basic (qt6-declarative, a dependency of sddm;
-	// a Plasma or Kirigami import could fail in the greeter). The Plasma splash draws the same
-	// mark.
-	sddm := O + "/usr/share/sddm/themes/runink-river"
-	splash := O + "/usr/share/plasma/look-and-feel/org.runink.river.desktop/contents/splash"
-	if !brandLineMatch(at(O+"/etc/sddm.conf.d/10-river.conf"), regexp.MustCompile(`^Current=runink-river$`)) {
-		r.fail("etc/sddm.conf.d/10-river.conf does not select Current=runink-river")
-	}
-	if !brandLineMatch(at(sddm+"/metadata.desktop"), regexp.MustCompile(`^QtVersion=6$`)) {
-		r.fail("the SDDM theme's metadata.desktop does not say QtVersion=6")
-	}
-	for _, d := range []string{sddm, splash} {
-		for _, l := range []string{"back", "head", "front", "water", "waves"} {
-			if brandSize(repo, d+"/images/mark-"+l+".svg") == 0 {
-				r.fail("%s lacks the mark layer images/mark-%s.svg", d, l)
-			}
-		}
-		if !isFile(d + "/RiverLockup.qml") {
-			r.fail("%s lacks RiverLockup.qml (the animated mark)", d)
-		}
-	}
-	nqml := 0
-	_ = filepath.WalkDir(at(sddm), func(p string, _ fs.DirEntry, err error) error {
-		if err == nil && strings.HasSuffix(filepath.Base(p), ".qml") {
-			nqml++
-		}
-		return nil
-	})
-	if nqml <= 3 {
-		r.fail("the SDDM theme has only %d QML files — its path is stale", nqml)
-	}
-	imports := map[string]bool{}
-	for _, d := range []string{sddm, splash} {
-		qmls, _ := filepath.Glob(at(d + "/*.qml"))
-		for _, q := range qmls {
-			b, _ := os.ReadFile(q)
-			for _, l := range strings.Split(string(b), "\n") {
-				if strings.HasPrefix(l, "import ") {
-					if i := strings.Index(l, " as "); i >= 0 {
-						l = l[:i]
-					}
-					if !brandImportsOK.MatchString(l) {
-						imports[l] = true
-					}
-				}
-			}
-		}
-	}
-	if len(imports) > 0 {
-		bad := make([]string, 0, len(imports))
-		for l := range imports {
-			bad = append(bad, l)
-		}
-		slices.Sort(bad)
-		r.fail("the greeter or splash imports a module outside the allow-list:")
-		indent(bad)
-	}
-	// The QML the render copies must be the hand-written sources, unmodified.
-	srcs, _ := filepath.Glob(at("branding/src/sddm/runink-river/*"))
-	for _, f := range srcs {
-		b := filepath.Base(f)
-		if !brandSameFile(f, at("branding/sddm/runink-river/"+b)) {
-			r.fail("branding/sddm/runink-river/%s != branding/src/sddm/runink-river/%s (re-run branding/render.sh)", b, b)
-		}
-	}
-	for _, p := range []string{"branding/sddm/runink-river", "branding/splash"} {
-		if !brandSameFile(at("branding/src/qml/RiverLockup.qml"), at(p+"/RiverLockup.qml")) {
-			r.fail("%s/RiverLockup.qml != branding/src/qml/RiverLockup.qml", p)
-		}
-	}
-	if !brandSameFile(at("branding/src/splash/Splash.qml"), at("branding/splash/Splash.qml")) {
-		r.fail("branding/splash/Splash.qml != branding/src/splash/Splash.qml")
-	}
 	eds, _ := filepath.Glob(at("iso-profiles/river/live-overlay/usr/share/river/installer/editions/*.json"))
 	for _, e := range eds {
 		b, _ := os.ReadFile(e)
@@ -439,7 +358,7 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 	// (Runink River + Emerald) under 6 MiB in total, and ONE resolution per River variant.
 	var big []string
 	for _, f := range brandFiles(repo, "branding", O+"/usr/share/runink/branding", O+"/usr/share/wallpapers", O+"/usr/share/icons",
-		O+"/usr/share/plymouth", O+"/usr/share/plasma") {
+		O+"/usr/share/plymouth") {
 		if brandSize(repo, f) > brandMaxAsset {
 			big = append(big, f)
 		}

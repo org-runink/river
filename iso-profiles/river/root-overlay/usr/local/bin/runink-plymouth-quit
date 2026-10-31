@@ -1,7 +1,7 @@
 #!/bin/sh
 # runink-plymouth-quit — stop the RIVER boot splash, if one is running.
 #
-# Called by the s6 oneshot `plymouth-quit` (which sddm-srv depends on) and again from
+# Called by the s6 oneshot `plymouth-quit` (which greetd depends on) and again from
 # rc.local as a fallback for a boot with no display manager. Idempotent, and it never
 # fails: a missing plymouth, or a boot without `splash`, is the normal case on any
 # non-graphical boot and must not hold up the services that depend on this.

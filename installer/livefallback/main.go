@@ -50,8 +50,10 @@ func probes() []sessionProbe {
 		// An X server publishes its socket here. Runink River is Wayland, but a
 		// downstream profile may not be.
 		{"X socket", func() bool { return globAny("/tmp/.X11-unix/X*") }},
-		// The desktop shell itself, in case the sockets live somewhere unusual.
-		{"plasmashell", func() bool { return pgrep("plasmashell") }},
+		// The compositor itself, in case the sockets live somewhere unusual: the live
+		// medium's installer session is weston (etc/greetd/live.toml), a desktop is DEsk.
+		{"weston", func() bool { return pgrep("weston") }},
+		{"desk", func() bool { return pgrep("desk") }},
 	}
 }
 
@@ -367,20 +369,48 @@ func releaseDisplay(tty *os.File) {
 	if _, err := exec.LookPath("s6-rc"); err != nil {
 		return
 	}
-	// "sddm" is the bundle name this image enables (iso-profiles/river/profile.yaml services,
-	// re-asserted by installer/lib/80-enable-s6.sh), not the sddm-srv servicedir.
-	cmd := exec.Command("s6-rc", "-d", "change", "sddm") // #nosec G204 -- fixed tool and arguments
-	cmd.Env = withBinDirs(os.Environ())
-	if err := cmd.Run(); err != nil {
-		// Not fatal: it may already be down, or not be this image's display manager.
-		fmt.Fprintf(os.Stderr, "river-live-fallback: could not stop the display manager (%v); "+
-			"the kiosk may not get the display\n", err)
-		return
+	list := exec.Command("s6-rc", "-a", "list") // #nosec G204 -- fixed tool and arguments
+	list.Env = withBinDirs(os.Environ())
+	active, _ := list.Output()
+	dms := activeDisplayManagers(string(active))
+	if len(dms) == 0 {
+		// Not this image's display manager, or none is up; try the original one regardless.
+		dms = displayManagers[:1]
+	}
+	for _, dm := range dms {
+		cmd := exec.Command("s6-rc", "-d", "change", dm) // #nosec G204 -- fixed tool; dm is one of displayManagers
+		cmd.Env = withBinDirs(os.Environ())
+		if err := cmd.Run(); err != nil {
+			// Not fatal: it may already be down, or not be this image's display manager.
+			fmt.Fprintf(os.Stderr, "river-live-fallback: could not stop the display manager %s (%v); "+
+				"the kiosk may not get the display\n", dm, err)
+			return
+		}
 	}
 	say(tty, "  Freeing the display from the display manager, which never started a session.\n")
 	// The device is not released the instant the service is told to stop. A short wait costs
 	// nothing next to five failed view starts.
 	time.Sleep(2 * time.Second)
+}
+
+// displayManagers are the display managers an image may enable, by the s6 BUNDLE name
+// (iso-profiles/river/profile.yaml services, re-asserted by installer/lib/80-enable-s6.sh), not
+// the <name>-srv servicedir. The first is the one the image has always enabled.
+var displayManagers = []string{"sddm", "greetd"}
+
+// activeDisplayManagers returns the displayManagers whose service `s6-rc -a list` reports up.
+// That lists atomic services, so a pipeline shows as <name>-srv rather than its bundle name.
+func activeDisplayManagers(list string) []string {
+	var out []string
+	for _, dm := range displayManagers {
+		for _, l := range strings.Fields(list) {
+			if l == dm || l == dm+"-srv" {
+				out = append(out, dm)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // activate brings the console to the front, so the message is on the screen the person is

@@ -33,17 +33,15 @@ rsync -aHAXS --numeric-ids --info=progress2 \
   --exclude='/usr/share/river/installer' --exclude='/etc/s6/sv/river-installer' \
   --exclude='/usr/local/bin/river-installer-tty' --exclude='/etc/xdg/autostart/river-installer.desktop' \
   --exclude='/usr/local/bin/river-installer-desktop' --exclude='/var/log/river-installer' \
-  --exclude='/etc/xdg/kscreenlockerrc' --exclude='/etc/xdg/powermanagementprofilesrc' \
+  --exclude='/etc/greetd/live.toml' \
   --exclude='/etc/xdg/weston' \
   / "$TARGET/"
 
-# kscreenlockerrc and powermanagementprofilesrc: the LIVE session must not lock or blank,
-# because somebody is copying a 64-character recovery key off the screen and the autologin user
-# has no password they could use to get back in. An INSTALLED machine must do both. These are
-# live-overlay files and the overlay is part of the running system this clones, so without an
-# explicit exclude they would follow the install and leave every installed workstation unable
-# to lock its screen. /etc/xdg/weston goes with them: the kiosk config has no meaning on a
-# machine that has Plasma.
+# /etc/greetd/live.toml: the live medium's greetd starts the installer with no login at all (its
+# initial_session). An INSTALLED machine must ask for one, from /etc/greetd/config.toml. It is a
+# live-overlay file and the overlay is part of the running system this clones, so without an
+# explicit exclude it would follow the install and log every installed workstation straight in.
+# /etc/xdg/weston goes with it: the kiosk config has no meaning on a machine that has DEsk.
 
 # Recreate the virtual-fs mountpoints the excludes emptied.
 for d in proc sys dev run tmp mnt media; do mkdir -p "$TARGET/$d"; done
@@ -66,21 +64,22 @@ find "$TARGET/etc" -name '*autologin*' -path '*getty*' -delete 2>/dev/null || tr
 for _c in "$TARGET"/etc/s6/config/tty*.conf; do
   [ -f "$_c" ] && sed -i '/^ARGS=/{s/--autologin[= ][^ "]*//; s/--noclear//; s/=" */="/; s/ *"$/"/}' "$_c"
 done
-# The workstation's live overlay logs the live user into Plasma (an SDDM [Autologin] drop-in)
-# and gives it passwordless sudo. An installed machine boots to the SDDM greeter, and its admin
-# uses sudo with their own password (root-overlay/etc/sudoers.d/10-wheel).
-rm -f "$TARGET/etc/sddm.conf.d/50-live-autologin.conf" "$TARGET/etc/sudoers.d/90-live-nopasswd"
-# Its Plasma autostart opens river-netsetup (network first) in Konsole; an installed machine
+# The workstation's live overlay starts the installer with no login (greetd's initial_session in
+# /etc/greetd/live.toml) and gives the live user passwordless sudo. An installed machine boots to
+# the login screen, and its admin uses sudo with their own password
+# (root-overlay/etc/sudoers.d/10-wheel).
+rm -f "$TARGET/etc/greetd/live.toml" "$TARGET/etc/sudoers.d/90-live-nopasswd"
+# Its live autostart opens river-netsetup (network first) in a terminal; an installed machine
 # does not. river-netsetup itself stays (runink-installer) for reconfiguring the network.
 rm -f "$TARGET/etc/xdg/autostart/river-netsetup.desktop"
-if grep -rqs '^[[:space:]]*User=[^[:space:]]' "$TARGET/etc/sddm.conf" "$TARGET/etc/sddm.conf.d"; then
-  echo "clone: an SDDM autologin user survived on the target:" >&2
-  grep -rs '^[[:space:]]*User=' "$TARGET/etc/sddm.conf" "$TARGET/etc/sddm.conf.d" >&2
+if grep -qs '^[[:space:]]*\[initial_session\]' "$TARGET"/etc/greetd/*.toml; then
+  echo "clone: a greetd initial_session (a login with no password) survived on the target:" >&2
+  grep -ls '^[[:space:]]*\[initial_session\]' "$TARGET"/etc/greetd/*.toml >&2
   exit 1
 fi
 # artools makes the display manager depend on artix-live when that service is installed.
 # Neither profile installs it; should a future one, its dependency must not outlive it here.
-rm -f "$TARGET"/etc/s6/sv/*-srv/dependencies.d/artix-live
+rm -f "$TARGET"/etc/s6/sv/*-srv/dependencies.d/artix-live "$TARGET"/etc/s6/sv/greetd/dependencies.d/artix-live
 # river-guide (the install guide agent) is live-medium only: its files were excluded above,
 # its guide model never leaves the medium, and the audit log of the install session stays
 # in the live RAM overlay. Drop its package record and give every tty its ordinary getty back
