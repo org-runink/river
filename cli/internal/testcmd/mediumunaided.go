@@ -39,10 +39,17 @@ import (
 // No existing check could see it: the GUI harness started the wizard itself, and CI never
 // boots a medium.
 //
+// SINCE DESK (2026-10-31). The live medium no longer starts a desktop: greetd's initial_session
+// runs weston, as the live user, with the installer full screen (live-overlay/etc/greetd/
+// live.toml); river-live-fallback takes over only when no compositor appears. So the questions
+// are greetd's and that kiosk's, and the screen itself is judged by size and entropy
+// (`river test screen`), because a grey-mean check passed QEMU's "Guest has not initialized the
+// display" placeholder on 2026-10-30.
+//
 // RIG. -cpu host, and virtio-vga so /dev/dri/renderD128 exists. With QEMU's default bochs VGA
-// there is no render node, kwin_wayland quits with "Found no render device!", and EVERY image
-// fails for a reason that belongs to the rig. A disk is attached because the installer plan
-// wants one; nothing is written to it.
+// there is no render node, a GPU compositor quits with "Found no render device!", and EVERY
+// image fails for a reason that belongs to the rig. A disk is attached because the installer
+// plan wants one; nothing is written to it.
 
 const (
 	// ovmfCodeDefault and ovmfVarsDefault are overridable because distributions disagree.
@@ -55,13 +62,15 @@ func mediumUnaidedCmd(v *viper.Viper) *cobra.Command {
 		Use:   "medium-unaided <iso>",
 		Short: "boot an ISO with nothing injected: does the MEDIUM reach the graphical installer by itself",
 		Long: `Boot ISO under QEMU with nothing injected, started or overlaid, and ask the running
-system six questions:
+system these questions (and the connectivity ones below):
 
-  medium-dm-started the display manager got far enough to write a log at all
-  medium-dm-tty     zero HELPER_TTY_ERROR in it
-  medium-dm-stable  the supervisor PID is unchanged AND positive across 12s
-  medium-desktop    a Plasma session is present in BOTH of two samples
-  medium-installer  river-installer is running
+  medium-dm-started   greetd is running within 3m
+  medium-dm-stable    its s6 supervisor PID is unchanged AND positive across 12s
+  medium-kiosk        the live session (weston, as the live user) is up in BOTH of two samples
+  medium-autologin    no login screen (gtkgreet) is waiting: the initial session took effect
+  medium-installer    river-installer is running, and its page is open in the kiosk's browser
+  medium-desk-session DEsk's session (desk-session, wayland-sessions/desk.desktop) is on the medium
+  medium-screen       a screendump shows something drawn (river test screen: size and entropy)
 
 Unlike qemu-gui-test, this overlays nothing and starts nothing: a green run here means the
 MEDIUM works, which is the thing an owner is actually asked to trust. Needs qemu-system-x86_64
@@ -74,44 +83,46 @@ with KVM and OVMF firmware.`,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return MediumUnaided(cmd.Context(), args[0],
-				v.GetString("ovmf-code"), v.GetString("ovmf-vars"),
+				v.GetString("ovmf-code"), v.GetString("ovmf-vars"), v.GetString("screen-out"),
 				cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	c.Flags().String("ovmf-code", ovmfCodeDefault, "OVMF_CODE firmware image")
 	c.Flags().String("ovmf-vars", ovmfVarsDefault, "OVMF_VARS template (copied, never written in place)")
+	c.Flags().String("screen-out", "medium-unaided-screen.png", "where the screendump medium-screen judged is kept")
 	return c
 }
 
 // probeScript runs inside the booted ISO. One KEY=VALUE per line, RV_DONE last, so a
 // truncated transfer can never be mistaken for a verdict.
 //
-// It settles before sampling. A fixed delay is not enough: sampled too early the log does not
-// exist yet (which `grep -c` reports as nothing, indistinguishable from zero errors) and a
-// respawning kwin_wayland is briefly in `ps`, so an early probe PASSES a crash-looping image.
-// Observed doing exactly that on the 2026-10-18 ISO: one run OK, the next FAIL, same image.
+// It settles before sampling. A fixed delay is not enough: sampled too early the display
+// manager is not up yet and a respawning compositor is briefly in `ps`, so an early probe
+// PASSES a crash-looping image. Observed doing exactly that on the 2026-10-18 ISO (then with
+// SDDM and Plasma): one run OK, the next FAIL, same image.
 const probeScript = `#!/bin/sh
 n=0
 while [ "$n" -lt 36 ]; do
-	[ -e /var/log/sddm.log ] && break
+	pgrep -x greetd >/dev/null && break
 	n=$((n + 1)); sleep 5
 done
-if [ -e /var/log/sddm.log ]; then L=1; else L=0; fi
+if pgrep -x greetd >/dev/null; then L=1; else L=0; fi
 sleep 30
-T=$(sudo grep -c HELPER_TTY_ERROR /var/log/sddm.log 2>/dev/null); [ -n "$T" ] || T=0
-A=$(sudo s6-svstat -p /run/service/sddm-srv 2>/dev/null)
-PA=$(ps -eo comm | grep -cE '^(plasma_session|kwin_wayland)$')
+A=$(sudo s6-svstat -p /run/service/greetd 2>/dev/null)
+KA=$(pgrep -u runink -x weston | grep -c .)
 sleep 12
-B=$(sudo s6-svstat -p /run/service/sddm-srv 2>/dev/null)
-PB=$(ps -eo comm | grep -cE '^(plasma_session|kwin_wayland)$')
-echo "RV_DMLOG=${L:-}"
-echo "RV_TTYERR=${T:-}"
+B=$(sudo s6-svstat -p /run/service/greetd 2>/dev/null)
+KB=$(pgrep -u runink -x weston | grep -c .)
+echo "RV_DMUP=${L:-}"
 echo "RV_PIDA=${A:-}"
 echo "RV_PIDB=${B:-}"
-echo "RV_PLASMAA=${PA:-}"
-echo "RV_PLASMAB=${PB:-}"
+echo "RV_KIOSKA=${KA:-}"
+echo "RV_KIOSKB=${KB:-}"
+echo "RV_GREETER=$(pgrep -x gtkgreet | grep -c .)"
 echo "RV_INST=$(ps -eo comm | grep -c '^river-installer$')"
+echo "RV_BROWSER=$(pgrep -u runink -f 'firefox.*47660' | grep -c .)"
 echo "RV_GETTY=$(sudo s6-rc -a list 2>/dev/null | grep -cx tty1)"
+echo "RV_DESKSESS=$([ -f /usr/share/wayland-sessions/desk.desktop ] && command -v desk-session >/dev/null && echo 1 || echo 0)"
 
 # --- connectivity ------------------------------------------------------------------
 # WIRED is real: QEMU gives the guest an emulated NIC, so this exercises a driver
@@ -139,29 +150,18 @@ echo "RV_BTSUBSYS=$([ -d /sys/class/bluetooth ] && echo 1 || echo 0)"
 echo "RV_BTUSB=$(find /usr/lib/modules -name 'btusb.ko*' 2>/dev/null | head -1 | grep -c .)"
 echo "RV_BTD=$(ps -eo comm | grep -c '^bluetoothd$')"
 echo "RV_BTBLOCK=$(rfkill list bluetooth 2>/dev/null | grep -c 'Soft blocked: yes')"
-
-# --- the desk, in motion ------------------------------------------------------------
-# /etc/xdg/kwinrc enables a deliberate set of effects. Shipping that file proves nothing:
-# an effect kwin cannot load is silently absent, which is exactly how the desk wallpaper
-# itself sat unrendered through every build. Ask kwin what it ACTUALLY loaded.
-KW=$(pgrep -u runink -x kwin_wayland | head -1)
-EFF=""
-if [ -n "$KW" ]; then
-	DBA=$(sudo sh -c "tr '\0' '\n' < /proc/$KW/environ" 2>/dev/null | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')
-	export DBUS_SESSION_BUS_ADDRESS="$DBA" XDG_RUNTIME_DIR=/run/user/1000
-	EFF=$(qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadedEffects 2>/dev/null \
-		|| qdbus org.kde.KWin /Effects org.kde.kwin.Effects.loadedEffects 2>/dev/null)
-fi
-echo "RV_KWINRC=$([ -r /etc/xdg/kwinrc ] && echo 1 || echo 0)"
-echo "RV_KWINEFF=$(printf '%s\n' "$EFF" | grep -c .)"
-echo "RV_KWINDESK=$(printf '%s\n' "$EFF" | grep -cE '^(diminactive|magiclamp|wobblywindows|glide|blur|slide)$')"
 echo RV_DONE
 `
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;?]*[a-zA-Z]")
 
-// MediumUnaided boots iso and reports whether it reaches the graphical installer unaided.
-func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, errw io.Writer) error {
+// probeKeys are the values probeScript prints, in the order they are shown.
+var probeKeys = []string{"DMUP", "PIDA", "PIDB", "KIOSKA", "KIOSKB", "GREETER", "INST", "BROWSER", "GETTY",
+	"DESKSESS", "ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK"}
+
+// MediumUnaided boots iso and reports whether it reaches the graphical installer unaided. The
+// screendump medium-screen judges is kept at screenOut.
+func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars, screenOut string, outw, errw io.Writer) error {
 	for _, f := range []string{iso, ovmfCode, ovmfVars} {
 		if _, err := os.Stat(f); err != nil {
 			return fmt.Errorf("medium-unaided: %w", err)
@@ -189,6 +189,7 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 	defer ln.Close()
 
 	logPath := filepath.Join(dir, "serial.log")
+	monSock := filepath.Join(dir, "mon.sock")
 	qemu := exec.CommandContext(ctx, "qemu-system-x86_64",
 		"-enable-kvm", "-cpu", "host", "-m", "8G", "-smp", "4", "-machine", "q35",
 		"-drive", "if=pflash,format=raw,readonly=on,file="+ovmfCode,
@@ -202,6 +203,7 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 		"-netdev", "user,id=n1", "-device", "e1000,netdev=n1",
 		"-device", "virtio-vga", "-display", "none",
 		"-chardev", "socket,id=s0,path="+sock+",logfile="+logPath,
+		"-monitor", "unix:"+monSock+",server=on,wait=off",
 		"-serial", "chardev:s0")
 	if err := qemu.Start(); err != nil {
 		return fmt.Errorf("medium-unaided: qemu: %w", err)
@@ -239,18 +241,46 @@ func MediumUnaided(ctx context.Context, iso, ovmfCode, ovmfVars string, outw, er
 		return fmt.Errorf("medium-unaided: %w", err)
 	}
 
+	shot := filepath.Join(dir, "screen.png")
+	screenErr := screendump(monSock, shot)
+	if screenErr == nil {
+		_ = os.Remove(screenOut) // copyFile never overwrites
+		if screenErr = copyFile(shot, screenOut, 0o644); screenErr == nil {
+			_, screenErr = ScreenCheck(screenOut, screenMinBytes, screenMinBits)
+		}
+	}
+
 	fmt.Fprintf(outw, "--- medium-unaided: %s ---\n", filepath.Base(iso))
-	for _, key := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
-		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK",
-		"KWINRC", "KWINEFF", "KWINDESK"} {
+	for _, key := range probeKeys {
 		fmt.Fprintf(outw, "  RV_%s=%s\n", key, vals[key])
 	}
-	return report(vals, outw, errw)
+	return report(vals, screenErr, outw, errw)
 }
 
-// report turns the probe's values into RIVERTEST lines. An unparsed value is a broken probe,
-// not a verdict, and says so rather than counting as either outcome.
-func report(vals map[string]string, outw, errw io.Writer) error {
+// screendump asks QEMU's monitor for a PNG of the screen and waits until it is written.
+func screendump(sock, png string) error {
+	c, err := net.Dial("unix", sock)
+	if err != nil {
+		return fmt.Errorf("monitor: %w", err)
+	}
+	defer c.Close()
+	go func() { _, _ = io.Copy(io.Discard, c) }()
+	if _, err := fmt.Fprintf(c, "screendump %s -f png\n", png); err != nil {
+		return fmt.Errorf("monitor: %w", err)
+	}
+	for i := 0; i < 20; i++ {
+		time.Sleep(time.Second)
+		if st, err := os.Stat(png); err == nil && st.Size() > 0 {
+			time.Sleep(time.Second) // the last write
+			return nil
+		}
+	}
+	return fmt.Errorf("QEMU wrote no screendump to %s", png)
+}
+
+// report turns the probe's values and the screen check into RIVERTEST lines. An unparsed value
+// is a broken probe, not a verdict, and says so rather than counting as either outcome.
+func report(vals map[string]string, screenErr error, outw, errw io.Writer) error {
 	failed := 0
 	say := func(name string, ok bool, why string) {
 		if ok {
@@ -264,9 +294,7 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 		n, err := strconv.Atoi(strings.TrimSpace(vals[k]))
 		return n, err == nil
 	}
-	for _, k := range []string{"DMLOG", "TTYERR", "PIDA", "PIDB", "PLASMAA", "PLASMAB", "INST", "GETTY",
-		"ETH", "ETHMANAGED", "WIFIDEV", "WIFINM", "WIFIBLOCK", "BTVHCI", "BTSUBSYS", "BTUSB", "BTD", "BTBLOCK",
-		"KWINRC", "KWINEFF", "KWINDESK"} {
+	for _, k := range probeKeys {
 		if _, ok := num(k); !ok {
 			say("medium-probe", false, fmt.Sprintf("value RV_%s did not parse (broken harness, not a verdict)", k))
 		}
@@ -274,42 +302,41 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	if failed > 0 {
 		return fmt.Errorf("medium-unaided: the probe did not return usable values")
 	}
-	dmlog, _ := num("DMLOG")
-	ttyerr, _ := num("TTYERR")
+	dmup, _ := num("DMUP")
 	pidA, _ := num("PIDA")
 	pidB, _ := num("PIDB")
-	plasmaA, _ := num("PLASMAA")
-	plasmaB, _ := num("PLASMAB")
+	kioskA, _ := num("KIOSKA")
+	kioskB, _ := num("KIOSKB")
+	greeter, _ := num("GREETER")
 	inst, _ := num("INST")
+	browser, _ := num("BROWSER")
 	getty, _ := num("GETTY")
+	deskSess, _ := num("DESKSESS")
 
-	// A getty on VT 1 is reported, NOT failed. It was a hard check until 2026-10-18 and that
-	// was wrong: it asserts the CAUSE I diagnosed instead of the outcome the owner needs.
-	//
-	// Measured on an ISO built from 527387b, which has SPAWN="yes" and therefore a live getty
-	// on tty1: RV_GETTY=1, and yet RV_TTYERR=0, sddm pid 785 unchanged across 12s, Plasma in
-	// both samples, installer running. The medium reached the wizard perfectly well. The
-	// reason is that SDDM's autologin takes effect there, so it never starts a GREETER — and
-	// the greeter is the thing that fought the getty. Two configurations are valid: autologin
-	// (no greeter, a getty is harmless) and a greeter (a getty starves it). Failing on the
-	// getty alone would have blocked a working release.
-	//
-	// The outcome checks below already catch the real fault: a starved greeter shows up as
-	// HELPER_TTY_ERROR, an unstable supervisor PID, and no sustained Plasma.
+	// A getty on VT 1 is reported, NOT failed: it asserts a cause, not the outcome. Under SDDM
+	// (2026-10-18) a tty1 getty starved the GREETER but was harmless under autologin, and the
+	// live medium autologins (greetd's initial_session). A starved session shows up below as an
+	// unstable supervisor PID or no sustained kiosk.
 	if getty != 0 {
 		fmt.Fprintln(outw, "RIVERTEST NOTE medium-vt-free   a tty1 getty is active; harmless under "+
-			"autologin, fatal if a greeter runs — see medium-dm-tty and medium-dm-stable")
+			"autologin, fatal if a greeter runs — see medium-dm-stable and medium-kiosk")
 	}
-	// "No log" is not "no errors": it means sddm never got far enough to write one.
-	say("medium-dm-started", dmlog == 1, "no /var/log/sddm.log after 3m: the display manager never started")
-	say("medium-dm-tty", ttyerr == 0, fmt.Sprintf("%d HELPER_TTY_ERROR in sddm.log: the greeter is losing the TTY", ttyerr))
+	say("medium-dm-started", dmup == 1, "greetd is not running after 3m: the display manager never started")
 	// s6-svstat -p prints -1 when the service is down; equal-and-negative is not stable.
 	say("medium-dm-stable", pidA == pidB && pidA > 0,
-		fmt.Sprintf("sddm-srv pid %d -> %d across 12s: not a stable supervisor", pidA, pidB))
-	// Two samples: a respawning kwin_wayland is in ps often enough for one sample to catch it.
-	say("medium-desktop", plasmaA >= 1 && plasmaB >= 1,
-		fmt.Sprintf("no sustained Plasma session (samples: %d, %d)", plasmaA, plasmaB))
-	say("medium-installer", inst >= 1, "river-installer is not running")
+		fmt.Sprintf("greetd pid %d -> %d across 12s: not a stable supervisor", pidA, pidB))
+	// Two samples: a respawning compositor is in ps often enough for one sample to catch it.
+	say("medium-kiosk", kioskA >= 1 && kioskB >= 1,
+		fmt.Sprintf("no sustained live session: weston as the live user in %d, %d of two samples", kioskA, kioskB))
+	say("medium-autologin", greeter == 0, "a login screen (gtkgreet) is waiting: greetd's initial_session did not take effect")
+	say("medium-installer", inst >= 1 && browser >= 1,
+		fmt.Sprintf("the installer is not up: river-installer %d, its page in the browser %d", inst, browser))
+	say("medium-desk-session", deskSess == 1, "desk-session or wayland-sessions/desk.desktop is missing: nothing to log in to after the install")
+	why := "ok"
+	if screenErr != nil {
+		why = screenErr.Error()
+	}
+	say("medium-screen", screenErr == nil, why)
 
 	// --- connectivity --------------------------------------------------------------------
 	//
@@ -354,17 +381,6 @@ func report(vals map[string]string, outw, errw io.Writer) error {
 	say("medium-bt-daemon", btd >= 1, "bluetoothd is not running")
 	say("medium-bt-unblocked", btBlock == 0, "Bluetooth is SOFT-BLOCKED by rfkill on a fresh boot: runink-fw should clear it")
 
-	// The desk must actually move. kwinrc shipping is not the same as kwin loading it.
-	kwinrc, _ := num("KWINRC")
-	kwinEff, _ := num("KWINEFF")
-	kwinDesk, _ := num("KWINDESK")
-	say("medium-kwinrc", kwinrc == 1, "/etc/xdg/kwinrc is not on the medium: the session runs stock Plasma defaults")
-	say("medium-kwin-effects", kwinEff >= 1, "kwin loaded NO effects at all — the config did not take, or kwin is not running")
-	say("medium-desk-motion", kwinDesk >= 1,
-		fmt.Sprintf("none of the desk effects (diminactive, magiclamp, wobblywindows, glide, blur, slide) loaded; kwin has %d up", kwinEff))
-
-	fmt.Fprintln(outw, "RIVERTEST NOTE desk-motion      effect COUNT is advisory under llvmpipe: kwin drops what it "+
-		"cannot afford, so a thin set in QEMU is not a packaging fault — zero is")
 	fmt.Fprintln(outw, "RIVERTEST NOTE connectivity      wired is real (emulated NIC); wifi and Bluetooth are "+
 		"SIMULATED (mac80211_hwsim, hci_vhci) and prove the stack only, never that a given card is recognised")
 

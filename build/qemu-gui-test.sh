@@ -40,7 +40,7 @@
 #     fb-finish      Finish removes the kiosk: no wpewebkit, no kiosk user, no marker
 #     golden         tests/assert-golden.sh passes after the first boot
 #   workstation (the default: Runink River, iso-profiles/river)
-#     gui-desktop    the installer opens full screen in the live Plasma session (Firefox)
+#     gui-desktop    the installer opens full screen in the live kiosk (weston as the live user, Firefox)
 #     gui-edition    as above
 #     gui-install    as above
 #     harness-wired  as above
@@ -54,8 +54,12 @@
 #     greeting-quiet-noninteractive  the greeting prints NOTHING in a non-interactive shell
 #     no-base-name   /etc/lsb-release and os-release never name the base distribution
 #     hostname       the installed /etc/hostname is the plan's name, not the live medium's (runink-live)
-#     plasma-login   the installed machine boots to SDDM, the admin logs in (the password typed
-#                    on the VM keyboard, so the layout the installer set works) and Plasma starts
+#     desk-login     the installed machine boots to the login screen (gtkgreet in cage, greetd),
+#                    the admin logs in (user name and password typed on the VM keyboard, so the
+#                    layout the installer set works) and DEsk starts (desk, as the admin)
+#     screen-greeter the login screen's screendump shows something drawn, and
+#     screen-desk    so does the desktop's (`river test screen`: PNG size and luma entropy,
+#                    never the grey mean, which passed QEMU's 752-byte no-display placeholder)
 #     net-ready      after that login the network is up with nothing left to do (a user-mode NIC)
 #   (tests/assert-golden.sh describes a server; the workstation is checked by the lines above)
 #   either profile, when the profile carries tests/installed.d/*.sh (build/qemu-hooks.sh)
@@ -257,21 +261,23 @@ if [ "$PROFILE" = server ]; then
 		-d '{"lang":"en","keyboard":""}' 'http://[::1]:47660/api/locale'
 else
 	u=runink
-	pid="$(pgrep -u $u -x kwin_wayland | head -1)"
-	# The session's environment (WAYLAND_DISPLAY and friends) is plasmashell's, not kwin's.
-	spid="$(pgrep -u $u -x plasmashell | head -1)"
-	if ! pgrep -u $u -f 'firefox.*47660' >/dev/null; then
-		echo "RIVERTEST NOTE opening the installer in the live session (this ISO predates the autostart)"
-		env="$(tr '\0' '\n' < /proc/"$spid"/environ | grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS|DISPLAY)=' | tr '\n' ' ')"
-		# shellcheck disable=SC2086
-		setsid runuser -u $u -- env HOME=/home/$u $env /usr/local/bin/river-installer-desktop </dev/null >/run/rt-desktop.log 2>&1 &
+	# The live session is weston as the live user (greetd's initial_session), which opens the
+	# installer itself (weston.ini [autolaunch]). Its socket is in the user's runtime directory.
+	i=0; until pgrep -u $u -x weston >/dev/null || [ $i -ge 120 ]; do sleep 1; i=$((i+1)); done
+	pid="$(pgrep -u $u -x weston | head -1)"
+	rt=/run/user/"$(id -u $u)"
+	wd="$(cd "$rt" 2>/dev/null && ls wayland-[0-9] 2>/dev/null | head -1)"
+	if ! pgrep -u $u -f 'firefox.*47660' >/dev/null && [ -n "$wd" ]; then
+		echo "RIVERTEST NOTE opening the installer in the live session (it did not open by itself)"
+		setsid runuser -u $u -- env HOME=/home/$u XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wd" \
+			/usr/local/bin/river-installer-desktop </dev/null >/run/rt-desktop.log 2>&1 &
 	fi
-	vt="$(tr '\0' '\n' < /proc/"$pid"/environ | sed -n 's/^XDG_VTNR=//p' | head -1)"
-	[ -n "$vt" ] && river-installer vt "$vt"
+	vt="$( [ -n "$pid" ] && tr '\0' '\n' < /proc/"$pid"/environ | sed -n 's/^XDG_VTNR=//p' | head -1)"
+	river-installer vt "${vt:-1}"
 	i=0; until pgrep -u $u -f 'firefox.*47660' >/dev/null || [ $i -ge 90 ]; do sleep 1; i=$((i+1)); done
 	sleep 25
-	pgrep -u $u -f 'firefox.*47660' >/dev/null && ok gui-desktop || ko gui-desktop "no installer window"
-	pgrep -u $u -f 'firefox.*47660' >/dev/null || sed 's/^/RIVERTEST NOTE desktop: /' /run/rt-desktop.log
+	pgrep -u $u -f 'firefox.*47660' >/dev/null && ok gui-desktop || ko gui-desktop "no installer window (weston pid ${pid:-none}, socket ${wd:-none})"
+	pgrep -u $u -f 'firefox.*47660' >/dev/null || sed 's/^/RIVERTEST NOTE desktop: /' /run/rt-desktop.log 2>/dev/null
 fi
 # The edition: the running image is the descriptor whose medium_label is the label= on the kernel
 # command line (river.edition= picks among several on one medium). The installer must say it is
@@ -346,8 +352,8 @@ if [ "$PROFILE" = server ]; then
 	echo "RIVERGUI SCREEN console-after-finish"; sleep 5
 else
 	# The desktop's preconditions. /home must be the pool's home dataset: without the zfs-mount
-	# oneshot it stayed unmounted, SDDM's helper could not chdir to /home/runink and no session
-	# ever started (the 2026-09-26 plasma-login failure).
+	# oneshot it stayed unmounted, the display manager could not chdir to /home/runink and no
+	# session ever started (the 2026-09-26 login failure, then under SDDM).
 	[ "$(findmnt -n -o FSTYPE /home)" = zfs ] && [ -d /home/runink ] && ok home-mounted \
 		|| ko home-mounted "$(findmnt -n -o SOURCE,FSTYPE /home || echo '/home not mounted')"
 	[ "$(stat -c %U /home/runink/.local 2>/dev/null)" = runink ] && [ "$(stat -c %U /home/runink/.local/share 2>/dev/null)" = runink ] \
@@ -374,17 +380,19 @@ else
 	h_="$(cat /etc/hostname 2>/dev/null)"
 	[ -n "$h_" ] && [ "$h_" != runink-live ] && [ "$(hostname)" = "$h_" ] && ok hostname || ko hostname "/etc/hostname=$h_ hostname=$(hostname)"
 	grep -lis artix /etc/lsb-release /etc/os-release /usr/lib/os-release >/dev/null && ko no-base-name "$(grep -lis artix /etc/lsb-release /etc/os-release /usr/lib/os-release | tr '\n' ' ')" || ok no-base-name
-	# SDDM's greeter on the desktop VT; the harness types the password (RIVERGUI TYPE).
-	i=0; until pgrep -f sddm-greeter >/dev/null || [ $i -ge 300 ]; do sleep 2; i=$((i+2)); done
+	# The login screen (gtkgreet in cage, from greetd) on VT 1; the harness types the user name,
+	# then the password, on the VM keyboard (RIVERGUI TYPE user, RIVERGUI TYPE password).
+	i=0; until pgrep -x gtkgreet >/dev/null || [ $i -ge 300 ]; do sleep 2; i=$((i+2)); done
 	sleep 20
-	echo "RIVERGUI SCREEN sddm"; sleep 5
+	echo "RIVERGUI SCREEN greeter"; sleep 5
+	echo "RIVERGUI TYPE user"; sleep 10
 	echo "RIVERGUI TYPE password"
-	# The first login on software rendering (no GPU in the VM) takes minutes.
-	i=0; until pgrep -u runink -x plasmashell >/dev/null || [ $i -ge 900 ]; do sleep 3; i=$((i+3)); done
+	# DEsk's first login traces its room; on software rendering (no GPU in the VM) it takes minutes.
+	i=0; until pgrep -u runink -x desk >/dev/null || [ $i -ge 900 ]; do sleep 3; i=$((i+3)); done
 	sleep 60
-	echo "RIVERGUI SCREEN plasma"; sleep 5
-	pgrep -u runink -x plasmashell >/dev/null && ok plasma-login || ko plasma-login "no plasmashell for runink"
-	pgrep -u runink -x plasmashell >/dev/null || ps -u runink -o comm= | sort -u | tr '\n' ' ' | sed 's/^/RIVERTEST NOTE runink processes: /'
+	echo "RIVERGUI SCREEN desk"; sleep 5
+	pgrep -u runink -x desk >/dev/null && ok desk-login || ko desk-login "no desk for runink"
+	pgrep -u runink -x desk >/dev/null || ps -u runink -o comm= | sort -u | tr '\n' ' ' | sed 's/^/RIVERTEST NOTE runink processes: /'
 	echo
 	act="$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | grep -v ':lo$')"
 	echo "RIVERTEST NOTE active connections: $act"
@@ -490,7 +498,11 @@ follow() {
 		for s in $(grep -a '^RIVERGUI SCREEN ' "$WORK/serial-$1.log" 2>/dev/null | awk '{ print $3 }' | tr -d '\r'); do
 			case " $done_ " in *" $s "*) ;; *) done_="$done_ $s"; snap "$1-$(printf '%02d' "$(echo "$done_" | wc -w)")-$s" ;; esac
 		done
-		if seen "RIVERGUI TYPE password" "$1" && ! echo "$done_" | grep -q typed; then
+		# the login screen asks the user name first (the admin the install created), then the password
+		if seen "RIVERGUI TYPE user" "$1" && ! echo "$done_" | grep -qw usertyped; then
+			done_="$done_ usertyped"; type_line runink
+		fi
+		if seen "RIVERGUI TYPE password" "$1" && ! echo "$done_" | grep -qw typed; then
 			done_="$done_ typed"; type_line "$PASSWORD"
 		fi
 		# the kiosk's "Español" choice on the welcome screen (1280x800, std VGA)
@@ -598,11 +610,22 @@ fi
 
 # --- verdict -----------------------------------------------------------------------------------------
 cat "$WORK"/serial-*.log | tr -d '\r' | grep -a '^RIVERTEST ' > "$WORK/results.txt" || true
+# The login screen and the desktop, judged on the host by `river test screen` (PNG size and luma
+# entropy, never the grey mean: QEMU's no-display placeholder passed that). A missing frame fails.
+if [ "$PROFILE" = workstation ]; then
+	( cd "$REPO/cli" && go build -o "$WORK/river" ./cmd/river ) || echo "qemu-gui-test: river did not build" >&2
+	for s in greeter desk; do
+		png="$(ls "$WORK"/shots/installed-*-"$s".png 2>/dev/null | head -1)"
+		if [ -n "$png" ] && "$WORK/river" test screen "$png" > "$WORK/screen-$s.txt" 2>&1; then
+			echo "RIVERTEST OK screen-$s" >> "$WORK/results.txt"
+		else echo "RIVERTEST FAIL screen-$s (${png:-no frame}: $(grep -m1 FAIL "$WORK/screen-$s.txt" 2>/dev/null))" >> "$WORK/results.txt"; fi
+	done
+fi
 if [ "$PROFILE" = server ]; then
 	want="gui-kiosk gui-recovery gui-pointer gui-edition gui-install harness-wired export unlocked fb-ready fb-k0s fb-finish golden"
 else
 	# (assert-golden checks a server; a workstation is checked by its own lines)
-	want="gui-desktop gui-edition gui-install harness-wired export unlocked home-mounted home-owner firewall machine-id greeting no-base-name hostname plasma-login net-ready"
+	want="gui-desktop gui-edition gui-install harness-wired export unlocked home-mounted home-owner firewall machine-id greeting no-base-name hostname desk-login screen-greeter screen-desk net-ready"
 fi
 # the profile's hooks (tests/installed.d): hook-<name> and every check each one declares
 want="$want $HOOK_WANT"
