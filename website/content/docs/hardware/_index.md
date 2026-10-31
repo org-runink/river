@@ -73,13 +73,13 @@ needs its EFI partition recreated before it boots again.
 | GPU drivers | Mesa for AMD and Intel: `mesa`, `vulkan-radeon`, `vulkan-intel`, `vulkan-icd-loader`, `libva-mesa-driver` |
 | Hardware video | `intel-media-driver` (VA-API for recent Intel graphics) and `libva-utils` (`vainfo`) |
 | Codecs | `gst-plugins-base`, `-good`, `-bad`, `-ugly`, `gst-libav`, `ffmpeg` |
-| Firmware | `linux-firmware-amdgpu` and `linux-firmware-intel` only |
+| Firmware | GPU: `linux-firmware-amdgpu` and `linux-firmware-intel`. Network: `linux-firmware-realtek`, `-broadcom`, `-atheros`, `-mediatek`, `-qcom` and `-marvell` |
 | Audio | PipeWire (`pipewire`, `pipewire-pulse`, `pipewire-alsa`, `pipewire-jack`, `wireplumber`) |
-| Bluetooth, printing | `bluez`, `bluez-utils` (`bluetoothctl`), `cups` (its web page, `http://localhost:631`) |
+| Bluetooth, printing | `bluez`, `bluez-utils` (`bluetoothctl`), `runink-bluetuith` (the **Bluetooth** program); `cups` (the **Printers** program opens its page, `http://localhost:631`) |
 
-NVIDIA's proprietary driver is not included. Devices that need firmware from other vendors'
-firmware packages (some Wi-Fi and Bluetooth chips, for example) may not work, because only the
-AMD GPU and Intel firmware packages are on the image.
+NVIDIA's proprietary driver is not included. Only the GPU and network splits of
+`linux-firmware` above are on the image, so a device that needs firmware from another split
+may not work.
 
 ## Check a machine before you install
 

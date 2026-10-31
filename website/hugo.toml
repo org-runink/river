@@ -133,8 +133,6 @@ disableKinds = ["taxonomy", "term", "rss"]
 
 [params]
   description = "Runink River: an optimized developer workstation on s6, with an encrypted ZFS root, the linux-runink kernel and a graphical installer."
-  # The share card LinkedIn and other sites show for any page (1200x627, static/og/).
-  images = ["og/runink-river-card.png"]
   externalLinkDecoration = true
   displayUpdatedDate = false
 

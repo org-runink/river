@@ -9,8 +9,9 @@ SPDX-FileCopyrightText: 2026 The RIVER Authors
 SPDX-License-Identifier: MIT
 -->
 
-Installing Runink River takes four steps. Nothing in the install needs a network: the
-installer copies the running live system onto your disk.
+Installing Runink River takes four steps, and a fifth page shows the desktop you land on.
+Nothing in the install needs a network: the installer copies the running live system onto
+your disk.
 
 {{% steps %}}
 
@@ -34,6 +35,11 @@ Boot the stick in UEFI mode and follow the graphical installer.
 
 Unlock the disk with your passphrase and sign in to DEsk.
 [First boot]({{< relref "first-boot" >}})
+
+### Use the desktop
+
+The programs, memory sticks, Bluetooth, printers and the battery.
+[Using the desktop]({{< relref "desktop" >}})
 
 {{% /steps %}}
 

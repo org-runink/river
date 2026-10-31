@@ -36,12 +36,13 @@ The ISO holds two squashfs layers ({{< repo "iso-profiles/river/profile.yaml" >}
   profile's `root-overlay/`. An installed machine is a copy of it.
 - **`livefs`** is for the live medium only and sits on top of `rootfs`: the live user's
   session (greetd starts the installer in weston with no login; a text console on Ctrl+Alt+F2), its passwordless `sudo`, the live
-  hostname, the graphical installer's s6 service, and the live GRUB menu package
-  (`artix-grub-live`, the whole of `Packages-Live`).
+  hostname and the graphical installer's s6 service. `Packages-Live` adds two packages:
+  `runink-grub-live` (the live GRUB scaffolding) and `weston`, whose kiosk shell shows the
+  installer before any desktop starts.
 
 The installer does not download or resolve packages. Step `20-clone-rootfs` copies the
 running live system onto the new ZFS boot environment with `rsync`, and then removes what
-belongs only to the live medium (the autologin drop-ins, the live `sudo` rule, the installer
+belongs only to the live medium (the no-login greetd session `/etc/greetd/live.toml`, the autologin drop-ins, the live `sudo` rule, the installer
 itself and its service, the machine-id and the SSH host keys). This is why an install works
 with no network at all.
 
@@ -54,6 +55,7 @@ is on it, and `river lint closure` checks the whole dependency closure against
 |---|---|
 | `podman`, `docker`, `docker-compose`, `podman-compose` | no container runtime in the base image |
 | `flatpak`, `flatpak-kcm`, `discover`, `packagekit`, `packagekit-qt6` | no second software supply chain beside the pinned pacman repositories |
+| `plasma-workspace`, `kwin`, `sddm` | DEsk and greetd replaced KDE Plasma and SDDM; they stay out |
 | `aws-cli`, `aws-cli-v2`, `google-cloud-cli`, `google-cloud-sdk`, `azure-cli` | no cloud vendor tooling in the base image |
 | `linux` | exactly one kernel, `linux-runink` |
 
@@ -117,8 +119,11 @@ River).
 
 ### Login
 
-greetd shows the login screen (gtkgreet in cage); the session is DEsk on Wayland, with PipeWire
-and WirePlumber as user services.
+greetd shows the login screen (gtkgreet in cage); `pam_gnome_keyring` in its PAM stack
+unlocks the keyring with the login password. The session is DEsk on Wayland, with PipeWire
+and WirePlumber as user services; at login it starts `river-desk automount` and
+`river-desk battery` from `/etc/xdg/autostart`
+([Using the desktop]({{< relref "/docs/getting-started/desktop" >}})).
 
 {{% /steps %}}
 
@@ -133,7 +138,8 @@ image:
 | `linux-runink`, `linux-runink-headers` | the kernel, built from the signed kernel.org tarball and the signed zen patch |
 | `runink-zfs` | OpenZFS kernel modules prebuilt for exactly that kernel release |
 | `runink-zfs-utils` | the matching OpenZFS userland and the mkinitcpio `zfs` hook, from the same PKGBUILD, so module and userland cannot drift apart |
-| `runink-installer` | `river-installer`, `river-hwprobe`, `river-plan`, `river-netsetup` and `river-netcheck`, from {{< repo "installer/" >}} (Go standard library only) |
+| `runink-installer` | `river-installer`, `river-hwprobe`, `river-plan`, `river-netsetup`, `river-netcheck` and the desktop helper `river-desk` (removable media, battery letters, Bluetooth and printers), from {{< repo "installer/" >}} (Go standard library only) |
+| `runink-bluetuith` | bluetuith, the terminal Bluetooth manager that `river-bluetooth` opens |
 | `runink-desk` | DEsk, the desktop: upstream's release plus the Runink fork's patches (no Python in its build, elogind instead of systemd, the weather off until you turn it on) |
 | `runink-wlroots0.18` | wlroots 0.18.3, the compositor library DEsk and cage are built on |
 | `runink-cage`, `runink-gtkgreet` | the login screen: gtkgreet, full screen in the cage kiosk compositor |

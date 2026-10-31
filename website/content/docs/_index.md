@@ -37,6 +37,7 @@ while Runink River moves to its own from-source base. See
 
 {{< cards >}}
   {{< card link="getting-started" title="Getting started" icon="download" subtitle="Download and verify the ISO, write a USB stick, install, first boot." >}}
+  {{< card link="getting-started/desktop" title="Using the desktop" icon="desktop-computer" subtitle="DEsk: the programs, memory sticks, Bluetooth, printers, the battery." >}}
   {{< card link="features" title="Features" icon="lightning-bolt" subtitle="s6, the kernel, ZFS and encryption, the firewall, the sandbox, the installer." >}}
   {{< card link="getting-started/download" title="Download & verify" icon="shield-check" subtitle="The one-line install.sh, its flags, and verifying the ISO by hand against the release key." >}}
   {{< card link="configuration" title="Configuration" icon="cog" subtitle="Boot environments and rollback, s6 services, updates, keyboard and language, networking." >}}
