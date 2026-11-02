@@ -82,6 +82,17 @@ None.
   `20-clone-rootfs` deletes `/etc/greetd/live.toml` and fails on any greetd
   `initial_session` left on the target, and `32-locale-keyboard` keys on DEsk's session.
   The QEMU harnesses' desktop checks still expect Plasma until they are rewritten.
+- **The node-state directory is `/var/lib/tide`** (it was `/var/lib/core`). A server install
+  now mounts `<pool>/state` there, and the model payload's `<pool>/models` at
+  `/var/lib/tide/models/shared`; the cloud first-boot tool does the same for its encrypted
+  datasets. Installer contract change for downstream profiles: `10-disk-zfs`,
+  `72-models-payload`, `12-cloud-disk`, `85-cloud-finalize` and `river-cloud-init` changed
+  (copy the steps byte-for-byte). A pool imported from an older image keeps its datasets:
+  `10-disk-zfs` (and `river-cloud-init` on every boot) moves the dataset's `mountpoint`
+  property from the old path to the new one, only while it still holds the old path and no
+  other dataset already uses the new one. No data is copied or moved. `/var/lib/core-runner`
+  is unrelated and unchanged. `models.lock` still carries the old path in a comment: its
+  bytes are the payload's lock digest, so it changes with the next model-set update.
 
 ### Removed
 

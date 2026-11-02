@@ -50,12 +50,12 @@ func ModelsRequired(ctx context.Context, repo string, outw, errw io.Writer) erro
 	if err := writeExec(filepath.Join(bin, "zfs"), `#!/bin/sh
 case "$1" in
 list) exit 1 ;;
-create) mkdir -p "$RUNINK_TARGET/var/lib/core/models/shared" ;;
+create) mkdir -p "$RUNINK_TARGET/var/lib/tide/models/shared" ;;
 destroy) echo destroyed >> "$FAKE_LOG" ;;
 get) case "$5" in
 	encryption) echo aes-256-gcm ;;
 	available) echo "$FAKE_AVAIL" ;;
-	mountpoint) echo /var/lib/core/models/shared ;;
+	mountpoint) echo /var/lib/tide/models/shared ;;
 	used) echo 1G ;;
 	*) exit 1 ;;
 	esac ;;

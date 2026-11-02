@@ -31,7 +31,7 @@ nvme0n1p1  ESP, FAT32, 1 GiB        -> /boot      UNENCRYPTED: kernel, initramfs
 nvme0n1p2  zriver                   encryption=aes-256-gcm  keyformat=passphrase  keylocation=prompt
            ├─ zriver/ROOT/<be>      /             (inherits: encrypted)
            ├─ zriver/home           /home         (inherits)
-           ├─ zriver/state          /var/lib/core (inherits) registry, models, payload data, Litestream dirs
+           ├─ zriver/state          /var/lib/tide (inherits) registry, models, payload data, Litestream dirs
            └─ zriver/containers     /var/lib/k0s  (inherits) containerd + kine
 ```
 
@@ -191,7 +191,7 @@ then `zfs load-key -L prompt <pool>/restore` (a raw-received dataset becomes its
 encryption root, keyed with the passphrase that was current at send time), then mount it
 or promote it.
 
-**Scope (unchanged):** the backup snapshots the BE. `zriver/state` (`/var/lib/core`) and
+**Scope (unchanged):** the backup snapshots the BE. `zriver/state` (`/var/lib/tide`) and
 `zriver/containers` (`/var/lib/k0s`) are siblings outside it by design (see the long
 comment in `10-disk-zfs.sh`), so payload data and Litestream working copies are not in
 these streams. They are encrypted at rest, but backing them up is a separate decision.

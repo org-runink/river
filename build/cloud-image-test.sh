@@ -239,7 +239,7 @@ if [ "$MODEL_PAYLOAD" = yes ]; then
 		sleep 30; i=$((i + 30))
 	done
 	if case "$m" in installed*) true ;; *) false ;; esac &&
-		g "cd /var/lib/core/models/shared && sha256sum --quiet -c /usr/local/share/runink/models.manifest && river-modelpack verify --dir . --lock /usr/local/share/runink/models.lock >/dev/null && ! sudo zfs list zriver/payload >/dev/null 2>&1"; then
+		g "cd /var/lib/tide/models/shared && sha256sum --quiet -c /usr/local/share/runink/models.manifest && river-modelpack verify --dir . --lock /usr/local/share/runink/models.lock >/dev/null && ! sudo zfs list zriver/payload >/dev/null 2>&1"; then
 		res PASS models "$m; payload dataset destroyed"
 	else res FAIL models "${m:-no status}"; fi
 else

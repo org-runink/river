@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ const (
 	logFile    = "/var/log/river-cloud-init.log"
 	authKeys   = "/etc/ssh/authorized_keys.d/runink"
 	adminUser  = "runink"
-	modelsMP   = "/var/lib/core/models/shared"
+	modelsMP   = "/var/lib/tide/models/shared"
 	shareDir   = "/usr/local/share/runink"
 )
 
@@ -65,7 +66,7 @@ var dataDatasets = []dataset{
 	{"etc-runink", "/etc/runink", nil, 0o700},
 	{"node-state", "/var/lib/runink", nil, 0o700},
 	{"home", "/home", nil, 0},
-	{"state", "/var/lib/core", []string{"com.sun:auto-snapshot=false"}, 0},
+	{"state", "/var/lib/tide", []string{"com.sun:auto-snapshot=false"}, 0},
 	{"models", modelsMP, []string{"com.sun:auto-snapshot=false", "recordsize=1M", "compression=off", "atime=off"}, 0},
 	{"containers", "/var/lib/k0s", []string{"com.sun:auto-snapshot=false"}, 0},
 }
@@ -196,6 +197,43 @@ func rootPool() (string, error) {
 func zfsExists(ds string) bool {
 	_, err := run(nil, "zfs", "list", "-H", "-o", "name", ds)
 	return err == nil
+}
+
+// legacyStateDir is where older images mounted the node-state datasets; /var/lib/tide
+// replaced it.
+const legacyStateDir = "/var/lib/core"
+
+// movedMountpoint maps a mountpoint under the old node-state directory to the same place
+// under /var/lib/tide; ok is false for any other path.
+func movedMountpoint(cur string) (string, bool) {
+	if cur == legacyStateDir || strings.HasPrefix(cur, legacyStateDir+"/") {
+		return "/var/lib/tide" + strings.TrimPrefix(cur, legacyStateDir), true
+	}
+	return "", false
+}
+
+// migrateLegacyMountpoints moves the mountpoint PROPERTY of a data dataset an older image
+// created at /var/lib/core to its current path. It copies nothing: the dataset is the same,
+// mounted elsewhere. A dataset is left alone unless its property is exactly the old path of
+// its current mountpoint and no dataset under root already uses the new path.
+func migrateLegacyMountpoints(root string) {
+	listing, _ := run(nil, "zfs", "list", "-H", "-o", "mountpoint", "-r", root)
+	for _, d := range dataDatasets {
+		ds := root + "/" + d.name
+		want, ok := movedMountpoint(zfsGet("mountpoint", ds))
+		if !ok || want != d.mountpoint {
+			continue
+		}
+		if slices.Contains(strings.Fields(listing), want) {
+			logger.Printf("%s: mounted at the old path but %s is already in use; left as is", ds, want)
+			continue
+		}
+		if _, err := run(nil, "zfs", "set", "mountpoint="+want, ds); err != nil {
+			logger.Printf("%s: moving its mountpoint to %s: %v", ds, want, err)
+			continue
+		}
+		logger.Printf("%s: mountpoint moved to %s (older image)", ds, want)
+	}
 }
 
 func zfsGet(prop, ds string) string {
@@ -600,6 +638,7 @@ func data(ctx context.Context, md *cloud.Metadata, bootPool string) error {
 	} else {
 		setStatus("unlock_provider", "already-loaded")
 	}
+	migrateLegacyMountpoints(root)
 	if _, err := run(nil, "zfs", "mount", "-a"); err != nil {
 		logger.Printf("zfs mount -a: %v", err)
 	}

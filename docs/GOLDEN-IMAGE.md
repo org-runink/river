@@ -92,8 +92,8 @@ terminates TLS or authenticates users, is defined by that payload, not by this c
 
 | Path | Contents |
 |---|---|
-| `/var/lib/core/models/shared` | GGUF model weights synced at enrollment and verified against `/usr/local/share/runink/models.manifest`. It is a real directory, world-readable, because inference workloads mount it as a `hostPath` of type `Directory`. |
-| `/var/lib/core` | Workload state. Snapshotted with the boot environment. |
+| `/var/lib/tide/models/shared` | GGUF model weights synced at enrollment and verified against `/usr/local/share/runink/models.manifest`. It is a real directory, world-readable, because inference workloads mount it as a `hostPath` of type `Directory`. |
+| `/var/lib/tide` | Workload state. Snapshotted with the boot environment. |
 | `/var/lib/k0s` | k0s state (kine/SQLite cluster store, PKI). |
 | `/usr/local/share/runink/core` | The payload tree, or `PAYLOAD-NONE`. |
 | `/etc/runink` | Node identity and enrollment output (0700). |
