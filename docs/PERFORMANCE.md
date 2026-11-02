@@ -89,7 +89,7 @@ a current NVMe's sequential speed; within 1% the faster wins):
 | `home` | workstation | 128K | 0.889 | 1.343 | 1.508 @ 449 | 1.515 @ 297 | **zstd-1** | within 0.5% of zstd-3, 51% faster |
 | a data-lake directory | workstation | 1M | 0.984 | 1.152 | 1.215 @ 1054 | 1.218 @ 601 | **zstd-1** | Parquet-dominated: within 0.3% of zstd-3 |
 | `containers` (/var/lib/k0s) | server | 128K | 0.973 | 1.282 | 1.380 @ 476 | 1.400 @ 288 | **zstd-3** | unpacked snapshots reward zstd-3 by 1.4% and it clears the floor |
-| `state` (/var/lib/core) | server | 1M | 0.992 | 1.080 | 1.129 @ 1277 | 1.130 @ 815 | **zstd-1** | registry blobs and weights barely compress; 128K would give 1.128 |
+| `state` (/var/lib/tide) | server | 1M | 0.992 | 1.080 | 1.129 @ 1277 | 1.130 @ 815 | **zstd-1** | registry blobs and weights barely compress; 128K would give 1.128 |
 | model files | both | 1M | 1.000 | 1.000 | 1.077 @ 965 | 1.077 @ 632 | **zstd-1** | the bf16 part compresses 1.08x; lz4 finds nothing |
 
 Recordsize is chosen from the access pattern, not by this rule: 1M for datasets of large
@@ -190,8 +190,8 @@ replace the model with on-pool numbers) before they land.
    +		-O compression=zstd-1 \
    ```
    ```diff
-   -[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/core containers:/var/lib/k0s"
-   +[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/core:recordsize=1M containers:/var/lib/k0s:compression=zstd-3"
+   -[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/tide containers:/var/lib/k0s"
+   +[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/tide:recordsize=1M containers:/var/lib/k0s:compression=zstd-3"
     for spec in $siblings; do
    -	ds="${spec%%:*}"
    -	mp="${spec#*:}"

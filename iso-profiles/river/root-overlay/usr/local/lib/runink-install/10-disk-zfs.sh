@@ -330,7 +330,7 @@ zfs list "$POOL/home" >/dev/null 2>&1 || zfs create -o mountpoint=/home "$POOL/h
 # These two are the whole problem, and both are REPRODUCIBLE, which is why they
 # belong outside a backup rather than inside one:
 #
-#   /var/lib/core   the node-local registry (91G of blobs) + model weights (72G).
+#   /var/lib/tide   the node-local registry (91G of blobs) + model weights (72G).
 #                   The registry is rebuildable from CI; weights re-fetch via
 #                   cmd/modelfetch. Snapshotting a cache is paying to preserve
 #                   something you can regenerate.
@@ -349,7 +349,7 @@ zfs list "$POOL/home" >/dev/null 2>&1 || zfs create -o mountpoint=/home "$POOL/h
 # SERVER PLANS ONLY (RUNINK_PLAN_PROFILE, set by the driver and the graphical installer from the
 # edition): a workstation runs neither, and an empty unmounted dataset for each is only noise.
 siblings=""
-[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/core containers:/var/lib/k0s"
+[ "${RUNINK_PLAN_PROFILE:-server}" = workstation ] || siblings="state:/var/lib/tide containers:/var/lib/k0s"
 for spec in $siblings; do
 	ds="${spec%%:*}"
 	mp="${spec#*:}"
@@ -358,8 +358,42 @@ for spec in $siblings; do
 	fi
 done
 
-# Import path: the siblings (/home, /var/lib/core, /var/lib/k0s) were imported with -N;
+# Import path: the siblings (/home, /var/lib/tide, /var/lib/k0s) were imported with -N;
 # mount them now that the BE sits at $TARGET. No-op on a fresh pool (zfs create mounted them).
+#
+# A pool made by an older image has <pool>/state at /var/lib/core and <pool>/models at
+# /var/lib/core/models/shared. The node-state directory is /var/lib/tide, so on import the
+# dataset's mountpoint PROPERTY moves to the new path. Nothing is copied or moved by hand:
+# the dataset is the same one, mounted somewhere else. It is done only while the property
+# still holds the old path and no dataset already claims the new one (never two datasets on
+# one path). The pool is imported with -R "$TARGET", so zfs may report the path with that
+# prefix; it is stripped before comparing.
+migrate_mountpoint() {
+	_ds="$1"
+	_old="$2"
+	_new="$3"
+	zfs list -H "$_ds" >/dev/null 2>&1 || return 0
+	_cur="$(zfs get -H -o value mountpoint "$_ds" 2>/dev/null)" || return 0
+	_cur="${_cur#"$TARGET"}"
+	[ "$_cur" = "$_old" ] || return 0
+	_claimed=0
+	while read -r _m; do
+		_m="${_m#"$TARGET"}"
+		if [ "$_m" = "$_new" ]; then _claimed=1; fi
+	done <<-EOF
+		$(zfs list -H -o mountpoint -r "$POOL" 2>/dev/null)
+	EOF
+	if [ "$_claimed" = 1 ]; then
+		echo "disk-zfs: WARN — $_ds is mounted at $_old but another dataset already uses $_new; leaving it" >&2
+		return 0
+	fi
+	echo "disk-zfs: $_ds was mounted at $_old by an older image; mounting it at $_new"
+	zfs set mountpoint="$_new" "$_ds"
+}
+if [ "${RUNINK_PLAN_PROFILE:-server}" != workstation ]; then
+	migrate_mountpoint "$POOL/state" /var/lib/core /var/lib/tide
+	migrate_mountpoint "$POOL/models" /var/lib/core/models/shared /var/lib/tide/models/shared
+fi
 zfs mount -a 2>/dev/null || true
 
 # Every dataset must be encrypted and unlocked. On a fresh pool this cannot fail (they all

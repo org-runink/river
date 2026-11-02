@@ -51,7 +51,7 @@ var Mixes = []Mix{
 		"open-table-format data: large Parquet files read sequentially, plus the JSON log"},
 	{"<pool>/containers (/var/lib/k0s)", "server", 128 << 10, map[string]float64{"container-layers": 0.5, "os-files": 0.5},
 		"compressed layer blobs in the content store plus their unpacked snapshots"},
-	{"<pool>/state (/var/lib/core, node state)", "server", 1 << 20, map[string]float64{"container-layers": 0.5, "model-weights": 0.4, "ndjson": 0.1},
+	{"<pool>/state (/var/lib/tide, node state)", "server", 1 << 20, map[string]float64{"container-layers": 0.5, "model-weights": 0.4, "ndjson": 0.1},
 		"a node's local image registry blobs and model weights, plus logs; large sequential files"},
 	{"<pool>/models (model files)", "workstation+server", 1 << 20, map[string]float64{"model-weights": 1},
 		"large model files, written once, read sequentially"},

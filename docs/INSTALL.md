@@ -367,7 +367,7 @@ failure:
 | `50-runink-user` | Creates the `runink` user (uid 1000), its subuid/subgid range and runtime directory. |
 | `60-load-artifacts` | Reports whether baked container images are present in `/usr/local/share/runink/images/`; they are imported at first boot. |
 | `70-secrets-models` | Copies `enrollment.env` (if given) to `/etc/runink/enrollment.env` with mode 0600, and wires `runink-firstboot.sh` into `/etc/s6/rc.local`. |
-| `72-models-payload` | Only when the medium carries `/river-models`: asks for the payload passphrase (blank defers), creates the encrypted `<pool>/models` dataset at `/var/lib/core/models/shared`, unpacks and verifies every file against `models.lock`, and destroys the dataset on any failure ([MODEL-PAYLOAD.md](MODEL-PAYLOAD.md)). |
+| `72-models-payload` | Only when the medium carries `/river-models`: asks for the payload passphrase (blank defers), creates the encrypted `<pool>/models` dataset at `/var/lib/tide/models/shared`, unpacks and verifies every file against `models.lock`, and destroys the dataset on any failure ([MODEL-PAYLOAD.md](MODEL-PAYLOAD.md)). |
 | `73-downstream-payloads` | Only when the medium carries downstream payloads (`/river-<kind>/<group>/`, a private medium): copies them **still encrypted** into the encrypted `<pool>/payloads` dataset at `/var/lib/runink/payloads`, verifying every part and LOCK against its MANIFEST; never opens or deploys them ([PAYLOADS.md](PAYLOADS.md)). |
 | `76-setup-answers` | Only with `runink-autoinstall --setup-answers FILE`: copies the file to `/var/lib/runink/firstboot.d/setup-answers` (0600) for the downstream's first-boot hooks, which get it as `RIVER_SETUP_ANSWERS`; it is shredded once they have all succeeded. |
 | `75-install-plan` | Writes the hardware install plan to `/etc/runink/install-plan.json` (mode 0600). |
@@ -579,7 +579,7 @@ them to `/etc/runink/he-tunnel.env` by hand; `he-tunnel.env.example` documents t
 
 | Variable | Effect |
 |---|---|
-| `MODEL_STORE_URL` | An rsync endpoint (`rsync://host.example.org/models` or `host:path` over SSH) holding the model set pinned in `models.lock`. Synced into `/var/lib/core/models/shared` and verified against `/usr/local/share/runink/models.manifest`, which is generated from `models.lock` at build time; a checksum mismatch stops enrollment. HTTPS is not supported (the node has no HTTP client). |
+| `MODEL_STORE_URL` | An rsync endpoint (`rsync://host.example.org/models` or `host:path` over SSH) holding the model set pinned in `models.lock`. Synced into `/var/lib/tide/models/shared` and verified against `/usr/local/share/runink/models.manifest`, which is generated from `models.lock` at build time; a checksum mismatch stops enrollment. HTTPS is not supported (the node has no HTTP client). |
 | `RUNNER_URL`, `RUNNER_TOKEN` | Register a GitHub Actions runner as `runink`, if the runner is unpacked at `/home/runink/actions-runner`. `runner-keepalive.sh` supervises it afterwards. |
 | `RUNNER_LABELS` | Comma-separated runner labels. Default `self-hosted,river`. |
 

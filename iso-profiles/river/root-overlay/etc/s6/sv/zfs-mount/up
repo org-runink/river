@@ -1,7 +1,7 @@
 #!/bin/execlineb -P
 # Mount every ZFS dataset of the imported pool(s). The initramfs `zfs` hook mounts only the
 # boot environment (and its children); the pool's other datasets are its SIBLINGS
-# (<pool>/home, <pool>/state at /var/lib/core, <pool>/containers at /var/lib/k0s,
+# (<pool>/home, <pool>/state at /var/lib/tide, <pool>/containers at /var/lib/k0s,
 # <pool>/models; 10-disk-zfs), and nothing else mounts them: the first installed server
 # booted with all four unmounted, so k0s and the platform wrote into the BE underneath.
 # They inherit the pool root's encryption key, which the initramfs already loaded.

@@ -1,6 +1,6 @@
 #!/bin/sh
 # 72-models-payload — unpack the encrypted model payload from the install medium into its
-# own natively encrypted dataset, <pool>/models, mounted at /var/lib/core/models/shared.
+# own natively encrypted dataset, <pool>/models, mounted at /var/lib/tide/models/shared.
 #
 # A server medium MAY carry the model set pinned in models.lock as an encrypted payload
 # (`river-models/` at the root of the ISO; format and threat model in docs/MODEL-PAYLOAD.md).
@@ -38,7 +38,7 @@ TARGET="${RUNINK_TARGET:?}"
 POOL="${RUNINK_POOL:?}"
 LOCK="${RUNINK_MODELS_LOCK:-/usr/local/share/runink/models.lock}"
 SUMS="${RUNINK_MODELS_MANIFEST:-/usr/local/share/runink/models.manifest}"
-MODELS_MP="/var/lib/core/models/shared"
+MODELS_MP="/var/lib/tide/models/shared"
 DS="$POOL/models"
 
 log() { echo "models-payload: $*"; }

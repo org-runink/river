@@ -27,7 +27,7 @@ CLOUD_SERVICES="river-cloud-identity river-cloud-init river-cloud-late ttyS"
 for s in river-cloud-identity river-cloud-init river-cloud-late; do
 	[ -f "$TARGET/etc/s6/sv/$s/type" ] || { echo "cloud-finalize: s6 service $s missing from the target" >&2; exit 1; }
 done
-# On a cloud image the stack (k0s on /var/lib/k0s, the payload on /var/lib/core) must not
+# On a cloud image the stack (k0s on /var/lib/k0s, the payload on /var/lib/tide) must not
 # start before river-cloud-init has unlocked and mounted the encrypted data datasets.
 : > "$TARGET/etc/s6/adminsv/rc-local/dependencies.d/river-cloud-init"
 chroot_run "s6 repository sync"

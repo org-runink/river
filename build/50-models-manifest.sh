@@ -6,14 +6,14 @@
 # cache from that lock at ISO BUILD time; the installed node never fetches a model.
 #
 # This step no longer hashes "whatever sits in a reference directory". It used to snapshot
-# the server's /var/lib/core/models/shared, so the manifest described what one box happened
+# the server's /var/lib/tide/models/shared, so the manifest described what one box happened
 # to hold (including an unused GGUF, and not two files the inference tiers named, which were
 # missing). Now the lock is the list: `models-fetch.sh --check` proves every locked file is
 # present in MODELS_DIR with the pinned size and sha256, and the manifest is written from
 # the lock rows. Files in MODELS_DIR that the lock does not name are ignored.
 #
 # Output: $OUT_DIR/models.manifest — `sha256  ./<dest>` lines, which runink-firstboot.sh
-#         checks with `sha256sum -c` from /var/lib/core/models/shared (staged into the image
+#         checks with `sha256sum -c` from /var/lib/tide/models/shared (staged into the image
 #         at /usr/local/share/runink/models.manifest by the runink-runtime package).
 #
 # Usage: 50-models-manifest.sh [MODELS_DIR]

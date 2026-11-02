@@ -187,8 +187,8 @@ are recognised and refused as "planned".
             ├─ etc-runink                   /etc/runink
             ├─ node-state                   /var/lib/runink
             ├─ home                         /home
-            ├─ state                        /var/lib/core
-            │  └─ (models)                  /var/lib/core/models/shared  (zriver/data/models)
+            ├─ state                        /var/lib/tide
+            │  └─ (models)                  /var/lib/tide/models/shared  (zriver/data/models)
             ├─ containers                   /var/lib/k0s
             └─ appfs                        not mounted: parent for per-application roots
 ```
@@ -332,7 +332,7 @@ unpacking (`river-cloud-init status`).
   a cloud instance has no console.
 - **Everything node-specific is encrypted**: `/etc/runink` (enrollment secrets, k0s role,
   install plan), `/var/lib/runink`, `/home` (the admin's and the runner's secrets),
-  `/var/lib/core` (payload state, registry, models), `/var/lib/k0s` (cluster state,
+  `/var/lib/tide` (payload state, registry, models), `/var/lib/k0s` (cluster state,
   containerd) and future per-application roots under `appfs`. All are children of
   `<pool>/data` (`zriver/data` on the boot disk, or `zriver-data/data` on a data disk),
   one aes-256-gcm encryption root, marked `org.runink:role=cloud-data`.
