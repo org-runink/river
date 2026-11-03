@@ -317,7 +317,7 @@ path is a new boot environment:
    sealed to the TPM plus a recovery passphrase), and `zfs send | zfs receive` the state
    datasets into it. This needs free space equal to the live state; the big caches can be
    dropped and regenerated instead. A node with no room is **reinstalled from the ISO**, with
-   `/var/lib/core` and `/var/lib/k0s` rebuilt as they are after a normal install.
+   `/var/lib/tide` and `/var/lib/k0s` rebuilt as they are after a normal install.
 3. **Stage.** Receive the rootfs into a new BE under the encryption root. Copy node identity
    into it: `/etc/hostid`, SSH host keys, `/etc/runink/*`, k0s PKI and state, the runner's
    `.runner`/`.credentials`.

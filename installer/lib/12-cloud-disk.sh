@@ -17,7 +17,7 @@
 #            └─ zriver/data                  created on the INSTANCE at first boot by
 #                                             river-cloud-init: the aes-256-gcm encryption
 #                                             root, under a per-instance key wrapped by a
-#                                             key provider; home, /var/lib/core, models,
+#                                             key provider; home, /var/lib/tide, models,
 #                                             /var/lib/k0s, /etc/runink, /var/lib/runink
 #
 # Nothing encrypted is created here: an encryption root made at image build would share one

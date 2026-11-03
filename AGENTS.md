@@ -24,7 +24,7 @@ secret, or anything that names a specific downstream product.
 - Installed-machine identifiers are part of the product and must not be renamed without a
   migration: the `runink-*` / `linux-runink` packages and the `[runink]` pacman repo,
   `/etc/runink/*`, `/etc/runink-os-version`, `ID=runink`, the `runink-os-*` release tags,
-  the `runink` user / hostname, `/usr/local/share/runink`, `/var/lib/core`.
+  the `runink` user / hostname, `/usr/local/share/runink`, `/var/lib/tide`.
 
 ## 2. Place in the ecosystem
 
