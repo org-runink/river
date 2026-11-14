@@ -1,5 +1,14 @@
 # Release notes
 
+## 20261114-132942 (3afa6c4)
+
+### Release Notes
+
+This update adds a new release notes document to the repository.
+
+**Added**
+*   `docs/release-notes.md`: New file containing release notes for version `20261113-143338`, detailing the introduction of a Wayland-based desktop environment ("DEsk"), improvements to live ISO boot reliability, and updates to dependencies and CI actions.
+
 ## 20261113-143338 (91fb454)
 
 ## Release Notes
