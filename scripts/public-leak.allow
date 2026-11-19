@@ -34,6 +34,7 @@ email | iso-profiles/river/root-overlay/usr/share/wallpapers/**   | rkstrdee@gma
 email | REUSE.toml                                                | rkstrdee@gmail.com | the same attribution, as SPDX-FileCopyrightText
 email | build/pkgbuilds/runink-kernel/PKGBUILD                    | heftig@archlinux.org | credit to the Arch linux-zen PKGBUILD this follows
 email | packaging/aur/linux-runink/PKGBUILD                       | heftig@archlinux.org | the same credit, in the AUR copy
+email | build/pkgbuilds/dbus/0002-add-elogind-build-support.patch | artoo@artixlinux.org | upstream author of the Artix elogind patch, kept verbatim
 email | packaging/aur/PUBLISHING.md                               | aur@aur.archlinux.org | the AUR's own SSH endpoint
 email | installer/**                                              | sk-ssh-ed25519@openssh.com | an OpenSSH key type, not an address
 email | installer/**                                              | sk-ecdsa-sha2-nistp256@openssh.com | an OpenSSH key type, not an address

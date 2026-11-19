@@ -33,6 +33,15 @@ None.
 
 ### Added
 
+- **`dbus` without X11.** `[runink]` gains `dbus` 1.16.4-1.1: the same release, options and
+  file layout as the distribution's dbus 1.16.4-1 (elogind, no systemd units, UID 81, the
+  setuid activation helper), built with muon from the sha256-pinned release tarball with
+  `-Dx11_autolaunch=disabled`. The distribution's dbus depends on libx11 only for X11
+  autolaunch, and every service that needs D-Bus reached libx11, libxcb and xorgproto
+  through it. Because the build puts `[runink]` ahead of `[system]`, this package replaces the
+  distribution's dbus in every image, the desktop included (it is Wayland; autolaunch was only
+  a fallback for X programs started without a session bus). Its pkgrel sorts above the
+  distribution's, so a sysupgrade does not swap the X11 build back in.
 - **DEsk packages.** `[runink]` gains `runink-wlroots0.18` (wlroots 0.18.3), `runink-desk`
   (DEsk 0.1.4 with the Runink fork's patches: no Python in its build, elogind instead of
   systemd, the weather off until a user turns it on), and the login screen's `runink-cage`
