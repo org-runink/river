@@ -32,7 +32,7 @@ sha256sums=('164a7c8bf9f8ae2c1fb00e7bddb6f08cad7e81b3eb35577b48483b1ac265a087')
 
 build() {
 	cd "wlroots-${pkgver}"
-	muon setup -Dprefix=/usr -Dbuildtype=release -Dexamples=false -Dwerror=false \
+	muon setup -Dprefix=/usr -Dbuildtype=release -Ddefault_library=shared -Dexamples=false -Dwerror=false \
 		-Dbackends=drm,libinput,x11 -Drenderers=gles2 -Dallocators=gbm -Dsession=enabled \
 		-Dxwayland=enabled -Dlibliftoff=disabled -Dcolor-management=disabled \
 		-Dxcb-errors=disabled -Dicon_directory=/usr/share/icons build
