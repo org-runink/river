@@ -1,5 +1,5 @@
 # Maintainer: The RIVER Authors (see MAINTAINERS.md)
-# runink-dbus — the D-Bus message bus, built WITHOUT X11, for headless images.
+# dbus — the D-Bus message bus, built WITHOUT X11.
 #
 # WHY THIS IS PACKAGED HERE. Artix's system/dbus is built with -Dx11_autolaunch=enabled and so
 # depends on libx11. On a headless profile, base, elogind-s6, dbus-s6, networkmanager(-s6),
@@ -33,17 +33,21 @@
 # BUILT WITH MUON (builder/Containerfile), the C implementation of meson: meson is Python, and
 # the build environment carries none (river lint python-purge).
 #
-# HOW THE IMAGE GETS IT. pacman's dependency resolution prefers a package literally named `dbus` over a
-# provider, whatever the repo order, so `provides=dbus` alone would still install Artix's dbus.
-# A profile that wants this one lists runink-dbus explicitly in its Packages-Root; pacman then
-# satisfies every `dbus` dependency with it. No `replaces`: a desktop profile that keeps
-# Artix's dbus (X11 autolaunch and all) is not migrated by a sysupgrade.
-# `pactree` follows the literal name the same way, so a per-package pactree walk of base or
-# dbus-s6 still lists Artix's dbus and libx11 even when this package is listed; the closure
-# that is installed is what `pacman -Sp` resolves for the whole Packages-Root at once.
-pkgname=runink-dbus
+# NAMED `dbus`, IN [runink]. The build puts [runink] ahead of [system], and pacman and pactree
+# both resolve a dependency on `dbus` by the first repo carrying a package of that name, before
+# any provider. Under its own name this package therefore replaces Artix's dbus for every
+# profile built with [runink] first, with no profile listing it, and the closure every lint
+# and every install resolves is the X11-free one. That includes the desktop profile, which is
+# Wayland: X11 autolaunch was the only thing in dbus linking libX11, and it is only a fallback
+# that starts a session bus for an X program launched with none.
+#
+# pkgrel 1.1 sorts above Artix's 1.16.4-1, so a sysupgrade that sees both never swaps Artix's
+# X11-linked build back in at an equal version. When Artix moves to a new dbus, this package
+# moves with it (same pkgver, pkgrel <artix pkgrel>.1).
+# conflicts/replaces libdbus as Artix's dbus does (the old split library package).
+pkgname=dbus
 pkgver=1.16.4
-pkgrel=1
+pkgrel=1.1
 pkgdesc="Freedesktop.org message bus system, built without X11"
 arch=('x86_64')
 url="https://www.freedesktop.org/wiki/Software/dbus/"
@@ -51,8 +55,9 @@ license=('AFL-2.1 OR GPL-2.0-or-later')
 depends=('glibc' 'audit' 'expat' 'libcap-ng' 'libelogind'
 	'libaudit.so' 'libcap-ng.so' 'libexpat.so')
 makedepends=('elogind')
-provides=("dbus=${pkgver}" 'libdbus' 'libdbus-1.so=3-64')
-conflicts=('dbus' 'libdbus')
+provides=('libdbus' 'libdbus-1.so=3-64')
+conflicts=('libdbus')
+replaces=('libdbus')
 source=("https://dbus.freedesktop.org/releases/dbus/dbus-${pkgver}.tar.xz"
 	0001-arch-layout.patch
 	0002-add-elogind-build-support.patch

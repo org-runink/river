@@ -43,7 +43,7 @@ build/pkgbuilds/**/k0s-v*-amd64
 # makepkg source downloads (pinned by sha256 in each PKGBUILD)
 /build/pkgbuilds/river-guide/mistralrs-cpu-*.tar.gz
 /build/pkgbuilds/runink-tayga/tayga-*.tar.bz2
-/build/pkgbuilds/runink-dbus/dbus-*.tar.xz
+/build/pkgbuilds/dbus/dbus-*.tar.xz
 /build/pkgbuilds/runink-wlroots0.18/wlroots-*.tar.gz
 /build/pkgbuilds/runink-cage/cage-*.tar.gz
 /build/pkgbuilds/runink-gtkgreet/gtkgreet-*.tar.gz

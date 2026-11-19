@@ -25,7 +25,7 @@ var PublicPackages = map[string]string{
 	"runink-installer":     "build/pkgbuilds/runink-installer",
 	"runink-grub-live":     "build/pkgbuilds/runink-grub-live",
 	"runink-tayga":         "build/pkgbuilds/runink-tayga",
-	"runink-dbus":          "build/pkgbuilds/runink-dbus",
+	"dbus":                 "build/pkgbuilds/dbus",
 	"runink-wlroots0.18":   "build/pkgbuilds/runink-wlroots0.18",
 	"runink-cage":          "build/pkgbuilds/runink-cage",
 	"runink-gtkgreet":      "build/pkgbuilds/runink-gtkgreet",

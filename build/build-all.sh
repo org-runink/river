@@ -102,15 +102,15 @@ if command -v makepkg >/dev/null 2>&1; then
 	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
 	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
 
-	# runink-dbus, dbus 1.16.4 built without X11 (no X11 autolaunch), so a headless profile
-	# can list it instead of Artix's dbus and keep libx11/libxcb out of its closure.
+	# dbus 1.16.4 built without X11 (no X11 autolaunch). Named dbus, so with [runink] ahead of
+	# [system] it replaces the distribution's X11-linked dbus in every profile's closure.
 	# Integrity-checked (release tarball and its three patches pinned by sha256), with muon.
 	# No --nodeps: it compiles C against libelogind, audit, expat and libcap-ng, so they must
 	# be present.
-	echo "  makepkg runink-dbus (integrity-checked)"
-	( cd "$HERE/pkgbuilds/runink-dbus" && \
+	echo "  makepkg dbus (integrity-checked)"
+	( cd "$HERE/pkgbuilds/dbus" && \
 	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
-	  || { echo "  makepkg runink-dbus FAILED" >&2; exit 1; }
+	  || { echo "  makepkg dbus FAILED" >&2; exit 1; }
 
 	# The desktop (docs/DESKTOP-DESK-PLAN.md), integrity-checked, with muon (builder/Containerfile).
 	# wlroots first, installed into this throwaway builder so cage and DEsk build against it;
