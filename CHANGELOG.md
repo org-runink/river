@@ -33,6 +33,14 @@ None.
 
 ### Added
 
+- **`runink-dbus`.** `[runink]` gains dbus 1.16.4 built without X11 (`-Dx11_autolaunch=disabled`),
+  otherwise the same version, options and file layout as the distribution's dbus (elogind,
+  no systemd units, UID 81, the setuid activation helper), built with muon from the
+  sha256-pinned release tarball. The distribution's dbus depends on libx11 only for X11
+  autolaunch, and every service that needs D-Bus reaches libx11, libxcb and xorgproto
+  through it. A headless profile lists `runink-dbus` in its `Packages-Root` and pacman
+  satisfies every `dbus` dependency with it; it provides `dbus`, `libdbus` and
+  `libdbus-1.so`. Not used by the in-tree profile.
 - **DEsk packages.** `[runink]` gains `runink-wlroots0.18` (wlroots 0.18.3), `runink-desk`
   (DEsk 0.1.4 with the Runink fork's patches: no Python in its build, elogind instead of
   systemd, the weather off until a user turns it on), and the login screen's `runink-cage`

@@ -1,0 +1,105 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-dbus — the D-Bus message bus, built WITHOUT X11, for headless images.
+#
+# WHY THIS IS PACKAGED HERE. Artix's system/dbus is built with -Dx11_autolaunch=enabled and so
+# depends on libx11. On a headless profile, base, elogind-s6, dbus-s6, networkmanager(-s6),
+# wpa_supplicant and iptables all reach libx11, libxcb and xorgproto through dbus alone, and a
+# headless profile's forbidden.closure bans exactly those. X11 autolaunch (starting a session
+# bus from an X display) means nothing on a machine with no display, so the fix is a dbus
+# without it, not a weaker closure policy.
+#
+# SAME VERSION AND LAYOUT AS ARTIX. Artix's dbus 1.16.4-1 (itself Arch's PKGBUILD plus
+# elogind), with these differences only:
+#   -Dx11_autolaunch=disabled   no libX11/libxcb link, no libx11 dependency
+#   no docs, no man pages        doxygen/xmlto/ducktype are not in the builder (Artix splits
+#                                the API docs into dbus-docs; nothing on a node reads them)
+#   no test suite                upstream's tests need python3; Artix runs them in check()
+# Everything a running system depends on is unchanged: /usr/bin/dbus-daemon, the system bus
+# socket at /run/dbus/system_bus_socket, /usr/share/dbus-1/{system,session}.conf, the
+# setuid launch helper at /usr/lib/dbus-daemon-launch-helper (root:dbus 4110), the dbus user
+# with UID 81 (sysusers.d) and /var/lib/dbus/machine-id -> /etc/machine-id (tmpfiles.d), and
+# elogind for console-user detection. dbus-s6 and elogind work unchanged on top of it. No
+# systemd units, as in Artix.
+#
+# SOURCES. The upstream release tarball, pinned by sha256 (its detached signature verifies
+# against Simon McVittie's key DA98F25C0871C49A59EAFF2C4DE8FF2A63C7CC90, the key Artix's
+# PKGBUILD names). Three patches, each pinned below:
+#   0001-arch-layout.patch               Arch's layout tweaks, as Artix applies them
+#   0002-add-elogind-build-support.patch Artix's elogind patch, verbatim
+#   0003-build-without-python.patch      the meson build without python3 (see its header)
+# Artix also cherry-picks upstream 2cb5882d (a locked dbus user); that only takes effect when
+# built with systemd, so Artix's own package ships the unlocked line this one ships.
+#
+# BUILT WITH MUON (builder/Containerfile), the C implementation of meson: meson is Python, and
+# the build environment carries none (river lint python-purge).
+#
+# HOW THE IMAGE GETS IT. pacman's dependency resolution prefers a package literally named `dbus` over a
+# provider, whatever the repo order, so `provides=dbus` alone would still install Artix's dbus.
+# A profile that wants this one lists runink-dbus explicitly in its Packages-Root; pacman then
+# satisfies every `dbus` dependency with it. No `replaces`: a desktop profile that keeps
+# Artix's dbus (X11 autolaunch and all) is not migrated by a sysupgrade.
+# `pactree` follows the literal name the same way, so a per-package pactree walk of base or
+# dbus-s6 still lists Artix's dbus and libx11 even when this package is listed; the closure
+# that is installed is what `pacman -Sp` resolves for the whole Packages-Root at once.
+pkgname=runink-dbus
+pkgver=1.16.4
+pkgrel=1
+pkgdesc="Freedesktop.org message bus system, built without X11"
+arch=('x86_64')
+url="https://www.freedesktop.org/wiki/Software/dbus/"
+license=('AFL-2.1 OR GPL-2.0-or-later')
+depends=('glibc' 'audit' 'expat' 'libcap-ng' 'libelogind'
+	'libaudit.so' 'libcap-ng.so' 'libexpat.so')
+makedepends=('elogind')
+provides=("dbus=${pkgver}" 'libdbus' 'libdbus-1.so=3-64')
+conflicts=('dbus' 'libdbus')
+source=("https://dbus.freedesktop.org/releases/dbus/dbus-${pkgver}.tar.xz"
+	0001-arch-layout.patch
+	0002-add-elogind-build-support.patch
+	0003-build-without-python.patch)
+sha256sums=('d08b05526c2cb7966a5fb79210d6112b1aca3d135f315c1b302e14b4b0297dac'
+	'35a7100b93d10b2a4e6a240c97e6236ea33512a08343d5194907edde13417faa'
+	'f6bb4b6247ea62b5f3ec425056fc4abfc750ecc0527a697e439a1ea41fc5daf6'
+	'0c05cf40301183cd4488e8fffb3cb0557687ca5ac54805d0edf6dda4af39a903')
+
+prepare() {
+	cd "dbus-${pkgver}"
+	patch -Np1 -i ../0001-arch-layout.patch
+	patch -Np1 -i ../0002-add-elogind-build-support.patch
+	patch -Np1 -i ../0003-build-without-python.patch
+}
+
+build() {
+	cd "dbus-${pkgver}"
+	# Artix's options (artix-meson: libexecdir=lib, sbindir=bin, buildtype=plain so makepkg's
+	# CFLAGS/LDFLAGS apply, PIE), every feature named so nothing is picked up by accident.
+	# default_library=shared is spelled out: muon defaults to static, which would ship
+	# libdbus-1.a and no libdbus-1.so.3 (the soname elogind, NetworkManager and the rest link).
+	muon setup -Dprefix=/usr -Dlibexecdir=lib -Dsbindir=bin -Dsysconfdir=/etc -Dlocalstatedir=/var \
+		-Dbuildtype=plain -Db_pie=true -Ddefault_library=shared \
+		-Dx11_autolaunch=disabled \
+		-Delogind=enabled -Dsystemd=disabled -Duser_session=false \
+		-Dlibaudit=enabled -Dapparmor=disabled -Dselinux=disabled \
+		-Dkqueue=disabled -Dlaunchd=disabled -Drelocation=disabled \
+		-Depoll=enabled -Dinotify=enabled -Dvalgrind=disabled \
+		-Ddbus_user=dbus -Dmessage_bus=true -Dtools=true -Dtraditional_activation=true \
+		-Ddoxygen_docs=disabled -Dducktype_docs=disabled -Dxml_docs=disabled -Dqt_help=disabled \
+		-Dmodular_tests=disabled -Dinstalled_tests=false -Dintrusive_tests=false \
+		build
+	muon -C build samu
+}
+
+package() {
+	cd "dbus-${pkgver}"
+	DESTDIR="$pkgdir" muon -C build install
+
+	# What upstream's post-install script does as root: the activation helper is setuid root,
+	# executable by the bus user's group only.
+	chown root:81 "$pkgdir/usr/lib/dbus-daemon-launch-helper"
+	chmod 4110 "$pkgdir/usr/lib/dbus-daemon-launch-helper"
+
+	# Upstream installs a few example and design documents; Artix moves them to dbus-docs.
+	rm -rf "$pkgdir/usr/share/doc"
+
+	install -Dt "$pkgdir/usr/share/licenses/$pkgname" -m644 COPYING LICENSES/AFL-2.1.txt
+}

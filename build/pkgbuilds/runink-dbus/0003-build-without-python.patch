@@ -1,0 +1,74 @@
+Configure, build and install dbus without python3.
+
+Upstream's meson build calls python3 for the test suite, the Doxygen docs, a probe of
+TMPDIR/TEMP/TMP for the default socket directory, and a post-install script that sets the
+launch helper's owner and mode. This build compiles none of the tests or docs, fixes the
+socket directory at /tmp (what the probe answers in a package build), and sets the launch
+helper's owner and mode in the PKGBUILD's package().
+
+--- a/meson.build
++++ b/meson.build
+@@ -84,7 +84,8 @@
+ ###############################################################################
+ # System detection
+ 
+-python = find_program('python3')
++# No Python in this build. python3 served the test suite and the Doxygen docs (neither is
++# built here) and the socket-directory probe (replaced below).
+ 
+ host_os = host_machine.system()
+ 
+@@ -1073,12 +1074,9 @@
+ data_config.set('DATADIR_FROM_PKGSYSCONFDIR', datadir_from_pkgsysconfdir)
+ 
+ #### Find socket directories
+-values = run_command(python, '-c',
+-    'import os; [print(os.getenv(e, "")) for e in ["TMPDIR", "TEMP", "TMP"]]',
+-    check: true,
+-).stdout()
+-values += '/tmp'
+-default_socket_dir = values.strip().split('\n')[0]
++# The upstream probe read TMPDIR/TEMP/TMP with python3; a package build has none set,
++# so it always answered /tmp.
++default_socket_dir = '/tmp'
+ 
+ test_socket_dir = get_option('test_socket_dir')
+ if test_socket_dir == ''
+@@ -1263,13 +1261,11 @@
+ if tools
+     subdir('tools')
+ endif
+-subdir('test')
+ subdir('doc')
+ subdir('cmake')
+ 
+-meson.add_install_script('meson_post_install.py',
+-    '@0@'.format(relocation),
+-)
++# meson_post_install.py (python3) is not run: it only set the launch helper's owner and
++# mode, which the package does itself, and relocated the .pc file (relocation=disabled).
+ 
+ pkgconfig.generate(
+     libdbus,
+--- a/meson.build.orig
++++ b/meson.build.orig
+@@ -500,6 +500,11 @@
+ use_systemd = systemd.found()
+ config.set('HAVE_SYSTEMD', use_systemd)
+ 
++elogind_opt = get_option('elogind').require(not use_systemd)
++elogind = dependency('libelogind', version: '>=209', required: elogind_opt)
++use_elogind = elogind.found()
++config.set('HAVE_ELOGIND', use_elogind)
++
+ if use_systemd
+     # If not found in $PATH, we might still have systemd and systemctl at runtime
+     # (perhaps dbus is being compiled in a minimal chroot with no systemd).
+@@ -1375,6 +1380,7 @@
+     'Building inotify support': use_inotify,
+     'Building kqueue support':  use_kqueue,
+     'Building systemd support': use_systemd,
++    'Building elogind support': use_elogind,
+     'Traditional activation':   use_traditional_activation,
+     'Building X11 code':        config.get('DBUS_BUILD_X11'),
+     'Building Doxygen docs':    doxygen.found(),
