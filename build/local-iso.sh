@@ -226,11 +226,15 @@ fi
 # build/k0s-images.lock, so a downstream server brings its cluster up with no network. Built
 # here on the host (rootless podman pulls them); reused when it still verifies. Runink River does
 # not install the package, but build-all packages every component. The image list comes from
-# the profile's own /etc/k0s/k0s.yaml when it has one, else from the reference build/k0s/k0s.yaml.
+# the profile's own /etc/k0s/k0s.yaml when it has one, else from the reference build/k0s/k0s.yaml,
+# and is checked against the profile's own k0s-images.lock when it has one, else the reference
+# lock: a profile that changes the image set must carry the lock for it.
 echo "local-iso: k0s airgap bundle"
 K0S_CFG="$REPO/build/k0s/k0s.yaml"
 [ -f "$PDIR/root-overlay/etc/k0s/k0s.yaml" ] && K0S_CFG="$PDIR/root-overlay/etc/k0s/k0s.yaml"
-OUT_DIR="$ART" K0S_CONFIG="$K0S_CFG" "$HERE/k0s-airgap.sh"
+K0S_LCK="$REPO/build/k0s-images.lock"
+[ -f "$PDIR/k0s-images.lock" ] && K0S_LCK="$PDIR/k0s-images.lock"
+OUT_DIR="$ART" K0S_CONFIG="$K0S_CFG" K0S_LOCK="$K0S_LCK" "$HERE/k0s-airgap.sh"
 # The lock the image ships (runink-installer takes a payload-staged one first) is the lock
 # the model payload must be packed from: the installer refuses a payload from another lock.
 LOCK="$REPO/models.lock"

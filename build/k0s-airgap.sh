@@ -36,8 +36,9 @@
 #
 # Usage: build/k0s-airgap.sh [--update-lock]
 # Environment: K0S_BIN (default: the cached, verified release binary; fetched once into
-# ~/.cache/river-build/sources), K0S_CONFIG (default build/k0s/k0s.yaml), OUT_DIR (default
-# build/artifacts).
+# ~/.cache/river-build/sources), K0S_CONFIG (default build/k0s/k0s.yaml), K0S_LOCK (default
+# build/k0s-images.lock; a downstream config that changes the image set brings its own lock),
+# OUT_DIR (default build/artifacts).
 # Needs: podman (rootless), go, sha256sum, and network for the first pull only.
 set -eu
 
@@ -48,7 +49,7 @@ OUT_DIR="${OUT_DIR:-$REPO/build/artifacts}"
 PKGBUILD="$REPO/build/pkgbuilds/runink-k0s/PKGBUILD"
 CFG="${K0S_CONFIG:-$REPO/build/k0s/k0s.yaml}"
 [ -f "$CFG" ] || { echo "k0s-airgap: no k0s config at $CFG" >&2; exit 1; }
-LOCK="$REPO/build/k0s-images.lock"
+LOCK="${K0S_LOCK:-$REPO/build/k0s-images.lock}"
 UPDATE=0
 
 die() { echo "k0s-airgap: $*" >&2; exit 1; }
