@@ -194,6 +194,9 @@ echo "[iso] buildiso (s6) ..."
 # Output is tee'd so the ZFS assertion below can inspect it. PIPESTATUS, not $?, because
 # the pipe's exit status is tee's.
 BUILDLOG=/tmp/buildiso.log
+# Keep the log on the host (OUT_DIR, mounted at /os/iso-out): the container is --rm, and a
+# failed check above names its cause only in this file.
+trap 'mkdir -p /os/iso-out; cp -f "$BUILDLOG" /os/iso-out/buildiso.log 2>/dev/null || true; restore_images' EXIT
 set +e
 buildiso -p "${PROFILE:-river}" -i s6 -t /os/iso-out 2>&1 | tee "$BUILDLOG"
 _bi=${PIPESTATUS[0]}
