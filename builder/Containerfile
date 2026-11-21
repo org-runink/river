@@ -55,9 +55,9 @@ RUN py="$(pacman -Qq | grep -E '^python(-|$)' || true)" \
 # pkg-config. A build tool (GPL-3.0) that never ships in an image. The desktop's build
 # dependencies are in the first RUN's package list (docs/DESKTOP-DESK-PLAN.md).
 ARG MUON_VERSION=0.5.0
-ARG MUON_SHA256=24aa4d29ed272893f6e6d355b1ec4ef20647438454e88161bdb9defd7c6faf77
+ARG MUON_SHA256=565c1b6e1e58f7e90d8813fda0e2102df69fb493ddab4cf6a84ce3647466bee5
 RUN cd /tmp \
-    && curl -fsSLo muon.tar.gz "https://muon.build/releases/v${MUON_VERSION}/muon-v${MUON_VERSION}.tar.gz" \
+    && curl -fsSLo muon.tar.gz "https://github.com/muon-build/muon/archive/refs/tags/${MUON_VERSION}.tar.gz" \
     && echo "${MUON_SHA256}  muon.tar.gz" | sha256sum -c - \
     && mkdir muon-src && tar -xzf muon.tar.gz -C muon-src --strip-components=1 && cd muon-src \
     && ./bootstrap.sh build \
