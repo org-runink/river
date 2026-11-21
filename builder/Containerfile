@@ -61,7 +61,7 @@ RUN cd /tmp \
     && echo "${MUON_SHA256}  muon.tar.gz" | sha256sum -c - \
     && mkdir muon-src && tar -xzf muon.tar.gz -C muon-src --strip-components=1 && cd muon-src \
     && ./bootstrap.sh build \
-    && build/muon-bootstrap setup -Dprefix=/usr/local -Dbuildtype=release build-final \
+    && build/muon-bootstrap setup -Dprefix=/usr/local -Dbuildtype=release -Dlibpkgconf=disabled build-final \
     && build/muon-bootstrap -C build-final samu \
     && build/muon-bootstrap -C build-final install \
     && cd / && rm -rf /tmp/muon.tar.gz /tmp/muon-src \
