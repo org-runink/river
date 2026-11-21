@@ -15,7 +15,7 @@ license=('GPL3')
 depends=('gtk3' 'json-c' 'greetd')
 provides=('gtkgreet')
 conflicts=('gtkgreet')
-source=("gtkgreet-${pkgver}.tar.gz::https://git.sr.ht/~kennylevinsen/gtkgreet/archive/${pkgver}.tar.gz")
+source=("gtkgreet-${pkgver}.tar.gz::https://github.com/kennylevinsen/gtkgreet/archive/refs/tags/${pkgver}.tar.gz")
 sha256sums=('e5c70219da191a60e2e009412603e05c36cee15bbbf7657dbbeaa1d21a692873')
 
 build() {
