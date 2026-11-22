@@ -86,6 +86,30 @@ passes `KCFLAGS=-march=x86-64-v3`, and `config.delta` keeps `X86_NATIVE_CPU` off
 - Meteor Lake (no AVX-512) has v3. v3 does not use AVX-512.
 - runink-zfs builds with kbuild's generic `-march=x86-64`, which is compatible.
 
+## aarch64
+
+The PKGBUILD also builds for `aarch64` (UEFI/ACPI arm64 servers). x86_64 reads exactly the
+inputs it read before; aarch64 adds three, through `source_aarch64`:
+
+- `config.base.aarch64`: there is no zen arm64 config, so this is the kernel's arm64
+  `defconfig` with the portable symbols of `config.base` merged in
+  (`scripts/kconfig/merge_config.sh -m`, the x86 identity symbols left out) and `DRM_MSM`
+  disabled, then `olddefconfig`. `config.delta` is applied on top, as on x86.
+- `config.require.aarch64`: `!SYMBOL` lines mark the floor entries of `config.require` that
+  exist only on x86 (the eight `MITIGATION_*` symbols for x86 CPU bugs) as not applicable, and
+  the other lines add the arm64 floor: KPTI (`UNMAP_KERNEL_AT_EL0`), branch-history
+  mitigation, pointer authentication, BTI, KASLR, ACPI, the EFI stub, SMMUv3, and the
+  device-memory options (`ZONE_DEVICE`, `DEVICE_PRIVATE`, `HMM_MIRROR`) that out-of-tree GPU
+  drivers use, and `DRM_MSM=n`: the Qualcomm Adreno driver generates headers with a Python
+  script at build time, and the build has no Python.
+- `tools-types-u128.patch`: linux-api-headers 7.3 declare the arm64 vector registers as
+  `__u128`, which the tools copy of `linux/types.h` lacks, so `resolve_btfids` would not
+  compile on an aarch64 host.
+
+No ISA level is forced (kbuild's armv8-a baseline), and the package installs the
+uncompressed EFI-stub `Image` as `vmlinuz`, which `grub-install --target=arm64-efi` loads.
+`KVM` drops out of the merged config (a bool on arm64, `m` in the x86 base).
+
 ## Platform floor (`config.require`)
 
 Every line is checked after `olddefconfig`, and a miss fails the build:

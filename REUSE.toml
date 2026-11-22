@@ -144,6 +144,13 @@ path = "build/pkgbuilds/runink-kernel/config.base"
 SPDX-FileCopyrightText = "Arch Linux contributors (linux-zen)"
 SPDX-License-Identifier = "0BSD"
 
+# aarch64 kernel config: olddefconfig output of the kernel's arm64 defconfig (GPL-2.0-only)
+# with the portable symbols of config.base above merged in.
+[[annotations]]
+path = "build/pkgbuilds/runink-kernel/config.base.aarch64"
+SPDX-FileCopyrightText = ["The Linux kernel authors", "Arch Linux contributors (linux-zen)"]
+SPDX-License-Identifier = "GPL-2.0-only AND 0BSD"
+
 # bpfdoc: a Go port of the Linux kernel's scripts/bpf_doc.py (GPL-2.0-only), which the kernel
 # PKGBUILD builds in place of that script so the kernel builds without Python. A port of kernel
 # code, so GPL-2.0-only like the script. (build/pkgbuilds/runink-kernel/bpfdoc.go is a symbolic

@@ -1,0 +1,22 @@
+tools/include: define __s128/__u128 like include/uapi/linux/types.h
+
+linux-api-headers 7.3 declare the arm64 sigcontext/ptrace vector registers as __u128. The
+tools copy of linux/types.h shadows the system header and lacks the type, so
+resolve_btfids' libbpf and libsubcmd fail to compile on an aarch64 host.
+
+--- a/tools/include/linux/types.h	2026-11-22 09:32:35.579268972 -0500
++++ b/tools/include/linux/types.h	2026-11-22 09:32:35.582363080 -0500
+@@ -13,6 +13,13 @@
+ #include <asm/types.h>
+ #include <asm/posix_types.h>
+ 
++/* Newer arm64 uapi headers (sigcontext, ptrace) use __u128, which the kernel defines in
++ * include/uapi/linux/types.h; this tools copy shadows that header, so define it here too. */
++#ifdef __SIZEOF_INT128__
++typedef __signed__ __int128 __s128 __attribute__((aligned(16)));
++typedef unsigned __int128 __u128 __attribute__((aligned(16)));
++#endif
++
+ struct page;
+ struct kmem_cache;
+ 

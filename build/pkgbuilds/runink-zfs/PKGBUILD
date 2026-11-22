@@ -32,7 +32,7 @@ pkgname=(runink-zfs runink-zfs-utils)
 pkgver=2.4.4
 pkgrel=3   # 3: --with-python=no (no arc_summary/arcstat/dbufstat scripts); 2: rebuilt against linux-runink 7.2.7-zen1
 pkgdesc="OpenZFS ${pkgver} (stable) built from source against linux-runink — Runink River Server image"
-arch=(x86_64)
+arch=(x86_64 aarch64)
 url="https://openzfs.org"
 license=(CDDL-1.0)
 # Compiled against the kernel build tree that linux-runink-headers installs at
