@@ -33,6 +33,11 @@ None.
 
 ### Added
 
+- **aarch64 kernel and OpenZFS packages.** `linux-runink` and `runink-zfs` build for
+  `aarch64` (UEFI/ACPI arm64 servers) as well as x86_64: an arm64 `config.base.aarch64`, an
+  arm64 platform floor (`config.require.aarch64`) and a small tools-header patch, all through
+  `source_aarch64`. The x86_64 build reads the same inputs as before
+  (`build/pkgbuilds/runink-kernel/README.md`, "aarch64"). No aarch64 image is built yet.
 - **`dbus` without X11.** `[runink]` gains `dbus` 1.16.4-1.1: the same release, options and
   file layout as the distribution's dbus 1.16.4-1 (elogind, no systemd units, UID 81, the
   setuid activation helper), built with muon from the sha256-pinned release tarball with

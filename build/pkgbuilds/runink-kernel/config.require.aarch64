@@ -1,0 +1,30 @@
+# config.require.aarch64 — the aarch64 side of the platform floor, read by _require_config after
+# config.require when CARCH=aarch64.
+#   !SYMBOL      config.require names an x86-only symbol: not applicable on arm64 (skipped)
+#   SYMBOL=val   an arm64-only floor entry (same syntax as config.require)
+# x86 CPU mitigations that do not exist on arm64; their arm64 counterparts are required below.
+!MITIGATION_PAGE_TABLE_ISOLATION
+!MITIGATION_RETPOLINE
+!MITIGATION_SPECTRE_BHI
+!MITIGATION_MDS
+!MITIGATION_SRSO
+!MITIGATION_RETBLEED
+!MITIGATION_GDS
+!MITIGATION_RFDS
+# arm64 mitigations and hardening: KPTI, branch-history, pointer authentication, BTI, KASLR.
+UNMAP_KERNEL_AT_EL0=y
+MITIGATE_SPECTRE_BRANCH_HISTORY=y
+ARM64_PTR_AUTH=y
+ARM64_BTI=y
+RANDOMIZE_BASE=y
+# ACPI/UEFI servers (SBSA): firmware tables, EFI stub boot, the SMMUv3 IOMMU.
+ACPI=y
+EFI_STUB=y
+ARM_SMMU_V3=y
+# Device memory for out-of-tree GPU drivers that use HMM.
+ZONE_DEVICE=y
+DEVICE_PRIVATE=y
+HMM_MIRROR=y
+# The Qualcomm Adreno DRM driver generates headers with a Python script at build time; the
+# build has no Python (and a server has no Adreno GPU).
+DRM_MSM=n

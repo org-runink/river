@@ -45,7 +45,7 @@ pkgver=${_kver}.zen${_zenrel}
 pkgrel=1
 pkgdesc='Runink River sovereign kernel (zen-kernel 7.2.x stable fork; analytics profile, hardened, signed-module-ready)'
 url='https://runink.org'
-arch=(x86_64)
+arch=(x86_64 aarch64)
 license=(GPL-2.0-only)
 makedepends=(
   bc binutils cpio gettext glibc go libelf libgcc openssl pahole perl
@@ -86,6 +86,15 @@ sha256sums=('4ac34c47db2540ffb2713943f8d891ff1702e0ba6934525a493b7d1cad43145a'
             '215e7ed5aee10bb735f7de8a5b103a798eb6185419e706c49312db51fb2cfb1a'
             'e5913f21e21ead4f85aa2a3664f0b820ced330cfb05cf9e20a639b23fdd0951b'
             'adf4435fc6b04da282aba07720173fa3755f6770cf06afddd16edd22dc27ca09')
+# Per-architecture inputs. x86_64 keeps config.base (the zen config); aarch64 has no zen
+# config, so config.base.aarch64 is arm64 defconfig with the portable symbols of config.base
+# merged in (scripts/kconfig/merge_config.sh), then olddefconfig. config.require.aarch64 marks
+# the x86-only floor symbols not applicable (!SYMBOL) and adds the arm64 ones. x86_64 builds
+# read exactly the inputs they read before.
+source_aarch64=(config.base.aarch64 config.require.aarch64 tools-types-u128.patch)
+sha256sums_aarch64=('43d872f9e0ca5c27a88ec380b75024e394bfc8abb30a5629b440ce4d2c40c1f9'
+                    '73c2cb5aa16e2ad34afde92c8f884acb7a69564bee367139466bdf781e2f9c2c'
+                    '7fe60c3dbf6ba3430d7b334bf20f8c94861b7b947e20c665fda516ecdd8a5ddf')
 
 export KBUILD_BUILD_HOST=runink
 export KBUILD_BUILD_USER=$pkgbase
@@ -98,15 +107,21 @@ export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EP
 # -fno-tree-vectorize) still win, so no FPU/vector code appears in kernel context; what v3 buys
 # is BMI/LZCNT/MOVBE/POPCNT and v3 tuning.
 _isa_kcflags=-march=x86-64-v3
+# aarch64: kbuild's own arm64 flags (armv8-a baseline); no ISA level is forced, so one image
+# boots any ARMv8 server. _karch is the kernel's arch directory.
+_karch=x86
+if [[ $CARCH == aarch64 ]]; then _isa_kcflags=; _karch=arm64; fi
 
 # _require_config checks the resolved .config against config.require (SYMBOL=val[|val...];
 # "n" = not set). Every miss is printed, then the build fails.
 _require_config() {
-  local line sym want have alt ok bad=0
+  local line sym want have alt ok bad=0 skip=
   local -a alts
+  [[ -f ../config.require.$CARCH ]] && skip=" $(sed -n 's/^!\([A-Z0-9_]*\).*/\1/p' "../config.require.$CARCH" | tr '\n' ' ')"
   while IFS= read -r line; do
-    case "$line" in ''|\#*) continue ;; esac
+    case "$line" in ''|\#*|\!*) continue ;; esac
     sym=${line%%=*} want=${line#*=}
+    [[ $skip == *" $sym "* ]] && continue   # not applicable on this architecture
     have=$(grep -m1 "^CONFIG_${sym}=" .config | cut -d= -f2-)
     have=${have:-n}
     ok=0
@@ -116,7 +131,7 @@ _require_config() {
       echo "config.require: CONFIG_${sym} is '${have}', need '${want}'" >&2
       bad=1
     fi
-  done < ../config.require
+  done < <(cat ../config.require; [[ -f ../config.require.$CARCH ]] && cat ../config.require.$CARCH)
   (( ! bad )) || { echo "config.require: platform floor not met — refusing to build" >&2; return 1; }
   echo "config.require: platform floor OK"
 }
@@ -147,6 +162,8 @@ prepare() {
   # makepkg has already verified the .zst against its .sig and decompressed it.
   echo "Applying zen patch linux-${_zentag}.patch..."
   patch -Np1 -i "../linux-${_zentag}.patch"
+  # aarch64 hosts with linux-api-headers >= 7.3 need __u128 in the tools copy of types.h
+  [[ $CARCH == aarch64 ]] && patch -Np1 -i ../tools-types-u128.patch
 
   _install_bpfdoc
 
@@ -155,7 +172,7 @@ prepare() {
   echo "${pkgbase#linux}" > localversion.20-pkgname   # -> "-runink"
 
   echo "Setting config (config.base: zen config ported to 7.2)..."
-  cp ../config.base .config
+  if [[ -f ../config.base.$CARCH ]]; then cp ../config.base.$CARCH .config; else cp ../config.base .config; fi
   make olddefconfig
 
   echo "Applying Runink sovereignty/hardening deltas (config.delta)..."
@@ -224,7 +241,9 @@ _package() {
   cd "$_srcname"
   local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
   echo "Installing boot image..."
-  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+  # arm64: the uncompressed EFI-stub Image (GRUB arm64-efi loads a PE image; image_name is Image.gz)
+  local _img; _img="$(make -s image_name)"; [[ $CARCH == aarch64 ]] && _img=arch/arm64/boot/Image
+  install -Dm644 "$_img" "$modulesdir/vmlinuz"
   echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"   # mkinitcpio kernel name
   echo "Installing modules..."
   ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
@@ -237,7 +256,7 @@ _package-headers() {
   depends=(binutils glibc libelf libgcc openssl pahole xxhash zlib zstd)
   provides=(LINUX-HEADERS)
   cd "$_srcname"
-  local builddir="$pkgdir/usr/lib/modules/$(<version)/build" karch=x86
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build" karch=$_karch
   echo "Installing build files..."
   install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
     localversion.* version vmlinux tools/bpf/bpftool/vmlinux.h
