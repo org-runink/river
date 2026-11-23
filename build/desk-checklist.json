@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "n": 1, "id": "boot-splash",
+      "title": "Power on the installed machine: Plymouth river theme, then the greeter chain",
+      "unprovable": "the splash frame itself (its timing is not deterministic); the evidence is the installed theme and the greeter chain",
+      "checks": [
+        {"kind": "guest", "user": "root", "cmd": "grep -h '^Theme=' /etc/plymouth/plymouthd.conf /usr/share/plymouth/plymouthd.defaults 2>&1",
+         "match": "Theme=river", "reason": "the installed system selects the river Plymouth theme, not the default"},
+        {"kind": "guest", "user": "root", "cmd": "cat /run/rt-greeter.ev",
+         "match": "cage=[1-9] gtkgreet=[1-9]", "reason": "the login screen is gtkgreet inside cage (greetd's command), recorded by the guest while the greeter was up"}
+      ]
+    },
+    {
+      "n": 2, "id": "greeter",
+      "title": "Greeter: login box on the dark Runink wallpaper",
+      "steps": [{"adopt": "installed-*-greeter.png", "as": "greeter"}],
+      "checks": [
+        {"kind": "screen", "shot": "greeter", "preset": "greeter",
+         "reason": "the login screen is a dark, drawn scene: not black, not a flat placeholder, with a box and text on it"}
+      ]
+    },
+    {
+      "n": 3, "id": "desk-dark",
+      "title": "After login: the room starts dark, the lamp comes up as it is traced (not Plasma, Weston or black)",
+      "steps": [{"adopt": "installed-*-desk-dark.png", "as": "dark"}],
+      "checks": [
+        {"kind": "screen", "shot": "dark", "preset": "dark-alive",
+         "reason": "a dark room that has something drawn in it (lamp, clock), which a black or crashed screen does not have"},
+        {"kind": "guest", "cmd": "ps -u runink -o comm= | sort -u | tr '\\n' ' '", "match": "(^| )desk( |$)", "not_match": "plasma|weston|kwin",
+         "reason": "the user's session runs desk and not a leftover Plasma or Weston compositor"}
+      ]
+    },
+    {
+      "n": 4, "id": "desk-lit",
+      "title": "Wait for the trace: the lit walnut desk, session log has room lines",
+      "steps": [{"wait": "5s"}],
+      "checks": [
+        {"kind": "screen", "shot": "lit", "preset": "lit", "retry": "240s", "vs": "desk-dark:dark", "changed": {"min": 0.05},
+         "reason": "the room became lit (warm wood and lamp light, a drawn scene) and is not the dark frame again; retried while the CPU trace runs"},
+        {"kind": "guest", "cmd": "grep -c 'desk: room:' /home/runink/.local/state/desk/session.log", "match": "^[1-9]",
+         "reason": "desk logged its room trace, so the pictures came from desk itself"},
+        {"kind": "guest", "cmd": "p=$(pgrep -u runink -x desk | head -1); echo $p > /tmp/rt-deskpid; ps -o stat= -p $p", "match": "^\\S", "not_match": "Z",
+         "reason": "desk is alive (not a zombie); its pid is remembered so a later restart (crash loop) shows"}
+      ]
+    },
+    {
+      "n": 5, "id": "terminal",
+      "title": "Super+Enter: a foot window on paper",
+      "steps": [{"key": "super+enter"}, {"wait": "4s"}, {"shot": "foot"}],
+      "checks": [
+        {"kind": "screen", "shot": "foot", "region": [0.15, 0.15, 0.85, 0.85], "vs": "desk-lit:lit", "changed": {"min": 0.12},
+         "expect": {"paper_frac": {"min": 0.1}},
+         "reason": "the middle of the desk changed and now holds a large light, low-colour area: the paper sheet a window sits on"},
+        {"kind": "guest", "cmd": "pgrep -u runink -x foot", "match": "^[0-9]", "retry": "20s",
+         "reason": "the terminal process exists, so the key chord reached DEsk and DEsk started it"}
+      ]
+    },
+    {
+      "n": 6, "id": "post-box",
+      "title": "notify-send typed in foot, then Super+N: the post box opens with a letter",
+      "steps": [{"type": "notify-send hi there && touch /tmp/rt-typed\n"}, {"wait": "2s"}, {"key": "super+n"}, {"wait": "3s"}, {"shot": "postbox"}],
+      "checks": [
+        {"kind": "guest", "cmd": "test -e /tmp/rt-typed && echo typed", "match": "typed", "retry": "10s",
+         "reason": "keystrokes typed through QMP reached the foot shell, and notify-send exited 0, which it does only if a notification service answered on the session bus"},
+        {"kind": "screen", "shot": "postbox", "vs": "prev", "changed": {"min": 0.03}, "expect": {"entropy": {"min": 2.5}},
+         "reason": "Super+N changed the screen from the terminal frame and the result is still a drawn scene"}
+      ]
+    },
+    {
+      "n": 7, "id": "drawer",
+      "title": "Super+D: the felt drawer with its things",
+      "steps": [{"key": "super+d"}, {"wait": "3s"}, {"shot": "drawer"}],
+      "checks": [
+        {"kind": "screen", "shot": "drawer", "vs": "prev", "changed": {"min": 0.03}, "expect": {"entropy": {"min": 3.0}},
+         "reason": "the drawer drew over the previous frame and the frame is a rich scene, not a blank"}
+      ]
+    },
+    {
+      "n": 8, "id": "bookcase",
+      "title": "Super+A: the bookcase with binders; icons are pictures, not initials",
+      "steps": [{"key": "super+a"}, {"wait": "4s"}, {"shot": "bookcase"}],
+      "checks": [
+        {"kind": "screen", "shot": "bookcase", "vs": "prev", "changed": {"min": 0.05}, "expect": {"colors": {"min": 150}},
+         "reason": "the bookcase replaced the previous view and carries many colours (binders, sheets)"},
+        {"kind": "guest", "cmd": "command -v rsvg-convert", "match": "rsvg-convert",
+         "reason": "librsvg is in the image: without it every ALL APPS icon falls back to initials (gap G3)"}
+      ]
+    },
+    {
+      "n": 9, "id": "all-apps-search",
+      "title": "Type \"term\" in ALL APPS: the book searches",
+      "steps": [{"type": "term"}, {"wait": "3s"}, {"shot": "search"}],
+      "checks": [
+        {"kind": "screen", "shot": "search", "vs": "prev", "changed": {"min": 0.002}, "expect": {"entropy": {"min": 3.0}},
+         "reason": "typing into the open book changed the page (the search filtered it) and the frame stays a drawn scene"},
+        {"kind": "guest", "cmd": "ls /usr/share/applications | grep -ci foot", "match": "^[1-9]",
+         "reason": "the program the search should find is installed with a desktop entry"}
+      ]
+    },
+    {
+      "n": 10, "id": "control-panel",
+      "title": "Super+C: the Control Panel (meters, volume knob, levers, key)",
+      "steps": [{"key": "super+c"}, {"wait": "3s"}, {"shot": "panel"}],
+      "checks": [
+        {"kind": "screen", "shot": "panel", "vs": "prev", "changed": {"min": 0.05}, "expect": {"entropy": {"min": 3.0}},
+         "reason": "the panel replaced the search page and is a drawn scene"},
+        {"kind": "guest", "cmd": "command -v wpctl", "match": "wpctl",
+         "reason": "the volume knob's backend (wpctl) is installed"}
+      ]
+    },
+    {
+      "n": 11, "id": "volume",
+      "title": "Volume: wpctl reports the changed value (PipeWire user service up, a sink present)",
+      "unprovable": "dragging the volume knob with the pointer (its position on the painted panel is not stable enough to aim at)",
+      "steps": [{"guest": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.37"}, {"wait": "1s"}],
+      "checks": [
+        {"kind": "guest", "cmd": "wpctl status | sed -n '/Sinks:/,/Sources:/p'", "match": "\\[vol:",
+         "reason": "PipeWire's session manager runs in the user session and has a sink: the audio device QEMU gave the guest is usable"},
+        {"kind": "guest", "cmd": "wpctl get-volume @DEFAULT_AUDIO_SINK@", "match": "Volume: 0\\.37",
+         "reason": "a volume set through the same wpctl DEsk's knob uses reads back changed"}
+      ]
+    },
+    {
+      "n": 12, "id": "bluetooth",
+      "title": "Bluetooth lever opens bluetuith titled Bluetooth",
+      "unprovable": "the lever click (no stable position) and any controller (QEMU has none)",
+      "checks": [
+        {"kind": "guest", "cmd": "command -v bluetuith && command -v river-desk", "match": "bluetuith[\\s\\S]*river-desk",
+         "reason": "the program the lever starts and the helper that names it exist"}
+      ]
+    },
+    {
+      "n": 13, "id": "tray",
+      "title": "Tray row: nm-applet",
+      "unprovable": "the slip under the panel as drawn",
+      "checks": [
+        {"kind": "guest", "cmd": "pgrep -u runink -x nm-applet", "match": "^[0-9]", "retry": "30s",
+         "reason": "the tray program is running in the user session"}
+      ]
+    },
+    {
+      "n": 14, "id": "settings-system",
+      "title": "Shell Settings, System tab: the Experience Index opens",
+      "unprovable": "opening Shell Settings and reading which rows are faint (gap G4 is a visual judgement)",
+      "checks": [
+        {"kind": "guest", "cmd": "command -v desk-index", "match": "desk-index",
+         "reason": "the Experience Index program the System tab opens is installed"}
+      ]
+    },
+    {
+      "n": 15, "id": "lang-ja",
+      "title": "Language ja and back: Japanese words, no tofu boxes",
+      "unprovable": "switching the language in Shell Settings and reading the result",
+      "checks": [
+        {"kind": "guest", "cmd": "fc-list :lang=ja family | head -3", "match": "\\S",
+         "reason": "a font with Japanese coverage is installed (Noto CJK): without it Japanese shows as boxes"}
+      ]
+    },
+    {
+      "n": 16, "id": "weather-off",
+      "title": "Weather opt-in: with the option off, nothing is sent to open-meteo.com",
+      "unprovable": "ticking the option and seeing rain at the door (needs the Settings click)",
+      "checks": [
+        {"kind": "file-absent", "path": "net-installed.pcap", "needle": "open-meteo",
+         "reason": "the guest's whole network capture so far (DNS names and TLS server names are in the clear) holds no weather host while the option is off"}
+      ]
+    },
+    {
+      "n": 17, "id": "camera", "since": "0.2.1",
+      "title": "Print: the camera, drag an area, Enter, a PNG in ~/Pictures/Screenshots",
+      "steps": [{"key": "print"}, {"wait": "3s"}, {"shot": "viewfinder"}, {"key": "enter"}, {"wait": "4s"}],
+      "checks": [
+        {"kind": "screen", "shot": "viewfinder", "vs": "prev", "changed": {"min": 0.03},
+         "reason": "Print changed the screen (the camera put up to the eye)"},
+        {"kind": "guest", "cmd": "ls -1 /home/runink/Pictures/Screenshots/*.png | wc -l", "match": "^[1-9]", "retry": "15s",
+         "reason": "a screenshot file exists"},
+        {"kind": "guest", "cmd": "f=$(ls -1t /home/runink/Pictures/Screenshots/*.png | head -1); od -An -tx1 -N4 \"$f\"", "match": "89 50 4e 47",
+         "reason": "the file is a real PNG, not an empty or text file"}
+      ]
+    },
+    {
+      "n": 18, "id": "film", "since": "0.2.1",
+      "title": "Shift+Print, shutter, Print: an mp4 in ~/Videos/Screencasts",
+      "steps": [{"key": "shift+print"}, {"wait": "3s"}, {"shot": "film-start"}, {"key": "enter"}, {"wait": "5s"}, {"key": "print"}, {"wait": "5s"}],
+      "checks": [
+        {"kind": "screen", "shot": "film-start", "vs": "prev", "changed": {"min": 0.02},
+         "reason": "Shift+Print changed the screen (the recording camera)"},
+        {"kind": "guest", "cmd": "f=$(ls -1t /home/runink/Videos/Screencasts/*.mp4 | head -1); ffprobe -v error -show_entries format=duration -of csv=p=0 \"$f\"", "match": "^[0-9]", "retry": "20s",
+         "reason": "the recording is a file ffprobe can read, with a duration"}
+      ]
+    },
+    {
+      "n": 19, "id": "door-lock",
+      "title": "Super+L: the front door with the brass plate",
+      "steps": [{"shot": "before-lock"}, {"key": "super+l"}, {"wait": "4s"}, {"shot": "door"}],
+      "checks": [
+        {"kind": "screen", "shot": "door", "vs": "door-lock:before-lock", "changed": {"min": 0.15}, "expect": {"entropy": {"min": 2.5}},
+         "reason": "the whole view became another scene (the door), still a drawn one"},
+        {"kind": "guest", "cmd": "test -f /etc/pam.d/desk && echo pam-desk", "match": "pam-desk",
+         "reason": "the PAM service the door asks exists, so a typed password can be judged"},
+        {"kind": "guest", "cmd": "[ \"$(pgrep -u runink -x desk | head -1)\" = \"$(cat /tmp/rt-deskpid)\" ] && echo same", "match": "same",
+         "reason": "desk is the same process as at the lit room: it has not crashed and restarted"}
+      ]
+    },
+    {
+      "n": 20, "id": "door-no",
+      "title": "Wrong password: the key will not turn",
+      "steps": [{"type": "wrong-password\n"}, {"wait": "1s"}, {"shot": "told-no"}],
+      "checks": [
+        {"kind": "screen", "shot": "told-no", "vs": "desk-lit:lit", "changed": {"min": 0.1}, "expect": {"entropy": {"min": 2.0}},
+         "reason": "the screen is still the door (not the room) after a wrong password, and still drawn"},
+        {"kind": "guest", "cmd": "[ \"$(pgrep -u runink -x desk | head -1)\" = \"$(cat /tmp/rt-deskpid)\" ] && echo same", "match": "same",
+         "reason": "a wrong password did not end the session"}
+      ]
+    },
+    {
+      "n": 21, "id": "door-open",
+      "title": "Right password: the door opens, the room is as it was left",
+      "steps": [{"type": "${PASSWORD}\n"}, {"wait": "5s"}],
+      "checks": [
+        {"kind": "screen", "shot": "room-back", "retry": "30s", "vs": "door-lock:before-lock", "changed": {"max": 0.2}, "expect": {"entropy": {"min": 3.0}},
+         "reason": "the view is the room again, close to the frame taken before the door (windows as left); retried while the door swings"},
+        {"kind": "guest", "cmd": "pgrep -u runink -x foot", "match": "^[0-9]",
+         "reason": "the terminal opened before the lock is still running"}
+      ]
+    },
+    {
+      "n": 22, "id": "alt-tab", "since": "0.2.1",
+      "title": "Alt+Tab held: windows spread across the desk",
+      "steps": [{"key": "super+enter"}, {"wait": "4s"}, {"down": "alt+tab"}, {"wait": "2s"}, {"shot": "spread"}, {"up": "alt+tab"}, {"wait": "2s"}],
+      "checks": [
+        {"kind": "guest", "cmd": "pgrep -u runink -cx foot", "match": "^[2-9]",
+         "reason": "there are two windows to switch between"},
+        {"kind": "screen", "shot": "spread", "vs": "prev", "changed": {"min": 0.03},
+         "reason": "holding Alt+Tab changed the screen against the frame before it (the spread)"}
+      ]
+    },
+    {
+      "n": 23, "id": "half-snap", "since": "0.2.1",
+      "title": "Super+Left, Super+Right: the window snaps to a half",
+      "steps": [{"key": "super+left"}, {"wait": "2s"}, {"shot": "left"}, {"key": "super+right"}, {"wait": "2s"}, {"shot": "right"}],
+      "checks": [
+        {"kind": "screen", "shot": "left", "region": [0, 0.05, 0.5, 0.95], "expect": {"paper_frac": {"min": 0.15}},
+         "reason": "after Super+Left the left half holds a large light window area"},
+        {"kind": "screen", "shot": "right", "region": [0.5, 0.05, 1, 0.95], "expect": {"paper_frac": {"min": 0.15}}, "vs": "prev", "changed": {"min": 0.05},
+         "reason": "after Super+Right the right half holds it and the picture moved against the left-half frame"}
+      ]
+    },
+    {
+      "n": 24, "id": "two-screens",
+      "title": "Second head: the desk continues on screen 2",
+      "unprovable": "a new window opening on the pointer's screen (one pointer device spans both heads in QEMU)",
+      "steps": [{"wait": "2s"}, {"shot": "head2", "head": 1}],
+      "checks": [
+        {"kind": "screen", "shot": "head2", "expect": {"entropy": {"min": 1.0}, "colors": {"min": 8}, "nonblack_frac": {"min": 0.05}},
+         "reason": "the second display head shows something drawn: the session enabled its second output and DEsk painted on it"}
+      ]
+    },
+    {
+      "n": 25, "id": "logout",
+      "title": "Session ends (elogind), the greeter returns (greetd restarts it)",
+      "unprovable": "the LOG OUT lever and DEsk asking its windows to close (the session is ended with loginctl terminate-user)",
+      "steps": [{"guest": "loginctl terminate-user runink", "user": "root", "nowait": true}, {"wait": "8s"}],
+      "checks": [
+        {"kind": "guest", "user": "root", "cmd": "pgrep -x gtkgreet", "match": "^[0-9]", "retry": "90s",
+         "reason": "greetd started the greeter again after the session ended"},
+        {"kind": "guest", "user": "root", "cmd": "pgrep -u runink -x desk", "rc": 1,
+         "reason": "desk is gone with the session"},
+        {"kind": "screen", "shot": "greeter-again", "preset": "greeter", "retry": "30s",
+         "reason": "the screen shows the login screen again"}
+      ]
+    },
+    {
+      "n": 26, "id": "second-login",
+      "title": "Log in again: the desk is back fast (cache hit), no trace letter",
+      "steps": [{"type": "runink\n"}, {"wait": "8s"}, {"type": "${PASSWORD}\n"}],
+      "checks": [
+        {"kind": "guest", "cmd": "pgrep -u runink -x desk | head -1 | tee /tmp/rt-deskpid", "match": "^[0-9]", "retry": "90s",
+         "reason": "desk started for the second session"},
+        {"kind": "screen", "shot": "lit-again", "preset": "lit", "retry": "60s",
+         "reason": "the lit room is on screen again within a minute: the room came from the cache, not a minutes-long CPU trace"},
+        {"kind": "guest", "cmd": "ls -A /home/runink/.cache/desk | head -1", "match": "\\S",
+         "reason": "the room cache exists in the user's home"}
+      ]
+    },
+    {
+      "n": 27, "id": "reset",
+      "title": "Ctrl+Alt+Del twice: the desk redraws, windows stay",
+      "steps": [{"key": "super+enter"}, {"wait": "4s"}, {"key": "ctrl+alt+delete"}, {"wait": "1s"}, {"key": "ctrl+alt+delete"}, {"wait": "6s"}, {"shot": "after-reset"}],
+      "checks": [
+        {"kind": "guest", "cmd": "[ \"$(pgrep -u runink -x desk | head -1)\" = \"$(cat /tmp/rt-deskpid)\" ] && echo same", "match": "same",
+         "reason": "the reset redrew inside the same desk process, not a restart of the session"},
+        {"kind": "guest", "cmd": "pgrep -u runink -x foot", "match": "^[0-9]",
+         "reason": "the window opened before the reset is still there"},
+        {"kind": "screen", "shot": "after-reset", "preset": "lit",
+         "reason": "the room is lit again after the redraw"}
+      ]
+    },
+    {
+      "n": 28, "id": "battery-letter",
+      "title": "Battery low: the letter at 15% and 5%",
+      "hardware": "QEMU has no battery. river-desk battery is covered by table-driven tests on a fixture power_supply directory (installer/desk, run by CI's installer-go); a real laptop shows the letter."
+    },
+    {
+      "n": 29, "id": "usb",
+      "title": "USB stick put in: mounted, a letter in the post box",
+      "unprovable": "the letter in the post box and Thunar listing the stick (on-screen content)",
+      "steps": [{"usb": "add"}, {"wait": "6s"}, {"shot": "stick"}],
+      "checks": [
+        {"kind": "guest", "user": "root", "cmd": "lsblk -rno NAME,LABEL,MOUNTPOINT | grep RIVERSTICK", "match": "RIVERSTICK /", "retry": "40s",
+         "reason": "the hot-plugged stick was mounted by the session's automount (river-desk and udisks2) with no one clicking"}
+      ]
+    },
+    {
+      "n": 30, "id": "shutdown",
+      "title": "loginctl poweroff: the VM powers off through elogind",
+      "steps": [{"guest": "loginctl poweroff", "user": "root", "nowait": true}],
+      "checks": [
+        {"kind": "qemu-exit", "within": "120s",
+         "reason": "QEMU reported SHUTDOWN or exited: the guest powered itself off through elogind (no systemctl)"}
+      ]
+    },
+    {"n": 31, "id": "hw-backlight", "title": "Brightness keys change the panel backlight",
+     "hardware": "needs logind SetBrightness on a real panel; QEMU has no backlight device"},
+    {"n": 32, "id": "hw-rfkill", "title": "AIRPLANE, Bluetooth and Wi-Fi levers (rfkill)",
+     "hardware": "QEMU has no radios and no rfkill switches"},
+    {"n": 33, "id": "hw-suspend", "title": "Lid close, suspend and resume",
+     "hardware": "needs real ACPI sleep states and a lid switch"},
+    {"n": 34, "id": "hw-touch", "title": "Touch screen: tap, drag, pinch",
+     "hardware": "needs a touch panel; QEMU's tablet is a pointer, not multi-touch"},
+    {"n": 35, "id": "hw-pen", "title": "Pen: pressure, eraser, handwriting",
+     "hardware": "needs a pen digitizer"},
+    {"n": 36, "id": "hw-autorotate", "title": "Auto-rotate from the accelerometer",
+     "hardware": "needs an accelerometer (iio-sensor-proxy has nothing to read in QEMU)"},
+    {"n": 37, "id": "hw-gpu-trace", "title": "Room ray trace in 6-9 seconds on a real GPU",
+     "hardware": "needs a Radeon or Intel GPU with a driver; the QEMU guest draws on the processor (2D Fallback)"}
+  ]
+}
