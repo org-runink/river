@@ -9,6 +9,9 @@ SPDX-License-Identifier: CC-BY-4.0
 > and the server profile lives in a downstream distribution: `build/cloud-image.sh` builds an
 > image from a server ISO built from that profile, and takes the profile's cloud installer
 > overlay from `RIVER_PROFILE_DIR`. "Runink River Server" below means that downstream image.
+>
+> The general-purpose Runink River image for Google Cloud (the `base` profile, publishing,
+> cost) is designed in [cloud/gcp.md](cloud/gcp.md).
 
 Runink River Server ships as an installer ISO. A cloud image is the same system, installed
 once onto a raw disk by the same installer in a **cloud mode**, and packaged the way a
@@ -302,8 +305,9 @@ The instance's service account needs `roles/secretmanager.secretAccessor` on
 SSH keys go to `/etc/ssh/authorized_keys.d/runink` on the boot environment (public keys,
 root-owned 0644), which `05-river-cloud.conf` adds to `AuthorizedKeysFile`. That way the
 admin can log in to repair a node whose data did not unlock. They are rewritten at every
-boot; **keys added to metadata while the instance runs apply at the next boot** (the
-guest agent watches metadata; `river-cloud-init` does not yet). Passwords are locked;
+boot and, where the image carries the `river-cloud-watch` longrun (`installer/cloud/s6`), on
+every metadata change (`river-cloud-init watch`, the `wait_for_change` long-poll); an image
+without it applies new keys at the next boot. Passwords are locked;
 root cannot log in; login is key-only.
 
 ### Health on the serial console

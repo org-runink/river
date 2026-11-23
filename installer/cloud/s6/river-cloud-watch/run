@@ -1,0 +1,7 @@
+#!/bin/execlineb -P
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+# Runink River cloud image (docs/cloud/gcp.md). Long-polls the metadata server and re-applies
+# the SSH keys on every instance or project metadata change; s6 restarts it if it exits.
+fdmove -c 2 1
+/usr/local/bin/river-cloud-init watch

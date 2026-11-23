@@ -33,12 +33,12 @@ func main() {
 	stdio := flag.Bool("stdio", false, "serve one connection on stdin/stdout")
 	logF := flag.String("log", "", "append one line per request to this file")
 	flag.Parse()
-	cfg, err := fake.Load(*cfgF)
+	// Re-read on every request: a test edits the file to change metadata mid-run.
+	h, err := fake.FileHandler(*cfgF)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "river-fake-metadata:", err)
 		os.Exit(1)
 	}
-	h := cfg.Handler()
 	if *logF != "" {
 		f, err := os.OpenFile(*logF, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -48,7 +48,7 @@ func main() {
 		lg := log.New(f, "", log.LstdFlags)
 		inner := h
 		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			lg.Printf("%s %s", r.Method, r.URL.Path)
+			lg.Printf("%s %s", r.Method, r.URL.RequestURI())
 			inner.ServeHTTP(w, r)
 		})
 	}

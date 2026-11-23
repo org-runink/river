@@ -27,6 +27,9 @@ CLOUD_SERVICES="river-cloud-identity river-cloud-init river-cloud-late ttyS"
 for s in river-cloud-identity river-cloud-init river-cloud-late; do
 	[ -f "$TARGET/etc/s6/sv/$s/type" ] || { echo "cloud-finalize: s6 service $s missing from the target" >&2; exit 1; }
 done
+# river-cloud-watch (a longrun: SSH keys follow metadata changes without a reboot) is enabled
+# when the image carries it; an image without it applies keys at boot only, as before.
+[ -f "$TARGET/etc/s6/sv/river-cloud-watch/type" ] && CLOUD_SERVICES="$CLOUD_SERVICES river-cloud-watch"
 # On a cloud image the stack (k0s on /var/lib/k0s, the payload on /var/lib/tide) must not
 # start before river-cloud-init has unlocked and mounted the encrypted data datasets.
 : > "$TARGET/etc/s6/adminsv/rc-local/dependencies.d/river-cloud-init"

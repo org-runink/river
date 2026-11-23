@@ -1,0 +1,7 @@
+#!/bin/execlineb -P
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+# Runink River base cloud image (docs/cloud/gcp.md). After the network: hostname and SSH keys
+# from the metadata server, the root pool grown to the disk. RIVER_CLOUD_PROFILE=base in
+# /etc/river-cloud/cloud.env: no data datasets, so nothing here fails the boot closed.
+/usr/local/bin/river-cloud-init boot
