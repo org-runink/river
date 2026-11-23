@@ -226,6 +226,12 @@ if [ $# -gt 0 ]; then
 			wipefs -a -q "$p"
 		done
 		wipefs -a -q "$DEV"
+		# wipefs drops the signatures but leaves the old data, and xorriso treats a block
+		# device as overwritable media: with -indev != -outdev it refuses an -outdev that
+		# "holds non-zero data". Zero the start of the disk, where it looks (256 MiB, more
+		# than the system area and volume descriptors it reads); the guard and size check
+		# above already apply.
+		dd if=/dev/zero of="$DEV" bs=1M count=256 conv=fsync status=none
 		blockdev --rereadpt "$DEV" 2>/dev/null || true
 		OUT_OPT=--device OUT_RW="$DEV:/dev/river-outdev" OUT_RO="$DEV:/dev/river-outdev:r" OUT_SPEC="stdio:/dev/river-outdev"
 		FINAL="$OUTDEV"
