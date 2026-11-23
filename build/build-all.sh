@@ -60,6 +60,8 @@ step "$HERE/25-river-guide.sh"
 step "$HERE/50-models-manifest.sh"
 
 echo "== build-all: packaging (makepkg) =="
+# Every makepkg runs with -C (--cleanbuild): a src/ left by the previous build makes a
+# prepare() that applies patches (dbus, runink-desk, ...) fail on the second run.
 if command -v makepkg >/dev/null 2>&1; then
 	# runink-installer, runink-runtime, runink-core and runink-k0s-airgap package LOCAL trees
 	# ($OUT_DIR/installer-bin, $OUT_DIR/bin, $OUT_DIR/core-tree, $OUT_DIR/k0s-airgap) with no
@@ -68,7 +70,7 @@ if command -v makepkg >/dev/null 2>&1; then
 	for p in runink-installer runink-runtime runink-core runink-k0s-airgap; do
 		echo "  makepkg $p"
 		( cd "$HERE/pkgbuilds/$p" && \
-		  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --skipinteg --noconfirm ) \
+		  RUNINK_OUT="$OUT_DIR" makepkg -f -C --nodeps --skipinteg --noconfirm ) \
 		  || { echo "  makepkg $p FAILED" >&2; exit 1; }
 	done
 
@@ -76,13 +78,13 @@ if command -v makepkg >/dev/null 2>&1; then
 	# unverified download baked into a sovereign image is precisely what the pin exists to stop.
 	echo "  makepkg runink-k0s (integrity-checked)"
 	( cd "$HERE/pkgbuilds/runink-k0s" && \
-	  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --noconfirm ) \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --nodeps --noconfirm ) \
 	  || { echo "  makepkg runink-k0s FAILED (sha256 mismatch? re-pin from k0s's sha256sums.txt)" >&2; exit 1; }
 
 	# river-guide WITH integrity checking: it downloads the pinned mistral.rs release.
 	echo "  makepkg river-guide (integrity-checked)"
 	( cd "$HERE/pkgbuilds/river-guide" && \
-	  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --noconfirm ) \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --nodeps --noconfirm ) \
 	  || { echo "  makepkg river-guide FAILED (sha256 mismatch? see guide/model.lock)" >&2; exit 1; }
 
 	# runink-tayga is built WITH integrity checking. Its source is a plain upstream tarball
@@ -90,7 +92,7 @@ if command -v makepkg >/dev/null 2>&1; then
 	# its PKGBUILD. No --nodeps either: it compiles C, so its build deps must be present.
 	echo "  makepkg runink-tayga (integrity-checked)"
 	( cd "$HERE/pkgbuilds/runink-tayga" && \
-	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --noconfirm ) \
 	  || { echo "  makepkg runink-tayga FAILED" >&2; exit 1; }
 
 	# runink-grub-live, the live medium's GRUB scaffolding (the livefs layer's /usr/share/grub
@@ -99,7 +101,7 @@ if command -v makepkg >/dev/null 2>&1; then
 	# edit to it. No --nodeps needed — it declares none.
 	echo "  makepkg runink-grub-live (integrity-checked)"
 	( cd "$HERE/pkgbuilds/runink-grub-live" && \
-	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --noconfirm ) \
 	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
 
 	# dbus 1.16.4 built without X11 (no X11 autolaunch). Named dbus, so with [runink] ahead of
@@ -109,7 +111,7 @@ if command -v makepkg >/dev/null 2>&1; then
 	# be present.
 	echo "  makepkg dbus (integrity-checked)"
 	( cd "$HERE/pkgbuilds/dbus" && \
-	  RUNINK_OUT="$OUT_DIR" makepkg -f --noconfirm ) \
+	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --noconfirm ) \
 	  || { echo "  makepkg dbus FAILED" >&2; exit 1; }
 
 	# The desktop (docs/DESKTOP-DESK-PLAN.md), integrity-checked, with muon (builder/Containerfile).
@@ -118,7 +120,7 @@ if command -v makepkg >/dev/null 2>&1; then
 	for p in runink-wlroots0.18 runink-cage runink-gtkgreet runink-desk runink-greetd-s6 runink-bluetuith; do
 		echo "  makepkg $p (integrity-checked)"
 		( cd "$HERE/pkgbuilds/$p" && \
-		  RUNINK_OUT="$OUT_DIR" makepkg -f --nodeps --noconfirm ) \
+		  RUNINK_OUT="$OUT_DIR" makepkg -f -C --nodeps --noconfirm ) \
 		  || { echo "  makepkg $p FAILED" >&2; exit 1; }
 		if [ "$p" = runink-wlroots0.18 ]; then
 			sudo pacman -U --noconfirm "$HERE"/pkgbuilds/runink-wlroots0.18/runink-wlroots0.18-*.pkg.tar.zst \
