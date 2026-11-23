@@ -13,8 +13,14 @@
 //	                            SSH keys, grow, data datasets; rc-local waits for it
 //	river-cloud-init late       s6 river-cloud-late: initramfs for the new hostid, pool
 //	                            reguid, the model payload, the instance's install plan
+//	river-cloud-init watch      s6 river-cloud-watch (longrun): re-applies the SSH keys whenever
+//	                            instance or project metadata changes (wait_for_change)
 //	river-cloud-init reseal     re-wrap the data key with the configured provider (rotation)
 //	river-cloud-init status     print /run/river-cloud/status
+//
+// The profile comes from RIVER_CLOUD_PROFILE in cloud.env: "node" (the default; everything
+// above) or "base" (a general-purpose image: identity, hostname, SSH keys and disk growth
+// only; no data datasets, no enrollment, no cluster address; docs/cloud/gcp.md).
 //
 // Exit status: 0 done, 1 failed (boot: the data datasets are NOT available, so rc-local and
 // the k0s node do not start), 2 usage.
@@ -91,6 +97,8 @@ func main() {
 		err = boot()
 	case "late":
 		err = late()
+	case "watch":
+		err = watch()
 	case "reseal":
 		err = reseal()
 	case "status":
@@ -180,6 +188,68 @@ func readCloudEnv() map[string]string {
 	return env
 }
 
+// The image profiles (RIVER_CLOUD_PROFILE in cloud.env).
+const (
+	profileNode = "node" // the default: a cluster node with encrypted data datasets
+	profileBase = "base" // a general-purpose base image: no data datasets, no enrollment
+)
+
+// profile reads RIVER_CLOUD_PROFILE. An unknown value is an error, never a guess: a node
+// image read as a base image would boot without unlocking its data.
+func profile(env map[string]string) (string, error) {
+	switch p := env["RIVER_CLOUD_PROFILE"]; p {
+	case "", profileNode:
+		return profileNode, nil
+	case profileBase:
+		return profileBase, nil
+	default:
+		return "", fmt.Errorf("RIVER_CLOUD_PROFILE=%q in %s: want %s or %s", p, cloudEnv, profileNode, profileBase)
+	}
+}
+
+// rootIsZFS says whether / is a ZFS boot environment.
+func rootIsZFS() bool { _, err := rootPool(); return err == nil }
+
+// --- watch ------------------------------------------------------------------------------------
+
+// watch is the s6 longrun river-cloud-watch: it long-polls the metadata server and re-applies
+// the SSH keys whenever instance or project metadata changes, so a key added with
+// `gcloud compute instances add-metadata` (or by `gcloud compute ssh`) works without a
+// reboot, and a removed key stops working within one round trip.
+func watch() error {
+	md := metadataClient(readCloudEnv())
+	return watchLoop(context.Background(), md, func(ctx context.Context) error { return sshKeys(ctx, md) }, 60, 2*time.Second)
+}
+
+// watchLoop calls apply once at start and again after every metadata change, until ctx ends.
+// A failed wait or apply is retried with a capped exponential backoff starting at retry; the
+// ETag only advances once apply has succeeded, so a failed apply is retried, never skipped.
+func watchLoop(ctx context.Context, md *cloud.Metadata, apply func(context.Context) error, timeoutSec int, retry time.Duration) error {
+	etag, backoff := "", retry
+	for ctx.Err() == nil {
+		wctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec+30)*time.Second)
+		tag, err := md.WaitForChange(wctx, etag, timeoutSec)
+		if err == nil && tag != etag {
+			if err = apply(wctx); err == nil {
+				logger.Printf("watch: metadata at etag %s applied", tag)
+				etag = tag
+			}
+		}
+		cancel()
+		if err == nil {
+			backoff = retry
+			continue
+		}
+		logger.Printf("watch: %v (retrying in %s)", err, backoff)
+		select {
+		case <-ctx.Done():
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, time.Minute)
+	}
+	return nil
+}
+
 // rootPool is the pool of the dataset mounted at /.
 func rootPool() (string, error) {
 	out, err := run(nil, "findmnt", "-n", "-o", "SOURCE", "/")
@@ -267,7 +337,7 @@ func identity() error {
 		}
 		logger.Print("machine-id generated")
 	}
-	if !exists("/etc/hostid") {
+	if !exists("/etc/hostid") && rootIsZFS() {
 		// A per-instance ZFS hostid. The initramfs still carries the image's until `late`
 		// rebuilds it; zfs_force=1 on the command line covers the one boot in between.
 		if _, err := run(nil, "zgenhostid"); err != nil {
@@ -318,7 +388,34 @@ func boot() error {
 			logger.Printf("ssh keys: %v", e)
 		}
 	}
+	prof, perr := profile(env)
+	if perr != nil {
+		return perr
+	}
+	setStatus("profile", prof)
 	pool, err2 := rootPool()
+	if prof == profileBase {
+		// A general-purpose image: grow the root pool when / is a ZFS boot environment, and
+		// stop there. Nothing waits on data datasets, so the boot never fails closed here.
+		if err2 != nil {
+			setStatus("grow", "skipped-not-zfs")
+			logger.Printf("grow: %v", err2)
+		} else if e := grow(pool); e != nil {
+			setStatus("grow", "failed")
+			logger.Printf("grow: %v", e)
+		}
+		if id != "" {
+			if e := writeFileAtomic(stateDir+"/instance-id", []byte(id+"\n"), 0o600); e != nil {
+				return e
+			}
+		}
+		if err == nil {
+			healthLine("ready", "Runink River base image up")
+		} else {
+			healthLine("failed", "metadata server not reachable: no SSH keys")
+		}
+		return nil
+	}
 	if err2 != nil {
 		return err2
 	}
@@ -387,8 +484,8 @@ func setHostname(ctx context.Context, md *cloud.Metadata) error {
 // sshKeys writes the metadata server's keys for the runink admin. The file lives on the boot
 // environment (public keys, root-owned 0644) so the admin can log in and repair a node whose
 // data datasets did not unlock; sshd reads it through AuthorizedKeysFile
-// (etc/ssh/sshd_config.d/05-river-cloud.conf). Rewritten at every boot, so a key removed
-// from metadata stops working at the next boot.
+// (etc/ssh/sshd_config.d/05-river-cloud.conf). Rewritten at every boot and, where the river-cloud-watch
+// longrun runs, on every metadata change, so a key removed from metadata stops working then.
 func sshKeys(ctx context.Context, md *cloud.Metadata) error {
 	var text []string
 	for _, p := range []string{"instance/attributes/ssh-keys", "instance/attributes/sshKeys"} {
@@ -403,7 +500,7 @@ func sshKeys(ctx context.Context, md *cloud.Metadata) error {
 		}
 	}
 	keys := cloud.ParseSSHKeys(strings.Join(text, "\n"), time.Now())
-	body := "# Written by river-cloud-init from instance metadata (ssh-keys) at every boot.\n"
+	body := "# Written by river-cloud-init from instance metadata (ssh-keys); rewritten on every change.\n"
 	for _, k := range keys {
 		body += k + "\n"
 	}
@@ -934,6 +1031,9 @@ func late() error {
 			_ = os.Remove(stateDir + "/initramfs-stale")
 			setStatus("initramfs", "rebuilt")
 		}
+	}
+	if p, _ := profile(env); p == profileBase {
+		return nil // no data datasets, models or enrollment on a base image
 	}
 	md := metadataClient(env)
 	if root := dataRoot(); root == "" || zfsGet("keystatus", root) != "available" {

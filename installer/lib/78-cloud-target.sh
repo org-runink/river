@@ -29,9 +29,16 @@ cloud_gce() {
 	SERIAL_BAUD="38400,115200"
 	# Modules the build machine did not load, so mkinitcpio's autodetect would drop them:
 	# NVMe (third-generation machine series boot from NVMe), gVNIC (gve) and virtio-net.
-	# virtio-scsi, virtio-pci and virtio-blk are built into linux-runink (config.require).
+	# virtio-scsi, virtio-pci and virtio-blk are built into linux-runink (config.base); the
+	# check below reads them from the running kernel, which is the one the target boots.
 	INITRAMFS_MODULES="nvme virtio_net gve"
+	# docs.cloud.google.com/compute/docs/images/building-custom-os: the options the kernel must
+	# be built with (=y). VIRTIO_NET is a module here and goes in the initramfs above.
+	KERNEL_BUILTIN="KVM_GUEST VIRTIO_PCI SCSI_VIRTIO PCI_MSI SERIAL_8250_CONSOLE"
 	METADATA_BASE="http://169.254.169.254/computeMetadata/v1"
+	# docs.cloud.google.com/compute/docs/images/configuring-imported-images: "include only the
+	# `server metadata.google.internal iburst` Google NTP server".
+	NTP_SERVER="metadata.google.internal"
 }
 
 case "$CLOUD" in
@@ -39,11 +46,28 @@ case "$CLOUD" in
 	*) echo "cloud-target: RUNINK_CLOUD=$CLOUD is not supported yet (gce only)" >&2; exit 1 ;;
 esac
 
+# The image profile: `node` (default) is a cluster node with encrypted data datasets; `base` is
+# a general-purpose image with neither a cluster address nor an enrollment hook
+# (docs/cloud/gcp.md). river-cloud-init reads it back from cloud.env.
+PROFILE="${RUNINK_CLOUD_PROFILE:-node}"
+case "$PROFILE" in
+	node|base) ;;
+	*) echo "cloud-target: RUNINK_CLOUD_PROFILE=$PROFILE (want node or base)" >&2; exit 1 ;;
+esac
+
+# The running kernel is the target's (the same linux-runink package), so its config is the
+# target's. A kernel without /proc/config.gz cannot be checked, and that fails the build too.
+[ -r /proc/config.gz ] || { echo "cloud-target: no /proc/config.gz to check the kernel against" >&2; exit 1; }
+for o in $KERNEL_BUILTIN; do
+	zcat /proc/config.gz | grep -qx "CONFIG_$o=y" || { echo "cloud-target: the kernel lacks CONFIG_$o=y" >&2; exit 1; }
+done
+
 # --- what river-cloud-init reads ------------------------------------------------------------
 install -d -m 0755 "$TARGET/etc/river-cloud"
 cat > "$TARGET/etc/river-cloud/cloud.env" <<EOF
 # Written by installer step 78-cloud-target. Public configuration, no secrets.
 RIVER_CLOUD=$CLOUD
+RIVER_CLOUD_PROFILE=$PROFILE
 RIVER_METADATA_BASE=$METADATA_BASE
 RIVER_NODE_ADDR=$NODE_ADDR
 RIVER_CLUSTER_DNS=fd00:10:96::a
@@ -77,6 +101,22 @@ TTY="$SERIAL_TTY"
 BAUD_RATE="$SERIAL_BAUD"
 EOF
 
+# --- time ---------------------------------------------------------------------------------------
+# The cloud's own NTP server and nothing else: an instance with no external address reaches no
+# public server, and the cloud's server smears leap seconds the way its hosts do. The image's
+# public servers stay in the file, commented out.
+CHRONY="$TARGET/etc/chrony.conf"
+if [ -f "$CHRONY" ]; then
+	{
+		echo "# Cloud image ($CLOUD): the cloud's NTP server only (installer step 78-cloud-target)."
+		echo "server $NTP_SERVER iburst"
+		sed -E 's/^(server|pool|peer) /# cloud: &/' "$CHRONY"
+	} > "$CHRONY.new" && mv "$CHRONY.new" "$CHRONY"
+	chmod 0644 "$CHRONY"
+	[ "$(grep -cE '^(server|pool|peer) ' "$CHRONY")" = 1 ] && grep -qx "server $NTP_SERVER iburst" "$CHRONY" \
+		|| { echo "cloud-target: $CHRONY does not name $NTP_SERVER as its only source" >&2; exit 1; }
+fi
+
 # --- initramfs: the cloud's disk and NIC drivers --------------------------------------------
 # zz-: sourced after zfs.conf, whose MODULES=(zfs) would otherwise reset the list.
 cat > "$TARGET/etc/mkinitcpio.conf.d/zz-river-cloud.conf" <<EOF
@@ -96,6 +136,7 @@ ipv4.method=auto
 ipv6.method=auto
 ethernet.cloned-mac-address=permanent
 EOF
+if [ "$PROFILE" = node ]; then
 install -d -m 0755 "$TARGET/etc/NetworkManager/system-connections"
 cat > "$TARGET/etc/NetworkManager/system-connections/river0.nmconnection" <<EOF
 # The node's host-local cluster address (installer step 78-cloud-target).
@@ -113,6 +154,7 @@ method=manual
 addresses=$NODE_ADDR/64
 EOF
 chmod 0600 "$TARGET/etc/NetworkManager/system-connections/river0.nmconnection"
+fi
 
 # --- SSH ----------------------------------------------------------------------------------------
 # 05-: read before 10-runink-*.conf, and sshd keeps the FIRST value of each keyword. The
@@ -130,7 +172,8 @@ ClientAliveInterval 420
 EOF
 install -d -m 0755 "$TARGET/etc/ssh/authorized_keys.d"
 
-# --- k0s: advertise the node address --------------------------------------------------------
+# --- node profile only: the k0s node address and the enrollment hook ------------------------
+if [ "$PROFILE" = node ]; then
 # Quoted: an IPv6 literal is otherwise a YAML mapping hazard (see runink-firstboot.sh).
 K0S="$TARGET/etc/k0s/k0s.yaml"
 if [ -f "$K0S" ] && ! grep -q '^    address:' "$K0S"; then
@@ -156,6 +199,7 @@ if [ -f "$TARGET/usr/local/bin/runink-firstboot.sh" ] && ! grep -q runink-firstb
 	' "$RCLOCAL" > "$RCLOCAL.new" && mv "$RCLOCAL.new" "$RCLOCAL"
 	chmod +x "$RCLOCAL"
 fi
+fi
 
 # --- rebuild the initramfs and grub.cfg with all of the above ------------------------------
 mounted=""
@@ -172,4 +216,8 @@ for m in $INITRAMFS_MODULES; do
 	chroot "$TARGET" /bin/sh -c "lsinitcpio /boot/initramfs-linux-runink.img" | grep -q "/$m\.ko" \
 		|| { echo "cloud-target: $m is not in the initramfs" >&2; exit 1; }
 done
-echo "cloud-target: $CLOUD configured (serial $SERIAL_TTY, initramfs +$INITRAMFS_MODULES, node address $NODE_ADDR)"
+if [ "$PROFILE" = node ]; then
+	echo "cloud-target: $CLOUD configured, profile node (serial $SERIAL_TTY, initramfs +$INITRAMFS_MODULES, NTP $NTP_SERVER, node address $NODE_ADDR)"
+else
+	echo "cloud-target: $CLOUD configured, profile base (serial $SERIAL_TTY, initramfs +$INITRAMFS_MODULES, NTP $NTP_SERVER)"
+fi

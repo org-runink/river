@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,6 +80,47 @@ func (m *Metadata) Get(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("metadata %s: response lacks Metadata-Flavor: Google", path)
 	}
 	return string(body), nil
+}
+
+// WaitForChange long-polls the metadata tree (recursive, as JSON) and returns its ETag. With
+// an empty lastETag the server answers at once; otherwise it holds the request until the
+// tree's content differs from lastETag or timeoutSec passes, and then answers with the
+// current ETag either way, so an unchanged ETag means "timed out, nothing changed". This is
+// the server's documented wait_for_change protocol; the guest environment watches metadata
+// the same way. The client timeout is widened past timeoutSec for the held request.
+func (m *Metadata) WaitForChange(ctx context.Context, lastETag string, timeoutSec int) (string, error) {
+	if timeoutSec < 1 {
+		timeoutSec = 60
+	}
+	q := url.Values{"recursive": {"true"}, "alt": {"json"}, "wait_for_change": {"true"}, "timeout_sec": {strconv.Itoa(timeoutSec)}}
+	if lastETag != "" {
+		q.Set("last_etag", lastETag)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.base()+"/?"+q.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+	c := m.client()
+	held := *c
+	held.Timeout = time.Duration(timeoutSec+10) * time.Second
+	resp, err := held.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metadata wait_for_change: HTTP %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Metadata-Flavor") != "Google" {
+		return "", errors.New("metadata wait_for_change: response lacks Metadata-Flavor: Google")
+	}
+	tag := resp.Header.Get("ETag")
+	if tag == "" {
+		return "", errors.New("metadata wait_for_change: response has no ETag")
+	}
+	return tag, nil
 }
 
 // Attr returns an instance attribute, falling back to the project attribute of the same

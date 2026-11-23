@@ -84,8 +84,28 @@ None.
   only while inference is idle or scaled down. The plan's `build` object and `build` budget
   line say which and why; a workstation plans none
   ([INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md#image-build-reserve)).
+- **Runink River on Google Cloud: design and phase 1** ([docs/cloud/gcp.md](docs/cloud/gcp.md)).
+  The plan is a free public image project, with a Marketplace listing optional. The page
+  covers Google's requirements, costs and the security comparison. Phase 1 adds:
+  - `river-cloud-init watch`, a longrun that long-polls the metadata server
+    (`wait_for_change`) so SSH keys added to or removed from metadata apply without a reboot;
+  - a `base` cloud profile (`RIVER_CLOUD_PROFILE=base`): identity, hostname, SSH keys and
+    disk growth, with no data datasets to unlock.
+
+  The metadata stub (`installer/fakemeta`) now serves the recursive tree with an ETag,
+  honours `wait_for_change`, and re-reads its config file per request.
 
 ### Changed
+
+- **Installer steps `78-cloud-target` and `85-cloud-finalize` (downstream contract).** These
+  are shared steps, so a downstream cloud profile copies both at its next pin bump.
+  - **78** writes `RIVER_CLOUD_PROFILE` (from `RUNINK_CLOUD_PROFILE`, default `node`) into
+    `cloud.env`. On `base` it skips the cluster address, the k0s address and the enrollment
+    hook.
+  - **78** makes `metadata.google.internal` chrony's only NTP source on GCE, as Google
+    documents.
+  - **78** fails the image when the kernel lacks one of the options Google requires built in.
+  - **85** enables `river-cloud-watch` when the image carries it.
 
 - **DEsk replaces KDE Plasma** (owner decision 2026-10-30; docs/DESKTOP-DESK-PLAN.md). The
   desktop is [DEsk](https://github.com/fyzugx/DEsk) (MIT, by fyzugx and the DEsk authors) on

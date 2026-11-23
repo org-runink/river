@@ -312,3 +312,58 @@ func TestSecretResource(t *testing.T) {
 		t.Error("a bare id without a project was accepted")
 	}
 }
+
+// WaitForChange: an empty ETag answers at once; the same ETag is held until the content
+// changes (and the new ETag differs) or the timeout passes (and the ETag is unchanged).
+func TestWaitForChange(t *testing.T) {
+	cfg, md, _ := fixture(t)
+	ctx := context.Background()
+	tag, err := md.WaitForChange(ctx, "", 5)
+	if err != nil || tag == "" {
+		t.Fatalf("first wait: %q, %v", tag, err)
+	}
+	start := time.Now()
+	same, err := md.WaitForChange(ctx, tag, 1)
+	if err != nil || same != tag || time.Since(start) < 900*time.Millisecond {
+		t.Fatalf("unchanged wait: %q (want %q), %v after %s", same, tag, err, time.Since(start))
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		cfg.Update(func(c *fake.Config) { c.Attributes["ssh-keys"] = "carol:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC carol" })
+	}()
+	start = time.Now()
+	changed, err := md.WaitForChange(ctx, tag, 30)
+	if err != nil || changed == tag || time.Since(start) > 10*time.Second {
+		t.Fatalf("changed wait: %q (old %q), %v after %s", changed, tag, err, time.Since(start))
+	}
+}
+
+// A file-backed fake follows edits to its file, so a QEMU test can add a key mid-run.
+func TestFileHandlerFollowsFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "meta.json")
+	write := func(keys string) {
+		if err := os.WriteFile(p, []byte(`{"instance_id":"9","hostname":"x.example.internal","attributes":{"ssh-keys":"`+keys+`"}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA a")
+	h, err := fake.FileHandler(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	md := &Metadata{Base: srv.URL + "/computeMetadata/v1"}
+	ctx := context.Background()
+	tag, err := md.WaitForChange(ctx, "", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("b:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB b")
+	if v, err := md.Get(ctx, "instance/attributes/ssh-keys"); err != nil || !strings.HasPrefix(v, "b:") {
+		t.Fatalf("after the edit: %q, %v", v, err)
+	}
+	if t2, err := md.WaitForChange(ctx, tag, 5); err != nil || t2 == tag {
+		t.Fatalf("ETag did not move after the edit: %q, %v", t2, err)
+	}
+}

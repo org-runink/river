@@ -8,15 +8,20 @@
 package fake
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
+	"maps"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // Config is the fake server's state.
@@ -32,6 +37,9 @@ type Config struct {
 	Secrets map[string]map[string]string `json:"secrets"`
 	// NoServiceAccount makes the token endpoint answer 404, as on an instance with none.
 	NoServiceAccount bool `json:"no_service_account"`
+
+	mu     sync.Mutex
+	reload func() (*Config, error) // FileHandler: re-read the file on every request
 }
 
 // Load reads a Config from a JSON file.
@@ -66,6 +74,11 @@ func (c *Config) metadata(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Metadata-Flavor", "Google")
 	p := strings.TrimPrefix(r.URL.Path, "/computeMetadata/v1/")
+	if p == "" {
+		c.tree(w, r)
+		return
+	}
+	c = c.view()
 	var v string
 	ok := true
 	switch {
@@ -97,6 +110,7 @@ func (c *Config) metadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Config) secret(w http.ResponseWriter, r *http.Request) {
+	c = c.view()
 	if r.Header.Get("Authorization") != "Bearer "+c.Token || c.Token == "" {
 		http.Error(w, `{"error":{"code":401,"message":"bad token"}}`, http.StatusUnauthorized)
 		return
@@ -158,4 +172,103 @@ func (c *Config) secret(w http.ResponseWriter, r *http.Request) {
 		"name":    resolved,
 		"payload": map[string]string{"data": data, "dataCrc32c": strconv.FormatUint(uint64(crc), 10)},
 	})
+}
+
+// FileHandler is Handler for a Config read from path, re-read on every request, so a test
+// can change the instance's metadata (add an SSH key, say) while a guest is running.
+func FileHandler(path string) (http.Handler, error) {
+	c, err := Load(path)
+	if err != nil {
+		return nil, err
+	}
+	c.reload = func() (*Config, error) { return Load(path) }
+	return c.Handler(), nil
+}
+
+// Update changes the in-memory state under the server's lock (unit tests).
+func (c *Config) Update(f func(*Config)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	f(c)
+}
+
+// view is a copy of the current state: the file's, for a FileHandler (the last good one
+// when the file does not parse mid-write), else the in-memory one.
+func (c *Config) view() *Config {
+	if c.reload != nil {
+		if n, err := c.reload(); err == nil {
+			c.Update(func(cur *Config) { cur.copyFrom(n) })
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v := &Config{}
+	v.copyFrom(c)
+	return v
+}
+
+func (c *Config) copyFrom(o *Config) {
+	c.InstanceID, c.Hostname, c.Token = o.InstanceID, o.Hostname, o.Token
+	c.ProjectID, c.ProjectNumber, c.NoServiceAccount = o.ProjectID, o.ProjectNumber, o.NoServiceAccount
+	c.Attributes, c.ProjectAttributes = maps.Clone(o.Attributes), maps.Clone(o.ProjectAttributes)
+	c.Secrets = make(map[string]map[string]string, len(o.Secrets))
+	for k, v := range o.Secrets {
+		c.Secrets[k] = maps.Clone(v)
+	}
+}
+
+// treeJSON is the recursive metadata document, in the shape the real server returns for
+// /computeMetadata/v1/?recursive=true (the parts this fake serves), and its ETag.
+func (c *Config) treeJSON() ([]byte, string) {
+	b, _ := json.Marshal(map[string]any{
+		"instance": map[string]any{"id": c.InstanceID, "hostname": c.Hostname, "attributes": nonNil(c.Attributes)},
+		"project":  map[string]any{"projectId": c.ProjectID, "attributes": nonNil(c.ProjectAttributes)},
+	})
+	sum := sha256.Sum256(b)
+	return b, hex.EncodeToString(sum[:8])
+}
+
+func nonNil(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
+}
+
+// tree serves the recursive document. With wait_for_change=true and a last_etag equal to
+// the current one it holds the request until the content changes or timeout_sec passes
+// (then answers with the unchanged document), as the real server does.
+func (c *Config) tree(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	if q.Get("recursive") != "true" {
+		http.NotFound(w, r)
+		return
+	}
+	body, tag := c.view().treeJSON()
+	if q.Get("wait_for_change") == "true" && q.Get("last_etag") == tag {
+		secs, err := strconv.Atoi(q.Get("timeout_sec"))
+		if err != nil || secs < 1 || secs > 3600 {
+			secs = 60
+		}
+		deadline := time.After(time.Duration(secs) * time.Second)
+		tick := time.NewTicker(100 * time.Millisecond)
+		defer tick.Stop()
+	wait:
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-deadline:
+				break wait
+			case <-tick.C:
+				if b, t := c.view().treeJSON(); t != tag {
+					body, tag = b, t
+					break wait
+				}
+			}
+		}
+	}
+	w.Header().Set("ETag", tag)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(body)
 }
