@@ -86,7 +86,7 @@ func (e *Env) defaults() {
 // Run executes the rows (all, or those with n in only when it is not nil) and returns their results.
 func Run(cl *Checklist, env Env, only map[int]bool) []RowResult {
 	env.defaults()
-	os.MkdirAll(env.Art, 0o755)
+	os.MkdirAll(env.Art, 0o750)
 	r := &runner{env: env}
 	var out []RowResult
 	for _, row := range cl.Rows {
@@ -248,7 +248,7 @@ func (r *runner) adopt(glob, label string) error {
 		return err
 	}
 	p := r.path(label)
-	if err := os.WriteFile(p, b, 0o644); err != nil {
+	if err := os.WriteFile(p, b, 0o600); err != nil {
 		return err
 	}
 	r.put(label, p)
@@ -449,7 +449,7 @@ func WriteResults(dir string, rows []RowResult, meta map[string]string) (bool, e
 		return false, err
 	}
 	for name, data := range map[string][]byte{"results.json": append(b, '\n'), "results.tsv": []byte(tsv.String()), "rows.txt": []byte(rt.String())} {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			return false, err
 		}
 	}
