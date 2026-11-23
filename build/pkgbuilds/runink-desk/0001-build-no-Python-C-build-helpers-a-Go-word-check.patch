@@ -1,7 +1,7 @@
-From 60061bd618f5375ec164016a9cce111a856c235c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
-Date: Fri, 30 Oct 2026 23:24:10 +0000
-Subject: [PATCH 1/4] build: no Python -- C build helpers, a Go word check
+Date: Mon, 23 Nov 2026 15:15:58 +0000
+Subject: [PATCH 1/5] build: no Python -- C build helpers, a Go word check
 
 The build ran Python three times: scripts/room-key.py (always),
 scripts/glsl2c.py (GPU builds) and scripts/check-words.py (meson test). It
@@ -18,15 +18,21 @@ C implementation of meson, on systems that carry no Python at all.
 - The installers no longer install Python for the build (meson brings its
   own where it is used). SHA256SUMS is made again for the changed tree.
 
+v0.2.1 runs the same three Python steps as v0.1.4 and no others (the pictures
+under art/ are committed and installed as data). art/looks/bake.py and
+art/kit.py are Blender scripts that desk-look bake would run, and Blender is
+not on the image: they are no longer installed. The art/*.py model scripts stay
+in the source tree, never run and never installed.
+
 Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
 ---
- README.ja.md                        |    4 +-
- SHA256SUMS                          |   32 +-
+ README.ja.md                        |    6 +-
+ SHA256SUMS                          |   30 +-
  docs/ARCHITECTURE.ja.md             |   10 +-
  docs/ARCHITECTURE.md                |   10 +-
  docs/MODDING.ja.md                  |   12 +-
  docs/MODDING.md                     |   14 +-
- meson.build                         |   24 +-
+ meson.build                         |   27 +-
  scripts/check-words.py              |  143 ---
  scripts/glsl2c.py                   |   36 -
  scripts/install_arch.sh             |    1 -
@@ -41,7 +47,7 @@ Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
  tools/glsl2c.c                      |   71 ++
  tools/go.mod                        |    3 +
  tools/room-key.c                    |   56 +
- 21 files changed, 507 insertions(+), 1860 deletions(-)
+ 21 files changed, 508 insertions(+), 1862 deletions(-)
  delete mode 100644 scripts/check-words.py
  delete mode 100755 scripts/glsl2c.py
  delete mode 100755 scripts/room-key.py
@@ -54,10 +60,10 @@ Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
  create mode 100644 tools/room-key.c
 
 diff --git a/README.ja.md b/README.ja.md
-index 9596437..cbbbdab 100644
+index 96d20a4..79341a3 100644
 --- a/README.ja.md
 +++ b/README.ja.md
-@@ -95,7 +95,7 @@ sudo sh scripts/install_fedora.sh
+@@ -99,7 +99,7 @@ sudo sh scripts/install_fedora.sh
  
  DEsk のセッションでは、ほかのアプリも机に合わせた見た目になります。
  
@@ -66,7 +72,16 @@ index 9596437..cbbbdab 100644
    iOS 6 のころのように、**本物がそのまま置かれたような**絵です。紙・厚紙・木・
    ヘアラインの金属の地肌、縁に当たる光、型押しのくぼみ、机に落ちる影まで描いています。
    - 場所：中に書類の入ったマニラの厚紙フォルダ（ドキュメント・ダウンロード・音楽・
-@@ -2440,7 +2440,7 @@ desk --headless --size 1600x1000 --dump chrome.png --screenshot desk.png --delay
+@@ -851,7 +851,7 @@ CG」の主成分**です。
+ Debian 13 / Trixie で、ビルドに要るものだけを手で入れるなら:
+ 
+ ```sh
+-sudo apt install gcc libc6-dev meson ninja-build pkg-config python3 \
++sudo apt install gcc libc6-dev meson ninja-build pkg-config \
+   libwlroots-0.18-dev libwayland-dev wayland-protocols libxkbcommon-dev \
+   libcairo2-dev libpango1.0-dev libgtk-3-dev libpixman-1-dev libfontconfig-dev libfreetype-dev libdrm-dev libpam0g-dev \
+   libinput-dev \
+@@ -2817,7 +2817,7 @@ desk --headless --size 1600x1000 --dump chrome.png --screenshot desk.png --delay
  desk-preview -o preview.png -s 1600x1000
  desk-preview -o console.png -s 1440x900 --console
  desk-preview --help                     # 描けるものの一覧
@@ -76,75 +91,82 @@ index 9596437..cbbbdab 100644
  
  ## 作り方について
 diff --git a/SHA256SUMS b/SHA256SUMS
-index ee54eb5..707495f 100644
+index daa1bc9..08e3c08 100644
 --- a/SHA256SUMS
 +++ b/SHA256SUMS
-@@ -2,16 +2,16 @@
+@@ -2,7 +2,7 @@
  f23feed53be20d224688cb6cbd0a1e7ae0f68f9254ab74bf78d420b2825b71e7  ./.gitignore
  9ca2f8afe06176db8b331513b4c67681c6923b3414e194fe6ef66eb8c8fa6e44  ./Dockerfile
  87dd199cc6c7a1fd1fefb42f86d924b11a053ef5444dfd5cbf479dd22d6dbc15  ./LICENSE
--7e3f75f2265d30163d276a1637c599022a8481c3067d37f5d6bfd1a23fd43dec  ./README.ja.md
--371fca31dceea2ebe848a1f695e88dcafb500d6fd3ad25d14b78ddf3473b53d1  ./README.md
-+46a60065cad2a794d5c5752a52acab57455da55c3647ab37830c22812d767754  ./README.ja.md
-+dfdf12bb2f5e0aa60a7c8be3559fff7e3f6aed99e9c6c04636c36afcc6ead026  ./README.md
- 6c979e967af7262f245367474aabb8479640a00107db06b503f78defe1d6def4  ./RELEASE-NOTES.ja.md
- d41d53b642b8d333b1cc63e5d7f50834891882618bb1b9fb8045fdb43d1e73ba  ./RELEASE-NOTES.md
- 95ec560c0517006961566f73ef2ae19b8f3dbe8b70b90366f0b908599957e49b  ./applications/meson.build
--bf70843e99c013113c2546ff25cc85713ee8ac4ed42ed2690e9927fb23c8a62f  ./docs/ARCHITECTURE.ja.md
--dd357af11e21ceebe6c1fe5ce6096305cf14036aa59173b59d2d41a80bc1d0c2  ./docs/ARCHITECTURE.md
-+039bbe804b06a40fee57f89b32d69bdee2f7f5b1e787fa8a39e4fc7368915a5b  ./docs/ARCHITECTURE.ja.md
-+a8664529d074dae23e396b4363c2391185cb2f5bc3f6892471e6725858030d7a  ./docs/ARCHITECTURE.md
- 93d95a6f095b4275071e565cdb5e571316c43b05f20db8cd0b3357757e9a3d65  ./docs/CONFIGURATION.md
--8451728b01a2963a21ab43a343adc6349476e848329add3d1c7256d73329b53b  ./docs/MODDING.ja.md
--f13659ce393144c586bddc12270bb46417f99386c9083ccc6993d694b5e599e1  ./docs/MODDING.md
-+6f0aabf374290ad64fcc723caebd8033362258b5e2c52fc5a9673e1f9d11262e  ./docs/MODDING.ja.md
-+493ff5a2ba215b2275c8776db798a9d913aef24bca80ef72aa6520a4093a8982  ./docs/MODDING.md
- 9847130f420eafa7c413afd5bf9cdddcbd7948d073dcc9334aa072766aec0e08  ./docs/design.md
- c4efeabc60bc2cac593492b3b7e4c141a6f643819c83c9a5cd741d397a19c1a2  ./docs/screenshots/book-search.jpg
- 5cebb4ef413b30a48fd63d511ecdfcdb9d2daebe175fd79f94e288ac50099548  ./docs/screenshots/book.jpg
-@@ -44,12 +44,11 @@ c7824c26e80784ca6886a159209c787234667ed59f47c86481583daa680bf8d3  ./include/powe
- 1083f28a3c8ec0b481cc342f45d442e521b313c5675efd70e95b856c49b617db  ./include/session.h
- 2cbb569c046ab4be0b5be26795bd32e8724997407f095486a99f7e8ad0ba9895  ./include/sound.h
+-d3d786823b6ed8f572d7d716a605cdda48a2f2fe039d792904dac138d1772f95  ./README.ja.md
++f93ad11ce9263bcbe8ca5d6122dfdac8612ef73c34325b91ae20b095a57c59c0  ./README.ja.md
+ f50c144ea91a3d2fcabb39fe920726133dcba7a17575892f642860c2d04f5910  ./README.md
+ f75a2bfbca6bc20bba45d8e0f2920b8d341e04533ac6008c452d56b78d153559  ./RELEASE-NOTES.ja.md
+ eeec7cc3b21f2a7ab39dc1abd142f781b9f987fb38b43d2374ac25a450882007  ./RELEASE-NOTES.md
+@@ -184,13 +184,13 @@ f19959cc9918d9ef17880494f6db83772ccd145852a1c2260c650da22bb313de  ./art/sound/sl
+ 92a8448900c4a059d901136bd884703424768752d46f70d3995de4326c2f6a99  ./art/sound/slide-soft-slow-1.wav
+ 209f0198647188283838429a980936e13e981b834756ca507a5b3b25f03af3ca  ./art/sound/slide-wood-quick-1.wav
+ 3d893925ddc63f27c38a08d0b390e145d49d66d20ae91267fcc11dc578341f67  ./art/sound/slide-wood-slow-1.wav
+-f90dc33593bd8177c971c5bb0ff8d495d15a466cbf1982f0f2a6700ef9547efc  ./docs/ARCHITECTURE.ja.md
+-99543abe0783488cde8785cfcd0ea58fdddf4b91693a043eab54f3561e90234d  ./docs/ARCHITECTURE.md
++4ba460377953e9af4e002ee05860bc2c77748877178245dc8ecc6a9acd00db37  ./docs/ARCHITECTURE.ja.md
++4e9a8d9f0a9c47adde256995c58d36b4c877bb1e1c2e22b30bfbcfee7a82c180  ./docs/ARCHITECTURE.md
+ 9fd555a2f1bcd463cc81a5e6f6dd3174c0a850859925f794a12fdf40d05368f4  ./docs/CONFIGURATION.md
+ 5fa0d9480417158f6d262eb464e05fe7f0c8390297830221abc439cf8b65a2e8  ./docs/LOOKS.ja.md
+ 2ffe9ec51423acb3cd9d0a0b9110e1a9dad244e12de1b4b10dd97528971220cd  ./docs/LOOKS.md
+-2b29e66b7e6514cb8e1967e3c45aab1ed1fa7d918d53849d53217d5089688358  ./docs/MODDING.ja.md
+-63054c7a78b067e817f58ccc01193cb6e44c8283d88199e608703b2523121266  ./docs/MODDING.md
++609c1ca52698554c560b20befb2d871059b46108b1c45d1f5416f14bfa39c56e  ./docs/MODDING.ja.md
++dff508773efa4106c86bf5452150f6062eaacd2be530a98578fdb95767b5d0d3  ./docs/MODDING.md
+ 942f81e22637428df0a93c66777678acda8341e7906aa2e961826cd610b8c552  ./docs/THINGS.ja.md
+ 7f86429aea2990b9fe3831961be292eceeb9bbb8cf2534e806200d016f1f133e  ./docs/THINGS.md
+ dece04ed606c8c463fdce40d77bfc6f954a3ef0fadf189a414428698ecd479cb  ./docs/design.md
+@@ -239,7 +239,7 @@ d766afa691f8e98b99d573ad4547e4e772e73eb39e89c23691994449526fee29  ./include/soun
+ 0b675af4d37551fc4d3bfdd11782edafccfac3700e2b55c12854791f5b7fae4f  ./include/thing.h
+ 89d5f3cab192fc86f78895487602bab564d52d5bf9ae52156c730d2120e52a38  ./include/touch.h
  c66ceb68f5593ae2fb99a3f849694af74cf9e53173ff734a5038d8d47507cd81  ./include/tray.h
--2938ebd301ff06f45e186ee7458256ea7bfd9ff5ea6aa9bdf78c507e86a073c8  ./meson.build
-+20c325efa43f44ab03e75afcc90317c8d8743b073b8e7e77347c6a8a26fbe396  ./meson.build
+-05d2898d3a9f3d3b9e6f8739359523a68b38e96ac7ca2f648a7502fc035a96b4  ./meson.build
++f694de78f3be20d5806e8befaa5e26923baea6d88f4734b3adb6a57f3026bb3c  ./meson.build
  d71a97f44854ceed9b3c1c68506b083ce22099977388599e1eabaed37002deed  ./meson_options.txt
- 950ba49090168acdb352ee484939507b8077400d2ba017b1e2d7bb61b2189aa2  ./packaging/debian/desk-desktop.equivs
+ 9c6ac02d33ce0d74215981aa198957b0996bd98afd4656035361657fd1b4ca38  ./packaging/debian/desk-desktop.equivs
+ 19538e97fb4df85bdf715b2386ddf539dc15e734db32ce892db029daa0717253  ./packaging/nix/.gitignore
+@@ -253,7 +253,6 @@ d6075438a19afdf40e8e65b161611c47537698e6a90f863cabff3f318a0cda1a  ./packaging/ni
+ 54fb418fd22df6e1d2ed1b4db9a41b3e416c1aff90d0de6e7386672708073693  ./packaging/nix/wlroots-0.18.nix
  65b0f82a6cf129bf1a1c31a2428795abd33886c15ddd5f3ad97e5922d7bdc3a7  ./protocols/wlr-output-management-unstable-v1.xml
  7ebd98f3449d246a57829e4b4dd9fbc3ef98e3dd42fa94ea102f14f490eb20de  ./protocols/wlr-output-power-management-unstable-v1.xml
 -84d400c18f7f7804c3a979de2c72b1bdee26da5067add45d2aba79bda16f1be0  ./scripts/check-words.py
- d45b7f3fb8115abeee25582d8d5ae20c0c48fcc826ca10fc533eec8583a6d5e4  ./scripts/desk-ctl
- 2eff68e7d83546949fcbb0d2d7011d981102e0366765525cff504a18ee62f03e  ./scripts/desk-report
- d714dd7ce294b9121f2dd10e045f1486c68c5663a755967bf3dd7cb406be0515  ./scripts/desk-screen-chooser
-@@ -57,15 +56,13 @@ d714dd7ce294b9121f2dd10e045f1486c68c5663a755967bf3dd7cb406be0515  ./scripts/desk
+ 31aa8987f434df89da9eaeca9343a3945ea0adc7959b14c5df6c0cd3940beccf  ./scripts/desk-ctl
+ d36234d582604c054d5cb95b29f8dc08186a1c54a69eb48ea2a077396cb40f50  ./scripts/desk-record
+ af3d9525ccbf5a31a7a21a5cc4c12cdbc30449ae40b1103748146b5d2a69a20a  ./scripts/desk-report
+@@ -262,15 +261,13 @@ ab12736a9ac02be51b0e113bebdfaa68da31453cdca178865c6fa99239bfa966  ./scripts/desk
  165d98fd9d35e8d570826809f4cc05486f0543531c28a59f08ae85f7f50e96e3  ./scripts/desk-session-helper
  c1c176a9e9bb5638bd09ca515aa59d57b0651c1a772920fcdd69364675605a34  ./scripts/desk-window
  2d9657bb6047fde2475d0503c6d4141781e1e1489ad81fefdeb93d5d5d94d152  ./scripts/entrypoint.sh
 -92bb78331c858b067696bc4771a5b225616a613ee1ae7276e1d6f69406c27226  ./scripts/glsl2c.py
  8bb9498037ce7adaa0a019fa528b45d1e50127d89a6fbd0ff08970b514f09efe  ./scripts/install-desktop.sh
  f497730ae4f3845d5f2d4af8f7752cd6cd93be9f280541649ecac5aa7e3cfcc5  ./scripts/install.sh
--a5d7c2d523ffb787d60ec737626b1946ef3d05e9124618037910323e7d8fa95c  ./scripts/install_arch.sh
--347f7bf68dfdb87a75f1811ba773203b8170720d2b8e3a6a9e4ef9dc8932f99e  ./scripts/install_debian.sh
--2ee0af3eb67d359af7aedd177a29e4f98411d4d5988d4a8617604564757ec73c  ./scripts/install_fedora.sh
-+35052a2ec18ecbc71d7fcc8d8cd56b5d3c8cc8ba2dd6eda667302d7b6b8f8c28  ./scripts/install_arch.sh
-+6045fa5c3db24524dc2ada9d3f1f60bbd6e92d5f3f1c265d4430681ebc99b52d  ./scripts/install_debian.sh
-+21194f48ef123e2ab8e699563e960dbef553a5268e368262caa5295c277ab0ff  ./scripts/install_fedora.sh
+-ad52618fc1684dfb828b20b73cab26f0d0e1c70ae737e70603f5306c3e5a33a5  ./scripts/install_arch.sh
+-ee0424a277ba22b49bdfc1f2bd9daca136a3e07e57d7b518f8f30d0268a5f4be  ./scripts/install_debian.sh
+-904288cd9e823ef52fef7a42704d6d1fed339a3f3c5417a290e29bc288e19c7a  ./scripts/install_fedora.sh
++328503afa4043c070827bf376eef00dc5810b056b3f4c8b19b44091acf2dcf1e  ./scripts/install_arch.sh
++36d9450a215fd09d4177034f2ff74d5d59bf1fcbb2bf200bb7f61849366c17a0  ./scripts/install_debian.sh
++6692703c3b109b70ef617c950ccb9a9eb4f647d42b142aad539d64f4522f166d  ./scripts/install_fedora.sh
  88d207cb26e99df2efa67ea71dd3e8f9908bbfa350bf689ef2ff84326f2798dc  ./scripts/install_session.sh
--efd8b0334fcb3ad8a4e80fe5e05d8843042d1414a95b65c1ea29cef891282023  ./scripts/install_ubuntu.sh
+-d33a9c8185aa504ba71ceea312bb19011bb6cd69785ec180d371049201129214  ./scripts/install_ubuntu.sh
 -b6164325cec6f7b2a2328c01ad0daade3d6a3ed26de3eca51007dd2b86028442  ./scripts/room-key.py
-+68c2ed3ec1497c8001ce1e421d01d176e3219fcd42a18278dc5091aaccc2d2cd  ./scripts/install_ubuntu.sh
++b2497e5587705f1cff11e47fbf2a8291f6d976ee701870ad2c9ccecf5f5c81db  ./scripts/install_ubuntu.sh
  a36962be2c4e986469cabc39daf728ed925380168d6b054eb160c60a54342463  ./scripts/uninstall.sh
  950590bbb80842a602afe00517244207bb7db4b078dd98b6220239e85b07c556  ./scripts/verify.sh
  efb1e1e656adf893543970a70e1417942f5df28b7f134a60d022e9291ea7ab8d  ./session/autostart/desk-ime.desktop
-@@ -113,7 +110,6 @@ c5062fe9f23c69c728ed2505188f2bd5791a9072d1d013a073346dd79110646e  ./src/sound.c
- 2c6a618dae877ea979543d050d2073e40513237d6fcf93fd8cbd3450bbf3fbaa  ./src/tray.c
- b5839f73e869853bfa7a39143d642e98e8a28cd88a4157358b2c21477d7cd949  ./src/user.c
- 605314188f35888cf8d4ed52e58f7085b1d113a0687828d25f46ccffcdb5379d  ./src/wm.c
+@@ -350,7 +347,6 @@ b5839f73e869853bfa7a39143d642e98e8a28cd88a4157358b2c21477d7cd949  ./src/user.c
+ 7bd49f4d4012ce47fb7201fbc44e6ce9ed508a50b4f7307cc7080b2841829dac  ./tests/calc-test.c
+ 4506a706f9e7427d94fa8b61ad74308dfb7a454aec8b4de2dbba05c7db63a271  ./tests/handwriting-test.c
+ 3c6298dbdc8d8fe6bad0b1999c6a8a9ccb3b27724c7353496b973ac895aed2c8  ./tests/touch-test.c
 -95084c4fdadd53f3e2a2df6b92d261bbb0be395b98844c021320a7a54dbf7fce  ./themes/contact-sheet.py
  ccd7f9403ebc18dc92d8e84cbb112ed43b9ed5af04368a40f0429320d0032b0d  ./themes/gtk/DEsk/gtk-3.0/gtk.css
  934eb863fca7e67237ad54b439a88fb6f1bb44d339409784ddaf20262e9ec8fd  ./themes/gtk/DEsk/gtk-4.0/gtk.css
  15bd26eeb1073c7f06109c16d9fe4ffccb834aee6dbe1d628a07ffae675e2e37  ./themes/gtk/DEsk/gtk-4.0/paper.css
-@@ -215,4 +211,8 @@ a39046305fe92b5d8af1cb0096b986eef501099c172a3928401589868ecae975  ./themes/icons
+@@ -452,4 +448,8 @@ a39046305fe92b5d8af1cb0096b986eef501099c172a3928401589868ecae975  ./themes/icons
  a806e4b3cfe95955d298f1e6b643f41dfcadde5ffe0c361177cf1d2dd89c2dee  ./themes/icons/DEsk/scalable/places/user-home.svg
  b386c13798b379ca063e77c6ffecca88ff22bcc0f6fc6a191b9988844bb7f4e2  ./themes/icons/DEsk/scalable/places/user-trash-full.svg
  cf6fe72932ac0ebba8d4c8a8c50dcafff41f20b7387ee85530dddc657105ea9d  ./themes/icons/DEsk/scalable/places/user-trash.svg
@@ -155,22 +177,28 @@ index ee54eb5..707495f 100644
 +c7fb350c95cf2b58c8a06ec232e08421f02a35a7b508ae9ee01ec16149b9062c  ./tools/go.mod
 +577c45eb3769dd23762f05450913f60653f0239d5a09fe455dd6f3490dd0baea  ./tools/room-key.c
 diff --git a/docs/ARCHITECTURE.ja.md b/docs/ARCHITECTURE.ja.md
-index 7b30ae8..1b22599 100644
+index a9d8d7b..ca68a34 100644
 --- a/docs/ARCHITECTURE.ja.md
 +++ b/docs/ARCHITECTURE.ja.md
-@@ -71,9 +71,9 @@ DEsk v0.1 (BETA) の技術的な全体像です。どんなプログラムがあ
+@@ -83,7 +83,7 @@ DEsk v0.1 (BETA) の技術的な全体像です。どんなプログラムがあ
  | `include/desk.h` | 約 1,200 | 描画ライブラリの API。`wm.c`・`settings.c`・`index.c`・道具が使います。 |
  | `include/compat.h` | | 旧名（DeskWM）の設定とデータを引き継ぎます。 |
  | `protocols/` | | wlr-output-management と wlr-output-power-management の XML。 |
--| `scripts/` | | インストーラ、セッションのスクリプト、ビルドの補助（`glsl2c.py`、`room-key.py`）、`check-words.py`（訳のテスト）。 |
+-| `scripts/` | | インストーラ、セッションのスクリプト、ビルドの補助（`glsl2c.py`、`room-key.py`、`bin2c.py`）、`check-words.py`（訳のテスト）。 |
 +| `scripts/` | | インストーラ、セッションのスクリプト、インストーラの補助。ビルドの補助は `tools/`（`glsl2c.c`、`room-key.c`）に、訳のテスト（`tools/checkwords`、Go）と共に。 |
+ | `art/camera/` | | Print のカメラと、それに入れるテープ：`camera.py` が Blender（4.5）で組み、光を当てて焼き、部品を `camera.png` に詰める。引き出しに横たわったカメラは `camera-top.png`（`camera-top.h`）。各部品の位置は `camera-map.h`。どちらもリポジトリに置いて実行ファイルに埋め込む（`bin2c.py`）ので、ビルドに Blender は要らない。要るのは絵を作り直す時だけ。 |
+ | `art/case.py` | | 机の上の物を Blender（4.5）で焼く時の共通部分：トレーサと同じ部屋（画面の形と机の幅ごとのカメラ、ランプ、机と壁、部屋の光、トーンカーブ）、机に落ちる影ごと焼く方法、書き出し（画面の形と机の幅ごとに PNG を 1 枚ずつ `THING-case.bin` に、何の絵かを `THING-case.h` に）。draw.c が今の画面の両隣の絵を、面ごとに射影変換で机の焼きの上に置く（`room_cases_paint`。机の上に描く他の物より下）。カメラと同じくリポジトリに置いて埋め込む。 |
+ | `art/clock/` | | 机の上の時計の筐体（机の焼きでは抜いてある）：`clock.py` がトレーサと同じ寸法に組み、`case.py` で画面の形 12 通りぶん焼く（`clock-case.bin`、`clock-case.h`）。 |
+@@ -92,7 +92,7 @@ DEsk v0.1 (BETA) の技術的な全体像です。どんなプログラムがあ
+ | `art/phone/`、`art/notebook/`、`art/calc/` | | 物ごとの台本と絵。 |
+ | `art/console/` | | 机の左奥の Control Panel（しまった状態。机の焼きでは抜いてある）：`console.py` が机から見える所（台座と銘板の棚、くるみの頬板、パネルの下とパイロットランプ、終わりのボタンの組）をトレーサと同じ寸法に組み、`case.py` で画面の形 12 通り × 机の幅 3 通りぶん焼く（`console-case.bin`、`console-case.h`）。銘板と灯ったランプは、今まで通り上に描く。 |
  | `session/` | | セッションのエントリ、PAM のファイル、autostart、既定のアプリの一覧、ポータルの設定。 |
 -| `themes/` | | DEsk のアイコンテーマ（`themes/make-icons.py` で生成）と GTK テーマ。 |
 +| `themes/` | | DEsk のアイコンテーマ（SVG をそのまま置いたもの）と GTK テーマ。 |
  | `packaging/` | | おすすめのプログラム一式のための Debian の equivs ファイル。 |
  | `docs/` | | この文書群と開発の記録。 |
  
-@@ -176,7 +176,7 @@ libsystemd がある（`-Dpost=enabled`）と、DEsk はイベントループの
+@@ -199,7 +199,7 @@ libsystemd がある（`-Dpost=enabled`）と、DEsk はイベントループの
  | Medium、Low | 小さく焼き、重ね描きも小さく。動いている紙は粗く描きます。 |
  | 2D Fallback | 一度だけ小さく、1 画素 1 サンプル（ぼかして）。影・フェード・ぼかし・アニメーションなし。画面を CPU で描いているときは自動でこれになります。 |
  
@@ -179,16 +207,16 @@ index 7b30ae8..1b22599 100644
  
  ### 5.3 平らなもの
  
-@@ -221,7 +221,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
+@@ -244,7 +244,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
  
  ## 8. 言語・書体・音
  
 -- **言葉**：`TR("English")` は英語で `WORDS`（`src/i18n.c`）を引きます。言語ごとに列がある表です（`enum desk_lang`：en、ja、zh、ko、es、fr、de）。訳の無い語は英語のまま出ます。キーには文脈を付けられます（`"clock|DAY"`）。`desk-index` は `index.c` に自分の表を持ちます。`meson test` が両方の表を確かめます（`scripts/check-words.py`）。
 +- **言葉**：`TR("English")` は英語で `WORDS`（`src/i18n.c`）を引きます。言語ごとに列がある表です（`enum desk_lang`：en、ja、zh、ko、es、fr、de）。訳の無い語は英語のまま出ます。キーには文脈を付けられます（`"clock|DAY"`）。`desk-index` は `index.c` に自分の表を持ちます。`tools/` の `go test ./...` が両方の表を確かめます（`tools/checkwords`）。
  - **書体**：役割（UI、印刷、見出し、刻印、タイプ、画面、手書き）ごとにラテン文字の一覧と CJK の一覧があり、CJK の一覧は中国語・日本語・韓国語ごとに選び直します（Noto CJK の SC・JP・KR）。同じ字でも国によって字形が違うためです。
- - **音**：録音は一つもありません。`sfx.c` が起動時に、固有振動、雑音、ぱりぱりという音、きしみからすべての音を合成し、`sound.c` が少しずつ違う版を、画面上のその物の位置の左右に振って鳴らします。
+ - **音**：録音は一つもありません。`sfx.c` が起動時に、固有振動、雑音、ぱりぱりという音、きしみからほとんどの音を合成します。耳で選んだもの（引き出し、マットの上に置く・滑らせる紙、Control Panel）は同じ作り方で Faust で作って焼いてあり（`art/sound`、`bake.py`）、あればそちらを読みます。`sound.c` が少しずつ違う版を、画面上のその物の位置の左右に振って鳴らします。窓を滑らせる音は、2 つの音を回しながら速さで混ぜます。
  
-@@ -229,7 +229,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
+@@ -252,7 +252,7 @@ DEsk が書くファイルはすべて、別の名前に書いてから名前を
  
  ```sh
  meson setup build && meson compile -C build
@@ -198,22 +226,28 @@ index 7b30ae8..1b22599 100644
  ./scripts/desk-window                     # 今のセッションの中で動かす
  ```
 diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
-index 6eb950e..d3ce27b 100644
+index ca7f27c..01d935d 100644
 --- a/docs/ARCHITECTURE.md
 +++ b/docs/ARCHITECTURE.md
-@@ -106,9 +106,9 @@ Logging out, restarting and powering off ask every window to close first
+@@ -118,7 +118,7 @@ Logging out, restarting and powering off ask every window to close first
  | `include/desk.h` | ~1,200 | The drawing library's API, as used by `wm.c`, `settings.c`, `index.c` and the tools. |
  | `include/compat.h` | | Carries settings and data over from DEsk's old name (DeskWM). |
  | `protocols/` | | wlr-output-management and wlr-output-power-management XML. |
--| `scripts/` | | Installers, session scripts, build helpers (`glsl2c.py`, `room-key.py`), `check-words.py` (the translation test). |
+-| `scripts/` | | Installers, session scripts, build helpers (`glsl2c.py`, `room-key.py`, `bin2c.py`), `check-words.py` (the translation test). |
 +| `scripts/` | | Installers, session scripts, and the installers' helpers. The build's own helpers are in `tools/` (`glsl2c.c`, `room-key.c`), with the translation test (`tools/checkwords`, Go). |
+ | `art/camera/` | | Print's camera, and the tape that goes into it: `camera.py` models, lights and renders them in Blender (4.5) and packs the pieces into `camera.png`, with where each piece is in `camera-map.h`; and the camera as it lies in the drawer, `camera-top.png` (`camera-top.h`). Both are committed and built in (`bin2c.py`), so building needs no Blender; only remaking the picture does. |
+ | `art/case.py` | | What the pictures of the things on the desk have in common, made in Blender (4.5): the room as the tracer has it (its camera for a screen of a given shape over a desk of a given width, its lamps, the desk and the wall, the room's light and its tone curve); how a thing is rendered with the shadow it throws on the desk; and how the pictures are put out, a PNG to each shape of screen and width of desk in `THING-case.bin` with what each is of in `THING-case.h`. draw.c lays the ones either side of the screen over the desk's sheet, plane by plane through homographies (`room_cases_paint`, under everything else drawn over the desk). Committed and built in like the camera's. |
+ | `art/kit.py` | | What the pictures of a thing lying on the desk have in common, made in Blender (4.5): materials, shapes, keys, lights, one eye, polish ([THINGS.md](THINGS.md)). |
+@@ -127,7 +127,7 @@ Logging out, restarting and powering off ask every window to close first
+ | `art/post/` | | The post box at the back right of the desk, door shut, which the desk's sheet leaves out: `post.py` builds it to the tracer's measurements and renders it with `case.py` for twelve shapes of screen and three widths of desk (`post-case.bin`, `post-case.h`). Its plate and the post in its slot are drawn over it, as before. |
+ | `art/console/` | | The Control Panel at the back left of the desk, stowed, which the desk's sheet leaves out: `console.py` builds what of it shows from the desk (the plinth and the nameplate's ledge, the walnut cheeks, the bottom of the panel with its pilot lenses, LOCK and SLEEP, and the front of the walnut lid with NIGHT and DISPLAY) to the tracer's measurements and renders it with `case.py` for twelve shapes of screen and three widths of desk (`console-case.bin`, `console-case.h`). Its nameplate and its lit lenses are drawn over it, as before. |
  | `session/` | | Session entry, PAM file, autostart entries, default applications list, portal configuration. |
 -| `themes/` | | The DEsk icon theme (generated by `themes/make-icons.py`) and GTK theme. |
 +| `themes/` | | The DEsk icon theme (committed SVGs) and GTK theme. |
  | `packaging/` | | A Debian equivs file for the recommended program set. |
  | `docs/` | | These documents and the development log. |
  
-@@ -293,7 +293,7 @@ There are two tracers:
+@@ -320,7 +320,7 @@ There are two tracers:
  
  Traced sheets are kept in `$XDG_CACHE_HOME/desk` as PNGs named by sheet,
  size, desk width, level and `ROOM_KEY`. `ROOM_KEY` is a hash of
@@ -222,7 +256,7 @@ index 6eb950e..d3ce27b 100644
  change to the room's code invalidates old sheets while ordinary updates keep
  them.
  
-@@ -365,7 +365,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
+@@ -393,7 +393,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
    a table with one column per language (`enum desk_lang`: en, ja, zh, ko,
    es, fr, de). A missing translation shows the English. Keys may carry a
    context, `"clock|DAY"`. `desk-index` keeps its own table in `index.c`.
@@ -231,7 +265,7 @@ index 6eb950e..d3ce27b 100644
  - **Fonts**: each role (UI, print, display, engrave, type, screen, hand) has
    a Latin list and a CJK list; the CJK list is chosen again for Chinese,
    Japanese or Korean (Noto CJK SC, JP or KR), because shared characters are
-@@ -378,7 +378,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
+@@ -409,7 +409,7 @@ place. Formats are in [CONFIGURATION.md](CONFIGURATION.md).
  
  ```sh
  meson setup build && meson compile -C build
@@ -241,7 +275,7 @@ index 6eb950e..d3ce27b 100644
  ./scripts/desk-window                     # run nested in the current session
  ```
 diff --git a/docs/MODDING.ja.md b/docs/MODDING.ja.md
-index 76e4b6e..70dd44a 100644
+index ae739e2..f9592cb 100644
 --- a/docs/MODDING.ja.md
 +++ b/docs/MODDING.ja.md
 @@ -11,7 +11,7 @@ DEsk は MIT ライセンスです。配るときは `LICENSE` を同梱し、RE
@@ -277,7 +311,7 @@ index 76e4b6e..70dd44a 100644
  
  訳の無い行は英語で出て、名前の表に行の無い言語は英語の名前で出るので、言語は少しずつ足せます。
  
-@@ -139,14 +139,14 @@ org.kde.kate.desktop = Development
+@@ -141,14 +141,14 @@ org.kde.kate.desktop = Development
  
  ## 9. アイコンとテーマ
  
@@ -295,7 +329,7 @@ index 76e4b6e..70dd44a 100644
  meson setup b-min -Dpost=disabled -Dsound=disabled -Dxwayland=disabled
  meson setup b-werror -Dbuildtype=debug -Dwerror=true
 diff --git a/docs/MODDING.md b/docs/MODDING.md
-index 37f4915..26b9c80 100644
+index fb92fe6..d740b3c 100644
 --- a/docs/MODDING.md
 +++ b/docs/MODDING.md
 @@ -16,7 +16,7 @@ README what you changed.
@@ -334,7 +368,7 @@ index 37f4915..26b9c80 100644
     `--console`, `--post`, `--calendar`, `--memo`, `--agenda`, `--lock`.
     Long words are shrunk to fit in a few places; anything that still runs
     over needs a shorter word.
-@@ -244,10 +244,10 @@ one:
+@@ -249,10 +249,10 @@ matter: that is a **thing**, one file of its own. See [THINGS.md](THINGS.md).
  
  ## 9. Icons and theme
  
@@ -347,7 +381,7 @@ index 37f4915..26b9c80 100644
  - The GTK theme is `themes/gtk/DEsk/gtk-3.0/gtk.css`, on top of Adwaita.
  - Both are installed into DEsk's own dconf layer, so they never change
    another desktop's look.
-@@ -255,7 +255,7 @@ one:
+@@ -260,7 +260,7 @@ matter: that is a **thing**, one file of its own. See [THINGS.md](THINGS.md).
  ## 10. Before you share a change
  
  ```sh
@@ -357,10 +391,10 @@ index 37f4915..26b9c80 100644
  meson setup b-min -Dpost=disabled -Dsound=disabled -Dxwayland=disabled
  meson setup b-werror -Dbuildtype=debug -Dwerror=true
 diff --git a/meson.build b/meson.build
-index 36fa9fa..5dbceb9 100644
+index 4f0c0bb..94da841 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -81,13 +81,17 @@ draw_deps = [cairo, fontconfig, math, threads]
+@@ -88,13 +88,17 @@ draw_deps = [cairo, pangocairo, fontconfig, math, threads]
  # and the C tracer -- which stays the reference either way -- is all there
  # is.
  have_gpu = egl.found() and glesv2.found() and gbm_dep.found()
@@ -380,8 +414,23 @@ index 36fa9fa..5dbceb9 100644
 +  command: [room_key, '@OUTPUT@', '@INPUT0@', '@INPUT1@'],
  )
  draw_sources += [room_key_h]
- if have_gpu
-@@ -95,8 +99,7 @@ if have_gpu
+ # The camera Print puts up to the eye, rendered in Blender
+@@ -145,12 +149,12 @@ install_data('art/notebook/nb-page.png', 'art/notebook/nb-rings.png', 'art/noteb
+   install_dir: get_option('datadir') / 'desk' / 'notebook')
+ # What a program kept in the drawer can be given to look like (docs/LOOKS.md): the desk's own
+ # looks, each a folder, rendered in Blender for nothing but that (art/looks/looks.py), and what
+-# renders anyone's the same way (art/looks/bake.py, with art/kit.py; desk-look bake runs it).
++# renders anyone's the same way (art/looks/bake.py, with art/kit.py, run by Blender's own Python;
++# desk-look bake runs it). Those two are Blender scripts, not part of the build: not installed here.
+ foreach look : ['radio', 'paintbox', 'gamepad', 'headphones']
+   install_data('art/looks' / look / 'look.png', 'art/looks' / look / 'look.ini',
+     install_dir: get_option('datadir') / 'desk' / 'looks' / look)
+ endforeach
+-install_data('art/looks/bake.py', 'art/kit.py', install_dir: get_option('datadir') / 'desk' / 'looks')
+ # The slider phone round a picture-in-picture window, rendered in Blender
+ # (art/phone/phone.py).
+ install_data('art/phone/ph-slab.png', 'art/phone/ph-ear.png', 'art/phone/ph-deck.png', 'art/phone/ph-keys.png',
+@@ -180,8 +184,7 @@ if have_gpu
    room_glsl_h = custom_target('room_glsl.h',
      input: 'src/room.glsl',
      output: 'room_glsl.h',
@@ -391,7 +440,7 @@ index 36fa9fa..5dbceb9 100644
    )
    draw_sources += ['src/gpu.c', room_glsl_h]
    draw_deps += [egl, glesv2, gbm_dep]
-@@ -314,7 +317,7 @@ install_data('session/desk-mimeapps.list',
+@@ -419,7 +422,7 @@ install_data('session/desk-mimeapps.list',
  )
  
  # The look of other programs in a DEsk session: its icons (themes/icons,
@@ -400,19 +449,28 @@ index 36fa9fa..5dbceb9 100644
  # the session's own layer of settings by desk-session (desk-dconf-profile)
  install_subdir('themes/icons/DEsk', install_dir: get_option('datadir') / 'icons')
  install_subdir('themes/gtk/DEsk', install_dir: get_option('datadir') / 'themes')
-@@ -359,9 +362,6 @@ install_data('session/desk.png',
+@@ -465,9 +468,6 @@ install_data('session/desk.png',
    install_dir: get_option('datadir') / 'icons/hicolor/512x512/apps',
  )
  
 -# meson test: the word tables (src/i18n.c, src/index.c) have a column for
 -# each language, and every translation takes the printf conversions its
 -# English takes, in the same order (scripts/check-words.py)
+ # DEsk's notebook, to type in and to write in with a pen, and its text editor,
+ # if GTK 3 is there to build it with: it is what lets it have input methods,
+ # right-to-left text and the clipboard without writing them again
+@@ -514,9 +514,8 @@ if gtk3.found()
+   )
+ endif
+ 
 -test('words', import('python').find_installation(),
 -  args: [files('scripts/check-words.py'), meson.project_source_root()],
 -)
-+# The word tables (src/i18n.c, src/index.c) have a column for each language,
-+# and every translation takes the printf conversions its English takes, in
-+# the same order: checked by `go test ./...` in tools/ (tools/checkwords).
++# (The word tables, src/i18n.c and src/index.c, are checked by `go test ./...` in
++# tools/: tools/checkwords. It needs Go, not Python.)
+ # and fingers are taken to have done what they did (tests/touch-test.c)
+ test('touch', executable('touch-test', ['tests/touch-test.c', 'src/touch.c'],
+   include_directories: include_directories('include'),
 diff --git a/scripts/check-words.py b/scripts/check-words.py
 deleted file mode 100644
 index 7bdda16..0000000
@@ -605,7 +663,7 @@ index 60ea396..0000000
 -if __name__ == "__main__":
 -    main()
 diff --git a/scripts/install_arch.sh b/scripts/install_arch.sh
-index 2f6071e..94a3532 100755
+index b1ba63f..5f57bea 100755
 --- a/scripts/install_arch.sh
 +++ b/scripts/install_arch.sh
 @@ -201,7 +201,6 @@ build|compiler and the tools to build with (base-devel)|base-devel
@@ -617,7 +675,7 @@ index 2f6071e..94a3532 100755
  build|Wayland protocols|wayland-protocols
  build|keyboards (xkbcommon)|libxkbcommon
 diff --git a/scripts/install_debian.sh b/scripts/install_debian.sh
-index 014b7df..e4de528 100755
+index ffd8b2d..a8905e1 100755
 --- a/scripts/install_debian.sh
 +++ b/scripts/install_debian.sh
 @@ -162,7 +162,6 @@ build|compiler: the C library headers|libc6-dev
@@ -629,7 +687,7 @@ index 014b7df..e4de528 100755
  build|Wayland|libwayland-dev
  build|Wayland protocols|wayland-protocols
 diff --git a/scripts/install_fedora.sh b/scripts/install_fedora.sh
-index c0d6e86..16c7f0d 100755
+index f876ae5..311aef1 100755
 --- a/scripts/install_fedora.sh
 +++ b/scripts/install_fedora.sh
 @@ -197,7 +197,6 @@ build|compiler: the C library headers|glibc-devel
@@ -641,7 +699,7 @@ index c0d6e86..16c7f0d 100755
  build|Wayland|wayland-devel
  build|Wayland protocols|wayland-protocols-devel
 diff --git a/scripts/install_ubuntu.sh b/scripts/install_ubuntu.sh
-index aedb39e..6dbf791 100755
+index 66a5c51..8afbc11 100755
 --- a/scripts/install_ubuntu.sh
 +++ b/scripts/install_ubuntu.sh
 @@ -191,7 +191,6 @@ build|compiler: the C library headers|libc6-dev
@@ -2778,6 +2836,3 @@ index 0000000..0bc5a0a
 +	fprintf(out, "#define DESK_ROOM_GPU_KEY 0x%08xu\n", (unsigned)both);
 +	return fclose(out) != 0;
 +}
--- 
-2.56.0
-

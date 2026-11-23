@@ -3,8 +3,8 @@
 # (windows as paper on a desk, the drawer, the bookcase, the post box, the front-door lock),
 # by fyzugx and the DEsk authors (MIT). docs/DESKTOP-DESK-PLAN.md has the why and the plan.
 #
-# SOURCE: upstream's v0.1.4 release plus the five patches beside this file, which are the
-# Runink fork's changes (0004 says so in the package's NOTICE). Until the fork's repository
+# SOURCE: upstream's v0.2.1 release (the tag's archive, pinned by sha256 below) plus the five
+# patches beside this file, which are the Runink fork's changes (0004 says so in the package's NOTICE). Until the fork's repository
 # exists they travel here; once it does, `source` names its tag and the patches go.
 #   0001  the build runs no Python (C build helpers, a Go word check)
 #   0002  runs without systemd: sd-bus from libelogind, no --systemd off systemd
@@ -18,15 +18,18 @@
 # elogind's sd-bus) fails the build rather than quietly dropping them; -Dweather_default=false
 # keeps the image from contacting open-meteo.com unasked (AGENTS.md invariant 5).
 pkgname=runink-desk
-pkgver=0.1.4
-pkgrel=2
+pkgver=0.2.1
+pkgrel=1
 pkgdesc="DEsk: the Runink River desktop, a skeuomorphic Wayland desktop (wlroots compositor)"
 arch=('x86_64')
 url="https://github.com/fyzugx/DEsk"
 license=('MIT')
 depends=('runink-wlroots0.18' 'wayland' 'libxkbcommon' 'cairo' 'pixman' 'fontconfig' 'libdrm'
 	'pam' 'libelogind' 'libpulse' 'libinput' 'mesa' 'libglvnd' 'libxcb' 'xcb-util-wm'
-	'xorg-xwayland' 'dbus')
+	'xorg-xwayland' 'dbus'
+	# v0.2: the letters' text (pangocairo), the handwriting (freetype2) and the GTK 3 programs
+	# desk-notepad, desk-look and desk-mat, which meson builds only if GTK 3 is there
+	'gtk3' 'pango' 'freetype2')
 makedepends=('wayland-protocols')
 provides=('desk')
 conflicts=('desk')
@@ -36,12 +39,12 @@ source=("desk-${pkgver}.tar.gz::https://github.com/fyzugx/DEsk/archive/refs/tags
 	'0003-build-Dweather_default-for-a-desk-that-asks-the-netw.patch'
 	'0004-Runink-fork-credit-upstream-say-what-changes.patch'
 	'0005-settings-Bluetooth-and-printers-without-Python.patch')
-sha256sums=('b35ea23b8311d67a61fa7ec14e505d4fa9f9b2b1e5b971661a05049f7bc0b23f'
-	'edbb8ae6d2e856a6147efb4199a34db60fcc307d93c6ccfc77e0467d4613add2'
-	'56a1da96dc5a48e7b0fadbe550ab92f23bdad2bb0921a787b4e80458a59402ed'
-	'e9583c573f831dc374edee8bfb3ffbdd7856c001595b1fd21dd523ee100d1e82'
-	'd9e5f86cfe9d559570b9660c8970c3623a20f8fe7ec5d2f7c5ae0a4994c41233'
-	'613d21e27d30ecb93222bf1070c0a2b046cac11fad6fda34546b77d2d6fdb0f9')
+sha256sums=('3fd4730a9fe55232f2b36556e488f54e268d566db4fc4b22f05ced9c3eba0e16'
+	'b01780a3c90210c800ff29c06b330e1115b07e50122d23464bc1e75e5997fda6'
+	'435d51ae1c11d8cc8f5751f3d72c212813f22a9e7624c5cbc826a2699d67f988'
+	'4cc5763255175c190004464729cd659d76b46d99c9fb768230fb0d0b4a6aec0c'
+	'0ff26b26bdf997acfa02759b74ab7b78dfa7f5d5bbe179a8cf7299166ccb97ac'
+	'248e0394dad7071b2e171c56474021ec849bc43c1ad0e488fc5171e7f0dc7c3f')
 
 prepare() {
 	cd "DEsk-${pkgver}"
@@ -61,6 +64,12 @@ build() {
 package() {
 	cd "DEsk-${pkgver}"
 	DESTDIR="$pkgdir" muon -C build install
+	# meson builds desk-notepad, desk-look and desk-mat only if GTK 3 is found, and says nothing
+	# when it is not: a package without them would be the old desk, so it must not be made
+	local b
+	for b in desk desk-session desk-notepad desk-look desk-mat desk-settings desk-index; do
+		test -x "$pkgdir/usr/bin/$b" || { echo "runink-desk: /usr/bin/$b was not built" >&2; return 1; }
+	done
 	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 	install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
 }
