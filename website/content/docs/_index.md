@@ -14,7 +14,8 @@ for data, analytics and AI development on hardware you own, built on:
 
 - **s6** init (s6, s6-rc, s6-linux-init). Never systemd.
 - **`linux-runink`**, one kernel: the zen kernel 7.2.x stable series, built from
-  signature-verified sources.
+  signature-verified sources. The kernel and OpenZFS packages build for x86_64 and
+  aarch64; the installer image and the `[runink]` repository are x86_64 only today.
 - An **encrypted ZFS root** (aes-256-gcm on every dataset) with **boot environments**.
 - A **default-deny firewall** and **`river-sandbox`** for code you do not trust.
 - A **graphical, zero-knowledge installer** that measures the machine, plans the disks and
@@ -32,6 +33,14 @@ gate is still open. The ISO is still assembled with a fork of Artix Linux's ISO 
 while Runink River moves to its own from-source base. See
 [the roadmap]({{< relref "/docs/roadmap" >}}).
 {{< /callout >}}
+
+## By role
+
+| You want to | Read |
+|---|---|
+| **Use** it: install, the desktop, everyday tasks | [Getting started]({{< relref "getting-started" >}}), [Using the desktop]({{< relref "getting-started/desktop" >}}), [Features]({{< relref "features" >}}), [Troubleshooting]({{< relref "troubleshooting" >}}), [FAQ]({{< relref "faq" >}}) |
+| **Administer** it: configure and operate a machine | [Configuration]({{< relref "configuration" >}}) (boot environments, s6 services, updates, the package repository, keyboard and language, networking), [Firewall]({{< relref "features/firewall" >}}), [Hardware support]({{< relref "hardware" >}}), [Verify a release]({{< relref "security/verify" >}}), [Kernel on Arch]({{< relref "kernel-on-arch" >}}) |
+| **Develop** it: build, contribute, extend | [Architecture]({{< relref "architecture" >}}), [Design principles]({{< relref "concepts" >}}), [Build from source]({{< relref "build" >}}) (including your own distribution on Runink River), [Contributing]({{< relref "contributing" >}}), [Releases]({{< relref "releases" >}}), [Licensing]({{< relref "governance" >}}), [Roadmap]({{< relref "roadmap" >}}) |
 
 ## Where to start
 
