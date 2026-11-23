@@ -23,7 +23,21 @@ the kernel.
 | OpenZFS (separate package) | `zfs-2.4.4.tar.gz` | its `.asc` |
 
 This is the same recipe Arch Linux uses for `linux-zen`: the signed stable tarball plus the
-signed zen patch. The kernel is compiled for **x86-64-v3** CPUs.
+signed zen patch.
+
+## Architectures
+
+The kernel and OpenZFS packages build for two architectures:
+
+- **x86_64**, compiled for **x86-64-v3** CPUs (AVX2, FMA, F16C, MOVBE, BMI2).
+- **aarch64** (UEFI/ACPI arm64 servers), at the kernel's generic armv8-a baseline, from an
+  arm64 configuration (`config.base.aarch64`) and an arm64 platform floor
+  (`config.require.aarch64`): KPTI, branch-history mitigation, pointer authentication,
+  BTI and KASLR in place of the x86 CPU-bug mitigations.
+
+**The installer image, the `[runink]` repository and the AUR package are x86_64 only.** No
+aarch64 image is built yet, so an arm64 machine has to build the packages from
+{{< repo "build/pkgbuilds/runink-kernel/" >}} itself (its README, section "aarch64").
 
 ## The profile
 

@@ -233,6 +233,10 @@ It runs the same sequence as a text dialog:
 
 1. **Network first**, with `river-netsetup`: keep what the live session set up, or set it up
    again. Any outcome continues.
+   The next menu may also offer **Install other machines on this network** (`river-pair`),
+   which drives opt-in installs of machines booted from a downstream install medium over
+   the local link ({{< repo "docs/INSTALL.md" >}}, "LAN installs"). For this machine, choose
+   **Install this machine**.
 2. **The hardware probe and plan**, shown in full. A refused plan stops here;
    `sudo runink-install --lab` waives the minimums on a VM or test rig.
 3. **Every disk the plan erases, confirmed by typing its serial number.** A mistyped serial

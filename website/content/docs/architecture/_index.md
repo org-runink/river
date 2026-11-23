@@ -16,8 +16,8 @@ links to read the code.
 
 | Layer | What it is | Source |
 |---|---|---|
-| Kernel | `linux-runink` 7.2.7-zen1: the zen kernel's 7.2.x stable series, the only kernel on the image | {{< repo "build/pkgbuilds/runink-kernel/" >}} |
-| Root filesystem | OpenZFS 2.4.4 as a separate module package (`runink-zfs`) plus its userland and initramfs hook (`runink-zfs-utils`) | {{< repo "build/pkgbuilds/runink-zfs/" >}} |
+| Kernel | `linux-runink` 7.2.7-zen1: the zen kernel's 7.2.x stable series, the only kernel on the image. Its packages also build for aarch64; the image is x86_64 only | {{< repo "build/pkgbuilds/runink-kernel/" >}} |
+| Root filesystem | OpenZFS 2.4.4 as a separate module package (`runink-zfs`) plus its userland and initramfs hook (`runink-zfs-utils`), built for x86_64 and aarch64 | {{< repo "build/pkgbuilds/runink-zfs/" >}} |
 | Init | s6, s6-rc and s6-linux-init, driven by the `s6` front end | {{< repo "iso-profiles/river/root-overlay/etc/s6/" >}} |
 | Desktop | DEsk (a wlroots compositor that is the whole desktop) on Wayland, greetd with gtkgreet in cage, PipeWire, NetworkManager, Bluetooth and printing, each with its s6 service package | {{< repo "iso-profiles/river/profile.yaml" >}} |
 | Installer | `river-installer` (graphical), `runink-install` (text), `river-hwprobe`, `river-plan`, `river-netsetup` and the numbered install steps | {{< repo "installer/" >}} |

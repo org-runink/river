@@ -22,9 +22,9 @@ disableKinds = ["taxonomy", "term", "rss"]
 
 # Consent-gated (Consent Mode v2, denied by default): see
 # layouts/_partials/components/analytics/google-analytics.html and
-# layouts/_partials/custom/banner.html, both overrides of Hextra's vendored
-# partials at those paths. Same GA4 property as runink.org and docs.runink.org
-# (one property across every public Runink surface, owner decision 2026-09-28).
+# layouts/_partials/custom/footer.html (the consent banner), overrides of Hextra's
+# vendored partials at those paths. Same GA4 property as runink.org and docs.runink.org
+# (one property across every public Runink surface).
 [services]
   [services.googleAnalytics]
     id = 'G-SEECKDWZNJ'
