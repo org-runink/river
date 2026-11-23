@@ -1,7 +1,7 @@
-From 4f93cf74e4c3860bb93036bed4ad1a3bd6f4b0bf Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniel Paes <78096758+paesdan@users.noreply.github.com>
-Date: Fri, 30 Oct 2026 23:48:35 +0000
-Subject: [PATCH 4/4] Runink fork: credit upstream, say what changes
+Date: Mon, 23 Nov 2026 15:19:12 +0000
+Subject: [PATCH 4/5] Runink fork: credit upstream, say what changes
 
 LICENSE keeps "The DEsk authors" and adds the fork's own copyright line;
 NOTICE and the top of the README credit fyzugx and the DEsk authors, link
@@ -10,10 +10,10 @@ upstream, and list what the fork changes.
 Signed-off-by: Daniel Paes <78096758+paesdan@users.noreply.github.com>
 ---
  LICENSE    |  1 +
- NOTICE     | 20 ++++++++++++++++++++
+ NOTICE     | 24 ++++++++++++++++++++++++
  README.md  |  3 +++
  SHA256SUMS |  5 +++--
- 4 files changed, 27 insertions(+), 2 deletions(-)
+ 4 files changed, 31 insertions(+), 2 deletions(-)
  create mode 100644 NOTICE
 
 diff --git a/LICENSE b/LICENSE
@@ -30,10 +30,10 @@ index d878dc5..350a20b 100644
  of this software and associated documentation files (the "Software"), to deal
 diff --git a/NOTICE b/NOTICE
 new file mode 100644
-index 0000000..bf7fb1a
+index 0000000..9c0fb33
 --- /dev/null
 +++ b/NOTICE
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,24 @@
 +This is the Runink fork of DEsk.
 +
 +DEsk is by fyzugx and the DEsk authors: https://github.com/fyzugx/DEsk
@@ -46,16 +46,20 @@ index 0000000..bf7fb1a
 +- The build runs no Python: tools/glsl2c.c and tools/room-key.c, built by
 +  the build itself, replace scripts/glsl2c.py and scripts/room-key.py, and
 +  tools/checkwords (Go) replaces scripts/check-words.py. The icon generator
-+  scripts are not carried; the SVGs they drew are.
++  scripts are not carried; the SVGs they drew are. art/looks/bake.py and
++  art/kit.py (Blender scripts, for desk-look bake) are not installed.
 +- It runs on systems without systemd: sd-bus from libelogind, --systemd and
 +  systemctl only where systemd is init, loginctl for powering off.
 +- -Dweather_default=false builds a desk that asks the network nothing until
 +  its user turns the weather on.
++- Shell Settings' Bluetooth and Printers rows, and the Control Panel's
++  Bluetooth lever, also open river-bluetooth and river-printers (where
++  blueman and system-config-printer, which are Python, are not carried).
 +
 +Nothing upstream wrote has been relicensed; the fork's own changes are under
 +the same MIT License, as "The RIVER Authors".
 diff --git a/README.md b/README.md
-index 5fc0916..4d8cfdd 100644
+index 62582b8..0f81185 100644
 --- a/README.md
 +++ b/README.md
 @@ -2,6 +2,9 @@
@@ -65,11 +69,11 @@ index 5fc0916..4d8cfdd 100644
 +> This is the **Runink fork** of DEsk, by fyzugx and the DEsk authors
 +> ([upstream](https://github.com/fyzugx/DEsk)). What it changes is in [NOTICE](NOTICE).
 +
- **v0.1.4 (BETA)** -- fixes (a session no longer ends when a monitor goes to sleep, and laptops whose firmware screen stays beside the graphics card get the desk on the right screen), GTK 4 programs on paper, and Arabic and more as a second keyboard layout. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
+ **v0.2.1 (BETA)** -- fixes for v0.2: the Control Panel's key and lid on a slower machine and on a touch screen, the top edge of the opened lid, and the drawer's sounds in time with the drawer. v0.2 brought new things to the desk: a calculator, one notebook to type and write in, Print as a camera that also films, and picture-in-picture as an old phone; touch, an on-screen typewriter, a pen and handwriting, and a screen that turns with the machine; the Control Panel redesigned in four; woods, stains and desk mats; favourites, a clipboard and looks for the drawer. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
  
- I've created a Discord server!
+ Homepage: https://fyzugx.github.io/DEsk/ -- the highlights, a desk you can try in your browser, the install steps and an FAQ.
 diff --git a/SHA256SUMS b/SHA256SUMS
-index b1c3c8f..fb1e70f 100644
+index 3ba4e18..936dbf5 100644
 --- a/SHA256SUMS
 +++ b/SHA256SUMS
 @@ -1,9 +1,10 @@
@@ -78,13 +82,10 @@ index b1c3c8f..fb1e70f 100644
  9ca2f8afe06176db8b331513b4c67681c6923b3414e194fe6ef66eb8c8fa6e44  ./Dockerfile
 -87dd199cc6c7a1fd1fefb42f86d924b11a053ef5444dfd5cbf479dd22d6dbc15  ./LICENSE
 +42104269993976ab0e1bb394d6d0b7db64dd7334b0d153c7b71497b4e15a170a  ./LICENSE
-+5f419e0082c30bc0145b531f10e62a0437e4132e8df6307520f8e01c5054a4d2  ./NOTICE
- 46a60065cad2a794d5c5752a52acab57455da55c3647ab37830c22812d767754  ./README.ja.md
--2cb55baae9e927a8fa58254fa1ba40d6977da2a4ef5f6baede942c96aed9fb04  ./README.md
-+d98cd9ee5095849666210f69cbebe70d56feb55a30f31f9eda319c28f13a1466  ./README.md
- 6c979e967af7262f245367474aabb8479640a00107db06b503f78defe1d6def4  ./RELEASE-NOTES.ja.md
- d41d53b642b8d333b1cc63e5d7f50834891882618bb1b9fb8045fdb43d1e73ba  ./RELEASE-NOTES.md
++945b29b837253e22e39ed3a8f19f8e24f631c79eec086d3579a5af9173216d5c  ./NOTICE
+ f93ad11ce9263bcbe8ca5d6122dfdac8612ef73c34325b91ae20b095a57c59c0  ./README.ja.md
+-692adee70793c42b3502afe443fbceddb98a3b0cf2695a87b1d9c402942375d7  ./README.md
++bafbeb2aa13275688145ce69dfb1fd4dc9b953670f1e370ade23b4ed3dbfb532  ./README.md
+ f75a2bfbca6bc20bba45d8e0f2920b8d341e04533ac6008c452d56b78d153559  ./RELEASE-NOTES.ja.md
+ eeec7cc3b21f2a7ab39dc1abd142f781b9f987fb38b43d2374ac25a450882007  ./RELEASE-NOTES.md
  95ec560c0517006961566f73ef2ae19b8f3dbe8b70b90366f0b908599957e49b  ./applications/meson.build
--- 
-2.56.0
-

@@ -1,7 +1,77 @@
 # DEsk replaces KDE Plasma: the plan
 
-Status: **phase A was research; phase B built it** (2026-10-30). The plan below is kept as
+Status: **phase A was research; phase B built it** (2026-10-30); **phase C moved it to upstream v0.2.1** (2026-11-23). The plan below is kept as
 written. Where phase B decided otherwise, this section says so and wins.
+
+## Phase C: DEsk v0.2.1 (2026-11-23)
+
+Owner directive (2026-11-23): users should have the same experience on Runink River as on
+upstream DEsk. Upstream's README tour is mostly v0.2 material, so the package moved from v0.1.4
+to **v0.2.1** (the tag's archive, sha256-pinned; upstream signs nothing, so the pin is the
+check, as for v0.1.4).
+
+- **The five patches were rebased**, not rewritten: they apply to v0.2.1 with offsets (fuzz in
+  four places, each read by hand; the one real misplacement, 0002's `loginctl` fallback landing in
+  the sd-bus branch of `power.c`, was fixed). Each patch carries its `SHA256SUMS` update.
+- **No Python, again.** v0.2.1's build runs the same three Python steps as v0.1.4
+  (`scripts/room-key.py`, `scripts/glsl2c.py`, `scripts/check-words.py`; the three files are
+  byte-identical to v0.1.4's), and patch 0001 already replaces them with C helpers built
+  `native: true` and a Go word check. The v0.2 art (`art/*.png`, `*-case.bin`, `*-faces-*.bin`,
+  the `*-map.h` headers) is committed data that `meson install` copies: nothing renders it at
+  build time. The `art/**/*.py` files are Blender model scripts, never run by the build; two of
+  them, `art/looks/bake.py` and `art/kit.py`, were *installed* (for `desk-look bake`), and no
+  longer are, because Blender is not on the image and Python would be. The rest stay in the
+  source tree, uninstalled. **No Python exception is needed.**
+- **New build inputs:** `gtk3`, `pango` (pangocairo) and `freetype2`. `gtk3` was already in the
+  builder image; `desk-notepad`, `desk-look` and `desk-mat` are built only `if GTK 3 is found`
+  and meson says nothing when it is not, so `package()` now fails if they are missing.
+- **Package gaps weighed** (read from the Arch package database of 2026-11-23, which
+  Artix's `[world]` follows; not re-read against the pinned snapshot):
+  - `librsvg` (`rsvg-convert`, for the shelves' SVG icons): **added**, named in `Packages-Root`
+    and `profile.yaml`. `gtk3` already depends on it, so the gap in the first analysis was not
+    real and the closure does not grow; naming it keeps it if `gtk3` ever stops needing it.
+  - `power-profiles-daemon` (POWER SAVE): **left out**. It needs `upower` and `polkit` and a
+    system-bus service s6 does not start yet, and `powerprofilesctl` is a Python script. Without
+    it the button is inert (upstream behaves the same on a machine without it). To add later: an
+    s6 longrun for `upowerd` and the daemon, and the script not installed.
+  - `iio-sensor-proxy` (auto-rotate, tablet mode): **left out**; hardware-only, needs `libssc`,
+    `polkit` and the same missing service.
+  - `yad` (the screen-share chooser): **left out**; it depends on `webkit2gtk-4.1`. Screen
+    sharing works and picks the first screen without asking.
+  - **Input method (IBus or fcitx5): left out.** DEsk's own fields (the bookcase search, the
+    memo pad, the notebook) take typing through an input context of **IBus only**
+    (`src/ime.c`: the "typing into DEsk itself" context); fcitx5 is only read there for the
+    indicator. IBus depends on `python` and `python-gobject` (160 MB installed), so it cannot ship;
+    fcitx5 depends on `systemd` and would not serve DEsk's own fields. JA/ZH/KO/VI/TH users can
+    type into other programs only if they add an input method themselves. **Owner decision
+    needed** if this must work: the smallest honest exception is the distribution's `ibus` with
+    its Python dependencies, which puts Python programs (`ibus-setup`) into the image, against
+    "no Python in the image"; nothing here proposes it by default.
+  - **Klee One** (the memo pad's handwriting face): **left out**. It is not in Arch or Artix
+    (upstream says so); a font package would need a pinned source and a `[runink]` package of its
+    own. The memo pad falls back to Caveat, Kalam or another face. Cosmetic.
+- **What is the same as upstream now:** every feature in upstream's v0.2.1 README tour (camera
+  and films, calculator, notebook and pen, the four-part Control Panel, `Super+P`, touch, the
+  mat, woods, looks, clipboard, favourites, `Alt+Tab` spread, half-screen snapping, the
+  picture-made room) is upstream's code, unmodified apart from the five patches. The keys are
+  upstream's.
+- **What still differs** (full reasons in the tables above): one login screen (gtkgreet in cage,
+  no session chooser); about 17 of the 24 System-tab rows open programs the image does not carry
+  and show faint; Bluetooth is `river-bluetooth`, printers are CUPS's pages, automounting and the
+  low-battery letter are `river-desk` (Go); the weather is off until the user turns it on;
+  `desk-look bake` cannot run (needs Blender); no POWER SAVE, auto-rotate, input method, Klee
+  One or screen chooser (above).
+- **Not proven by anything run on an image.** The package builds (see the PR for the
+  record), but nobody has booted DEsk under greetd and s6 since the Plasma cut-over. Still
+  open, in order of risk: the greetd to `desk-session` hand-off (session bus, PipeWire user
+  services, `XDG_RUNTIME_DIR`, elogind seat); the front door's PAM service (`/etc/pam.d/desk`);
+  the Control Panel's volume (wpctl), brightness (logind `SetBrightness` on elogind), radio levers
+  and suspend; the post box as the notification daemon; the camera (`Print`) and films
+  (`Shift+Print`: `grim`, `ffmpeg`, `pactl`); the two-head arrangement; first login time on a
+  screen drawn by the CPU; logout and re-login. `build/qemu-gui-test.sh`'s `desk-login` check only
+  asserts that a `desk` process exists and the screen is not flat, so a crash-looping desk passes
+  it. Items QEMU cannot prove (backlight keys, rfkill, lid, touch, pen, rotation, the GPU trace)
+  need a laptop.
 
 ## Phase B: what was decided and built
 
@@ -9,7 +79,7 @@ written. Where phase B decided otherwise, this section says so and wins.
   sha256, with muon. Artix's `wlroots0.18` is the documented fallback only (§0.2 proposed the
   opposite).
 - **The DEsk fork's repository waits on the owner.** Until it exists, its four changes ship as
-  patches next to `build/pkgbuilds/runink-desk/PKGBUILD`, applied to upstream's v0.1.4 tag:
+  patches next to `build/pkgbuilds/runink-desk/PKGBUILD`, applied to upstream's release tag (v0.1.4 when written, v0.2.1 since phase C):
   no Python in the build (C helpers built `native: true`, a Go word check), elogind instead of
   systemd, `-Dweather_default` (built `false`), and the fork's credit. `runink-desk` builds
   the same way once `source` names the fork's tag.

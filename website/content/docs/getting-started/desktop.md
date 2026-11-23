@@ -28,11 +28,12 @@ for example) do not ask again.
 |---|---|
 | Terminal | foot |
 | Files | Thunar (with `gvfs` and `udisks2`) |
-| Text | Mousepad |
+| Text | DEsk Notepad (the drawer's notebook, `desk-notepad`), and Mousepad |
 | Web | Firefox (telemetry and studies off by system policy) |
 | Pictures, PDF, archives, music and video | Ristretto, Atril, Engrampa, Parole |
 | Displays | wdisplays |
-| Screenshots | **Print** and **Alt+Print** (`desk-screenshot`, with `grim`); a letter says where the picture went |
+| Screenshots and films | **Print** puts up DEsk's camera (area, window or screen, with a timer); **Shift+Print** films (`desk-record`, with `ffmpeg`); `grim` takes the picture. A letter says where it went |
+| Calculator, clipboard | The calculator in the drawer; **Super+V** opens the clipboard |
 
 ## Common tasks
 
@@ -71,6 +72,50 @@ s6. Printers on your LAN are found over mDNS, which the
 ### Keyboard layout and language
 
 See [Keyboard & language]({{< relref "/docs/configuration/keyboard-locale" >}}).
+
+### The weather at the front door
+
+Upstream DEsk asks open-meteo.com for the weather every half hour. Runink River builds it with
+`-Dweather_default=false`, so **nothing is asked until you tick "The real weather at the front
+door" in Shell Settings**. Then one request goes out every 30 minutes, carrying only the
+latitude and longitude of the city your time zone is named after, made by DEsk itself. Off, the
+door still shows the hour and the porch lamp, and the weather is always fine.
+
+### Starting the desk over
+
+DEsk keeps your settings, its traced room and its logs under `~/.config/desk`,
+`~/.local/share/desk`, `~/.local/state/desk` and `~/.cache/desk`. Log out and remove them to
+start with a fresh desk; your files are elsewhere. The first login after that traces the room
+again (a few seconds on a GPU, longer on a screen drawn by the CPU). `runink-desk` is part of
+the image and greetd starts it, so it is not removed with `pacman -R`.
+
+## What differs from upstream DEsk
+
+The desk, drawer, bookcase, post box, Control Panel, camera, calculator, notebook, front door and
+the keys are upstream DEsk v0.2.1's code. What Runink River changes:
+
+- **No Python.** DEsk's own build runs none, and its Python helpers are replaced: automounting
+  and the low-battery letter are `river-desk` (Go) rather than `udiskie` and `poweralertd`;
+  Bluetooth is `river-bluetooth` (bluetuith) rather than `blueman`; printers are CUPS's own
+  pages rather than `system-config-printer`. `desk-look bake` (which needs Blender) is not
+  installed.
+- **elogind, not systemd**: sd-bus comes from `libelogind`, and the session does not ask a systemd
+  user manager anything.
+- **The weather is off until you turn it on** (above).
+- **One login screen** (gtkgreet in cage, branded), no session chooser, since there is one desktop.
+- **A smaller set of programs** than upstream's installer brings: foot, Firefox, Thunar and
+  Mousepad. Most of the rows on Shell Settings' System tab (sound, look, default
+  programs, disks, date and time, users, passwords, packages, backups, task manager, about)
+  open programs this image does not carry, so they show faint with the name of the package.
+- **No power-profile switch or auto-rotate** (`power-profiles-daemon`, `iio-sensor-proxy`: no
+  s6 service yet) and **no input-method framework** for typing Japanese, Chinese, Korean,
+  Vietnamese or Thai into DEsk's own fields (IBus needs Python), and no **Klee One** (the memo
+  pad falls back to another handwriting face). The screen-share chooser shares the first screen
+  without asking (no `yad`).
+- **Not yet proven on a booted image**: the lamp-lit login, the front door's lock, the Control
+  Panel's volume, brightness and radio levers, the post box and the camera under greetd and s6.
+  Nobody has booted this build since DEsk replaced Plasma; the checklist is in
+  {{< repo "docs/DESKTOP-DESK-PLAN.md" >}}.
 
 ## Under the hood
 

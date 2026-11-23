@@ -185,6 +185,7 @@ rootfs:
     - grim
     - wl-clipboard
     - libnotify
+    - librsvg
     - gsfonts
     - foot
     - thunar
