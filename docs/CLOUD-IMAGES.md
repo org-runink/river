@@ -305,7 +305,7 @@ The instance's service account needs `roles/secretmanager.secretAccessor` on
 SSH keys go to `/etc/ssh/authorized_keys.d/runink` on the boot environment (public keys,
 root-owned 0644), which `05-river-cloud.conf` adds to `AuthorizedKeysFile`. That way the
 admin can log in to repair a node whose data did not unlock. They are rewritten at every
-boot and, where the image carries the `river-cloud-watch` longrun (`installer/cloud/s6`), on
+boot and, where the image carries the `river-cloud-watch` longrun ([cloud/gcp.md](cloud/gcp.md), section 2.9), on
 every metadata change (`river-cloud-init watch`, the `wait_for_change` long-poll); an image
 without it applies new keys at the next boot. Passwords are locked;
 root cannot log in; login is key-only.

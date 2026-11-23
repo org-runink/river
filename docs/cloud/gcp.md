@@ -169,7 +169,7 @@ a patched daemon client or a fake `systemctl`. Invariant 1 rules out the fake, a
 fork an agent we would then have to track.
 
 Runink River instead ships `river-cloud-init` (`installer/cloudinit`, MIT). It is one
-standard-library Go binary run by s6 services in `installer/cloud/s6/`. Phase 1 covers:
+standard-library Go binary run by four s6 services (section 2.9). Phase 1 covers:
 
 | Guest environment feature | Runink River | Status |
 |---|---|---|
@@ -229,6 +229,29 @@ needs the same TSC vote. Compute Engine encrypts persistent disks at rest with G
 customer-managed keys. An encrypted base root needs the vTPM key provider, which is still a
 stub (**to build**).
 
+### 2.9 The s6 services
+
+These are four s6-rc source definitions under `/etc/s6/sv/`. A downstream cloud profile ships
+the first three today. `river-cloud-watch` is new: `85-cloud-finalize` enables it when the
+image carries it.
+
+| Service | `type` | `dependencies.d/` | Script |
+|---|---|---|---|
+| `river-cloud-identity` | `oneshot` | `mount-filesystems`, `remount-root` | `up`: `/bin/sh -c "/usr/local/bin/river-cloud-init identity \|\| echo 'river-cloud-identity: failed' >&2; exit 0"` |
+| `river-cloud-init` | `oneshot` | `river-cloud-identity`, `NetworkManager-srv` | `up`: `/usr/local/bin/river-cloud-init boot` |
+| `river-cloud-late` | `oneshot` | `river-cloud-init` | `up`: `/bin/sh -c "setsid /usr/local/bin/river-cloud-init late </dev/null >/dev/null 2>&1 &"` (detached, so it never holds the boot transaction) |
+| `river-cloud-watch` | `longrun` | `river-cloud-init` | `run` (execline): `fdmove -c 2 1` then `/usr/local/bin/river-cloud-init watch` |
+
+They are not tracked in this tree yet. `river lint shell-ratchet` treats any s6 control file
+that does not call the `river` CLI as a new shell script, and its list only shrinks. The `river`
+CLI is a build tool and does not ship on an image. The in-tree cloud edition (section 3) needs
+one of two maintainer decisions:
+
+- an on-image `river` entry point that these files can call; or
+- an explicit ratchet exception for one-line s6 files that call a Go binary.
+
+The boot test in section 8 ran exactly these four definitions.
+
 ## 3. What builds the image
 
 Reuse, not a fork:
@@ -239,7 +262,6 @@ Reuse, not a fork:
 2. **What this change adds:**
    - the base profile;
    - `river-cloud-watch`;
-   - the s6 definitions in `installer/cloud/s6/` (identity, init, late, watch);
    - NTP and the kernel-option check in `78-cloud-target`;
    - `85-cloud-finalize` enabling `river-cloud-watch` when present;
    - `wait_for_change` support in the metadata client and the fake server.
@@ -248,7 +270,7 @@ Reuse, not a fork:
      (`RIVER_PROFILE_DIR`), because Runink River has had no cloud installer since the
      server profile left this tree. A Runink River image needs an in-tree **headless cloud
      edition**: the workstation's package set minus the desktop, plus the
-     `installer/cloud/s6` services. It also needs an unattended install driver, as a
+     s6 services of section 2.9. It also needs an unattended install driver, as a
      `river` subcommand in Go (shell ratchet), and `--profile base` on `cloud-image.sh`.
    - The base image should be small. `cloud-image.sh` refuses disks under 64 GiB because
      that is the node installer's minimum. A base image should be about 10 GiB, since the
@@ -272,7 +294,7 @@ Each line is in this repository today.
 | module signing | `config.delta`: `MODULE_SIG`, `MODULE_SIG_ALL`, `MODULE_SIG_SHA512`, per-build key | signed, not forced |
 | sysctl hardening | `iso-profiles/river/root-overlay/etc/sysctl.d/10-runink-hardening.conf`: `kernel.kptr_restrict=2`, `kernel.yama.ptrace_scope=1`, `net.core.bpf_jit_harden=2`, `kernel.perf_event_paranoid=2`, `fs.protected_*`, no redirects or source routing | |
 | sandbox for untrusted code | `/usr/local/bin/river-sandbox` (bubblewrap, unprivileged), invariant 8 | an agent's tool calls can run under it today |
-| minimal init | s6 and s6-rc; the cloud services are four small definitions in `installer/cloud/s6/` | no systemd |
+| minimal init | s6 and s6-rc; the cloud services are four small definitions (section 2.9) | no systemd |
 | ZFS boot environments | root is `<pool>/ROOT/runink` (`12-cloud-disk`) | `zfs snapshot` and rollback work. A pre-update snapshot and rollback command is **to build** |
 | signed package updates | `[runink]`: `SigLevel = Required DatabaseRequired`, release key in `KEYS` ([REPOSITORY.md](../REPOSITORY.md)); distribution repositories `SigLevel = Required` (`pacman/pacman.conf.in`) | see section 6 |
 | key-only SSH, no root login, no default password | section 2.7 | |
@@ -503,15 +525,13 @@ Secure Boot, once section 2.2 is built: add
     stand-in;
   - `TestWatchLoop`: keys applied at start and after a change, a failed apply retried, no
     apply while metadata is unchanged;
-  - `TestProfile`;
-  - `TestCloudS6Services`: every s6 definition is well-formed, calls a subcommand that
-    exists, and depends only on known services.
+  - `TestProfile`.
 - **A boot test that emulates Compute Engine.** It used OVMF (UEFI), the disk on NVMe and on
   virtio-scsi (vendor `Google`, product `PersistentDisk`), a virtio-net NIC, the serial
   console to a file, and `installer/fakemeta` at `169.254.169.254:80` through QEMU's
   `guestfwd`. The disk was a GCE-format `disk.raw` (GPT, ESP, a whole number of GiB, archived
   with `--format=oldgnu`) holding:
-  - this branch's `river-cloud-init` and `installer/cloud/s6` services;
+  - this branch's `river-cloud-init` and the four s6 services of section 2.9;
   - the `linux-runink` 7.2.7 package built from this tree's PKGBUILD;
   - the distribution's s6 userland, with sshd and the serial getty configured exactly as
     `78-cloud-target` writes them.

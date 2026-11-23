@@ -90,8 +90,7 @@ None.
   - `river-cloud-init watch`, a longrun that long-polls the metadata server
     (`wait_for_change`) so SSH keys added to or removed from metadata apply without a reboot;
   - a `base` cloud profile (`RIVER_CLOUD_PROFILE=base`): identity, hostname, SSH keys and
-    disk growth, with no data datasets to unlock;
-  - the cloud image's s6 definitions in `installer/cloud/s6/`.
+    disk growth, with no data datasets to unlock.
 
   The metadata stub (`installer/fakemeta`) now serves the recursive tree with an ETag,
   honours `wait_for_change`, and re-reads its config file per request.

@@ -1,6 +1,0 @@
-#!/bin/execlineb -P
-# SPDX-FileCopyrightText: 2026 The RIVER Authors
-# SPDX-License-Identifier: MIT
-# Runink River base cloud image (docs/cloud/gcp.md). Detached, so it never holds the boot
-# transaction: the initramfs rebuilt for the instance's own hostid and the pool reguid.
-/bin/sh -c "setsid /usr/local/bin/river-cloud-init late </dev/null >/dev/null 2>&1 &"
