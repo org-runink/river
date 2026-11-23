@@ -138,6 +138,15 @@ the image ({{< repo "docs/PAYLOADS.md" >}}). The public Runink River image carri
 `build/local-iso.sh` and `build/iso-root-stage.sh` refuse to attach one to it. The full
 contract is in {{< repo "docs/BUILD.md" >}}, "Downstream distributions".
 
+The installer package also carries tools that only downstream media use, so they are built
+and tested here but do nothing on the Runink River workstation: `runink-autoinstall`
+(unattended install, from the downstream profile), opt-in LAN install pairing
+(`river-pair-announce` on the target), `river-payloadpack` and `river-modelpack` (encrypted
+payloads), and `river-cloud-init` with `build/cloud-image.sh` (cloud images). Their contracts
+are in {{< repo "docs/INSTALL.md" >}}, {{< repo "docs/PAYLOADS.md" >}} and
+{{< repo "docs/CLOUD-IMAGES.md" >}}. `build/make-multiboot-usb.sh` writes several images onto
+one USB stick ({{< repo "docs/USB-MULTIBOOT.md" >}}).
+
 ## Build only the kernel
 
 To run `linux-runink` on an existing Arch system without building the ISO, see

@@ -13,7 +13,7 @@ The terms below summarise LicenseRef-Runink-Trademark as published in this repos
 ## The name
 
 **RIVER** stands for **Raft-Integrated Validated Event Runtime**, the pipeline runtime the
-project is named after ([runtime/README.md](https://github.com/org-runink/river/blob/main/runtime/README.md)).
+project is named after. It is planned and has no code yet ([roadmap]({{< relref "roadmap" >}})).
 In prose the project is always **Runink River**, never a bare "River": that name belongs
 to an unrelated Wayland compositor.
 

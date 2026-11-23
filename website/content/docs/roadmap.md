@@ -31,7 +31,7 @@ authoritative list is {{< repo "ROADMAP.md" >}}.
 | **Reproducible ISO**: two independent builds of one commit produce identical images | planned (depends on the own base) |
 | **Secure Boot**: enforced module signing, own keys, then a reviewed shim | planned |
 | **The workstation built on the own base** (the DEsk desktop from recipes) | planned, after the base itself |
-| **RIVER runtime**: a validated pipeline runtime whose steps run under `river-sandbox` | planned; no code yet |
+| **RIVER runtime**: a pipeline runtime | planned; no code yet |
 | **SLSA Build L3 release provenance** | planned (depends on Tier 2 CI and the reproducible ISO) |
 | **Incubation prerequisites**: more maintainers from more organisations, an elected TSC | planned |
 

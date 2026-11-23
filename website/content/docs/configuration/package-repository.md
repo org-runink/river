@@ -31,7 +31,7 @@ holds equal to what those PKGBUILDs produce:
 
 | Package | What it is |
 |---|---|
-| `linux-runink`, `linux-runink-headers` | the kernel, the zen 7.2.x stable series ([Kernel]({{< relref "/docs/features/kernel" >}})) |
+| `linux-runink`, `linux-runink-headers` | the kernel, the zen 7.2.x stable series ([Kernel]({{< relref "/docs/features/kernel" >}})). The PKGBUILD also builds for aarch64; this repository carries x86_64 only |
 | `runink-zfs`, `runink-zfs-utils` | the OpenZFS kernel modules built for exactly that kernel, and the matching userland |
 | `runink-installer` | the hardware probe, the planner, the network set-up and the graphical installer |
 | `river-guide` | the offline install guide of the live medium |
