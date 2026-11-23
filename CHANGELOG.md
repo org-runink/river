@@ -33,6 +33,7 @@ None.
 
 ### Added
 
+- **Desk proof for the QEMU GUI harness.** `build/qemu-gui-test.sh --desk-proof` drives the installed desktop through QMP keys and pointer, judges frames by structure (not exact pixels), asks the guest for process evidence, and reports the 30-row checklist in `build/desk-checklist.json` as PASS, FAIL or NOT PROVABLE IN QEMU ([docs/DESK-PROOF.md](docs/DESK-PROOF.md)). The default run gains `desk-stable` and `screen-desk-alive`.
 - **aarch64 kernel and OpenZFS packages.** `linux-runink` and `runink-zfs` build for
   `aarch64` (UEFI/ACPI arm64 servers) as well as x86_64: an arm64 `config.base.aarch64`, an
   arm64 platform floor (`config.require.aarch64`) and a small tools-header patch, all through

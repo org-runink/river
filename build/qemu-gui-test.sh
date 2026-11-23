@@ -60,6 +60,10 @@
 #     screen-greeter the login screen's screendump shows something drawn, and
 #     screen-desk    so does the desktop's (`river test screen`: PNG size and luma entropy,
 #                    never the grey mean, which passed QEMU's 752-byte no-display placeholder)
+#     desk-stable    desk is the SAME process a minute after it appeared (a crash loop that keeps
+#                    restarting desk satisfies "a desk process exists" and fails this)
+#     screen-desk-alive  the desktop frame has structure (luma entropy and colour count), which a
+#                    black screen with a cursor on it does not (river-guitest screen)
 #     net-ready      after that login the network is up with nothing left to do (a user-mode NIC)
 #   (tests/assert-golden.sh describes a server; the workstation is checked by the lines above)
 #   either profile, when the profile carries tests/installed.d/*.sh (build/qemu-hooks.sh)
@@ -77,8 +81,33 @@
 # starts what a new ISO starts by itself. Everything copied is listed on the serial log, so a
 # result is never mistaken for the ISO's own. On an ISO built from this tree nothing is copied.
 #
+# The desk proof (--desk-proof, workstation only): after the login the harness runs the checklist in
+# build/desk-checklist.json against the live desktop, with river-guitest (installer/guitest). Its
+# rows are the user-visible things a DEsk user does, taken from the parity analysis (greeter, lit
+# room, Super+Enter terminal, post box, drawer, bookcase, control panel, volume, camera, door
+# lock and unlock, Alt+Tab, half snaps, second screen, log out and in, Ctrl+Alt+Del, a USB stick,
+# shutdown). Keys and the pointer go in through QMP (send-key, input-send-event), the screen is
+# judged by structure (colour and entropy metrics of regions, how much of a region changed against
+# an earlier frame), never by exact pixels, and every row also asks the guest: a small agent on the
+# guest's second serial port runs commands (wpctl, pgrep, notify-send, ...) as the user. A row's
+# result is PASS, FAIL, or NOT PROVABLE IN QEMU (hardware-only rows: backlight, rfkill, suspend,
+# touch, pen, auto-rotate, GPU trace, battery); none is skipped silently. Each row is a check
+# desk-NN-<id> in the verdict. Output, under the artifacts directory (default <work>/artifacts):
+#   NNN-<row id>[-label].png   every frame the checklist took, numbered, the row id in the name
+#   results.json               every row: status, each check with its reason and detail, frames
+#   results.tsv                one line per row
+#   rows.txt                   the RIVERTEST lines the verdict reads
+# The thresholds are in the data file and in installer/guitest/screen.go (presets): first-run
+# values, to be tuned from the first real boot's frames (docs/DESK-PROOF.md).
+#
 # Options:
 #   --profile workstation|server   (default workstation)
+#   --desk-proof       run the desk checklist after the login (implies --audio --second-head
+#                      --usb-stick and a QMP socket, a guest command channel and a packet capture)
+#   --checklist FILE   (default build/desk-checklist.json)    --artifacts DIR (default <work>/artifacts)
+#   --audio            an HDA sound card (a null backend) so PipeWire has a sink
+#   --second-head      a second display head on the virtio GPU      --usb-stick   a USB stick to hot-plug
+#   --no-audio --no-second-head --no-usb-stick   leave one of those out of --desk-proof
 #   --kiosk-pkgs DIR   package files for the kiosk (default ~/.cache/river-build/kiosk-pkgs)
 #   --offline          the guests get a NIC with no route out (k0s must come up air-gapped)
 #   --disk-size SIZE   scratch disk (default 64G)      --mem MiB (default 8192)   --cpus N (4)
@@ -91,6 +120,7 @@ REPO="$(cd "$HERE/.." && pwd)"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 PROFILE=workstation KIOSK_PKGS="$CACHE/river-build/kiosk-pkgs" OFFLINE=0 DISK_SIZE=64G MEM=8192 CPUS=4 WORK="" KEEP=0 ISO=""
 PASSWORD="correct-horse-battery"
+PROOF=0 AUDIO="" HEAD2="" STICK="" CHECKLIST="" ARTIFACTS="" SOCK="" GT=""
 
 die() { echo "qemu-gui-test: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
@@ -103,6 +133,15 @@ while [ $# -gt 0 ]; do
 		--cpus) CPUS="${2:?}"; shift ;;
 		--work) WORK="${2:?}"; shift ;;
 		--keep) KEEP=1 ;;
+		--desk-proof) PROOF=1 ;;
+		--checklist) CHECKLIST="${2:?}"; shift ;;
+		--artifacts) ARTIFACTS="${2:?}"; shift ;;
+		--audio) AUDIO=1 ;;
+		--no-audio) AUDIO=0 ;;
+		--second-head) HEAD2=1 ;;
+		--no-second-head) HEAD2=0 ;;
+		--usb-stick) STICK=1 ;;
+		--no-usb-stick) STICK=0 ;;
 		-h|--help) sed -n '5,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 		-*) die "unknown option $1" ;;
 		*) [ -z "$ISO" ] || die "one ISO only"; ISO="$1" ;;
@@ -111,6 +150,11 @@ while [ $# -gt 0 ]; do
 done
 [ -f "$ISO" ] || die "no ISO (see --help)"
 case "$PROFILE" in server|workstation) ;; *) die "--profile server or workstation" ;; esac
+{ [ "$PROOF" = 0 ] || [ "$PROFILE" = workstation ]; } || die "--desk-proof is for the workstation profile"
+# --desk-proof turns on the devices the checklist needs, unless one was switched off by name
+: "${AUDIO:=$PROOF}" "${HEAD2:=$PROOF}" "${STICK:=$PROOF}"
+[ -n "$CHECKLIST" ] || CHECKLIST="$REPO/build/desk-checklist.json"
+[ "$PROOF" = 0 ] || [ -f "$CHECKLIST" ] || die "no checklist $CHECKLIST"
 for t in qemu-system-x86_64 qemu-img mkfs.vfat mcopy blkid go magick; do
 	command -v "$t" >/dev/null 2>&1 || die "$t is required"
 done
@@ -158,6 +202,10 @@ if [ "$PROFILE" = workstation ]; then
 	mkdir -p "$KIT/root/etc/xdg/autostart"
 	cp "$P/live-overlay/etc/xdg/autostart/river-installer.desktop" "$KIT/root/etc/xdg/autostart/"
 fi
+# The host helper (QMP keys, screendumps, frame checks, the checklist runner): installer/guitest.
+GT="$WORK/river-guitest"
+( cd "$REPO/installer" && CGO_ENABLED=0 go build -trimpath -o "$GT" ./guitest ) || die "river-guitest did not build"
+[ "$PROOF" = 0 ] || "$GT" lint -checklist "$CHECKLIST" || die "the checklist is invalid"
 cp "$REPO/tests/assert-golden.sh" "$KIT/assert-golden.sh"
 # The profile's own installed-system checks (tests/installed.d, build/qemu-hooks.sh): only the
 # executable hooks are copied, and the checks they declare join the verdict.
@@ -179,6 +227,7 @@ cat > "$KIT/config" <<EOF
 PROFILE=$PROFILE
 PASSWORD=$PASSWORD
 OFFLINE=$OFFLINE
+DESKPROOF=$PROOF
 EOF
 hooks_env >> "$KIT/config"
 
@@ -332,6 +381,38 @@ exec >/dev/ttyS0 2>&1
 set -u
 . /run/rt/common.sh
 echo "RIVERTEST BEGIN installed"
+# asuser CMD... -- run CMD as the desktop user, in the desktop session's environment (taken from
+# the running desk process, so the session bus, PipeWire and the Wayland socket are the user's own).
+asuser() {
+	dpid="$(pgrep -u runink -x desk | head -1)"
+	envs="HOME=/home/runink XDG_RUNTIME_DIR=/run/user/$(id -u runink)"
+	if [ -n "$dpid" ]; then
+		for v in XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY XDG_SESSION_ID XDG_CURRENT_DESKTOP; do
+			val="$(tr '\0' '\n' < /proc/"$dpid"/environ 2>/dev/null | sed -n "s/^$v=//p" | head -1)"
+			[ -z "$val" ] || envs="$envs $v=$val"
+		done
+	fi
+	# shellcheck disable=SC2086
+	runuser -u runink -- env $envs "$@"
+}
+# The desk proof's command agent (build/desk-checklist.json, installer/guitest). The host talks to
+# the guest's second serial port: RIVERPING n -> RIVERPONG n; RIVERCMD id user base64 ->
+# RIVERRES id rc base64(output). Nothing else is read from it.
+desk_agent() {
+	stty -F /dev/ttyS1 raw -echo -hupcl clocal 115200 2>/dev/null
+	while IFS= read -r line; do
+		case "$line" in
+		"RIVERPING "*) echo "RIVERPONG ${line#RIVERPING }" ;;
+		"RIVERCMD "*)
+			set -- $line
+			id="$2" who="$3" cmd="$(printf '%s' "$4" | base64 -d 2>/dev/null)"
+			if [ "$who" = root ]; then out="$(timeout 80 sh -c "$cmd" 2>&1 </dev/null)"; rc=$?
+			else out="$(asuser timeout 80 sh -c "$cmd" 2>&1 </dev/null)"; rc=$?; fi
+			printf 'RIVERRES %s %s %s\n' "$id" "$rc" "$(printf '%s' "$out" | head -c 16000 | base64 -w0)" ;;
+		esac
+	done < /dev/ttyS1 > /dev/ttyS1
+}
+[ "${DESKPROOF:-0}" = 1 ] && { desk_agent & }
 [ "$(zfs get -H -o value keystatus "$(findmnt -n -o SOURCE / | cut -d/ -f1)")" = available ] && ok unlocked || ko unlocked
 if [ "$PROFILE" = server ]; then
 	# The first boot's kiosk (river-firstboot-ui from rc.local) draws before the driver starts.
@@ -384,14 +465,22 @@ else
 	# then the password, on the VM keyboard (RIVERGUI TYPE user, RIVERGUI TYPE password).
 	i=0; until pgrep -x gtkgreet >/dev/null || [ $i -ge 300 ]; do sleep 2; i=$((i+2)); done
 	sleep 20
+	# what the greeter chain was, recorded now because the greeter is gone after the login
+	echo "cage=$(pgrep -cx cage) gtkgreet=$(pgrep -cx gtkgreet)" > /run/rt-greeter.ev
 	echo "RIVERGUI SCREEN greeter"; sleep 5
 	echo "RIVERGUI TYPE user"; sleep 10
 	echo "RIVERGUI TYPE password"
 	# DEsk's first login traces its room; on software rendering (no GPU in the VM) it takes minutes.
 	i=0; until pgrep -u runink -x desk >/dev/null || [ $i -ge 900 ]; do sleep 3; i=$((i+3)); done
+	dpid="$(pgrep -u runink -x desk | head -1)"
+	# the dark room, photographed early for the proof (the lamp is still coming up)
+	[ "${DESKPROOF:-0}" = 1 ] && { sleep 8; echo "RIVERGUI SCREEN desk-dark"; sleep 3; }
 	sleep 60
 	echo "RIVERGUI SCREEN desk"; sleep 5
 	pgrep -u runink -x desk >/dev/null && ok desk-login || ko desk-login "no desk for runink"
+	# a desk that crashes and is restarted passes "a desk process exists": it must be the same one
+	[ -n "$dpid" ] && [ "$(pgrep -u runink -x desk | head -1)" = "$dpid" ] && ok desk-stable \
+		|| ko desk-stable "desk pid was ${dpid:-none}, is now $(pgrep -u runink -x desk | head -1)"
 	pgrep -u runink -x desk >/dev/null || ps -u runink -o comm= | sort -u | tr '\n' ' ' | sed 's/^/RIVERTEST NOTE runink processes: /'
 	echo
 	act="$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | grep -v ':lo$')"
@@ -406,6 +495,12 @@ if [ -d /run/rt/installed.d ]; then
 fi
 echo "RIVERTEST END installed"
 sync
+if [ "${DESKPROOF:-0}" = 1 ]; then
+	# the host runs the desk checklist through the agent and ends it with loginctl poweroff;
+	# this is only the backstop if it never does
+	echo "RIVERGUI DESKPROOF begin"
+	sleep 5400
+fi
 poweroff -f
 EOF
 
@@ -418,10 +513,12 @@ for f in "$KIT"/*; do mcopy -s -i "$WORK/kit.img" "$f" ::/; done
 qemu-img create -q -f qcow2 "$WORK/target.qcow2" "$DISK_SIZE"
 cp "$OVMF_VARS" "$WORK/vars.fd"
 NIC="-nic none"
-[ "$PROFILE" = workstation ] && NIC="-nic user,model=virtio-net-pci"
-[ "$OFFLINE" = 1 ] && NIC="-nic user,model=virtio-net-pci,restrict=on,ipv4=off,ipv6=on,ipv6-prefix=fd00:5eed:0:1::,ipv6-prefixlen=64"
+[ "$PROFILE" = workstation ] && NIC="-nic user,id=rtn0,model=virtio-net-pci"
+[ "$OFFLINE" = 1 ] && NIC="-nic user,id=rtn0,model=virtio-net-pci,restrict=on,ipv4=off,ipv6=on,ipv6-prefix=fd00:5eed:0:1::,ipv6-prefixlen=64"
 VGA="-vga std"
 [ "$PROFILE" = workstation ] && VGA="-vga virtio"
+# a second display head: a virtio GPU with two outputs (the desk proof photographs head 1)
+[ "$HEAD2" = 1 ] && VGA="-vga none -device virtio-vga,id=video0,max_outputs=2"
 QEMU_ARGS="-enable-kvm -machine q35 -cpu host -m $MEM -smp $CPUS $NIC -display none $VGA
  -drive if=pflash,format=raw,readonly=on,file=$OVMF_CODE -drive if=pflash,format=raw,file=$WORK/vars.fd
  -drive if=none,id=target,format=qcow2,file=$WORK/target.qcow2 -device virtio-blk-pci,drive=target,serial=RIVERQEMU0001,bootindex=1
@@ -429,13 +526,30 @@ QEMU_ARGS="-enable-kvm -machine q35 -cpu host -m $MEM -smp $CPUS $NIC -display n
 MEDIUM="-device qemu-xhci,id=xhci -drive if=none,id=medium,format=raw,readonly=on,file=$ISO -device usb-storage,bus=xhci.0,drive=medium,bootindex=0"
 # A relative USB mouse, like a real one (gui-pointer): the kiosk's WPE ignores absolute pointers.
 [ "$PROFILE" = server ] && MEDIUM="$MEDIUM -device usb-mouse,bus=xhci.0,id=mouse"
-trap qemu_cleanup EXIT INT TERM
+# What only the installed phase of a desk proof adds: a QMP socket (keys, pointer, screendumps,
+# USB hot-plug), the guest's second serial port as a command socket, an absolute pointer (a
+# tablet), a packet capture (what the guest sent: the weather row), a sound card with a null
+# backend so PipeWire has a sink, and the stick image to hot-plug. The sockets live in a short
+# directory of their own: a unix socket path is limited to 107 bytes.
+PROOF_ARGS=""
+if [ "$PROOF" = 1 ]; then
+	SOCK="$(mktemp -d "${TMPDIR:-/tmp}/rgt.XXXXXX")"
+	PROOF_ARGS="-qmp unix:$SOCK/qmp,server=on,wait=off -chardev socket,id=gcmd,path=$SOCK/guest,server=on,wait=off -serial chardev:gcmd"
+	PROOF_ARGS="$PROOF_ARGS -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0"
+	PROOF_ARGS="$PROOF_ARGS -object filter-dump,id=rtdump,netdev=rtn0,file=$WORK/net-installed.pcap"
+fi
+[ "$AUDIO" = 1 ] && PROOF_ARGS="$PROOF_ARGS -audiodev none,id=rtaudio -device ich9-intel-hda -device hda-duplex,audiodev=rtaudio"
+[ "$STICK" = 1 ] && mkfs.vfat -C -n RIVERSTICK "$WORK/stick.img" 8192 >/dev/null
+[ -n "$ARTIFACTS" ] || ARTIFACTS="$WORK/artifacts"
+cleanup() { qemu_cleanup; [ -z "$SOCK" ] || rm -rf "$SOCK"; }
+trap cleanup EXIT INT TERM
 
 # snap NAME — a PNG screendump into shots/ (and a small JPEG for the docs)
 snap() {
 	mon "screendump $WORK/shots/$1.ppm"
 	sleep 1
-	magick "$WORK/shots/$1.ppm" "$WORK/shots/$1.png" 2>/dev/null && rm -f "$WORK/shots/$1.ppm"
+	# ImageMagick, or the Go helper when it cannot read the dump
+	{ magick "$WORK/shots/$1.ppm" "$WORK/shots/$1.png" 2>/dev/null || "$GT" ppm2png "$WORK/shots/$1.ppm" "$WORK/shots/$1.png" 2>/dev/null; } && rm -f "$WORK/shots/$1.ppm"
 	magick "$WORK/shots/$1.png" -resize 1024x -quality 72 "$WORK/shots/$1.jpg" 2>/dev/null || true
 	echo "qemu-gui-test: screen $1"
 }
@@ -489,6 +603,17 @@ pointer_click() {
 	sleep 3
 	snap live-pointer-clicked
 }
+# desk_proof — run the checklist (build/desk-checklist.json) against the live desktop, through the
+# QMP and guest sockets of the installed VM. Rows, reasons and thresholds are in the data file.
+desk_proof() {
+	mkdir -p "$ARTIFACTS"
+	echo "qemu-gui-test: desk proof: $CHECKLIST -> $ARTIFACTS"
+	# a failing row is reported through rows.txt and the verdict, so the exit status is not needed
+	"$GT" run -checklist "$CHECKLIST" -qmp "$SOCK/qmp" -guest "$SOCK/guest" -harness "$WORK/shots" \
+		-art "$ARTIFACTS" -work "$WORK" -usb "$WORK/stick.img" -var "PASSWORD=$PASSWORD" \
+		> "$WORK/desk-proof.log" 2>&1 || true
+	cat "$WORK/desk-proof.log"
+}
 # follow PHASE SECONDS — photograph every RIVERGUI SCREEN, type on RIVERGUI TYPE, click on
 # RIVERGUI POINTER, until END.
 follow() {
@@ -508,6 +633,10 @@ follow() {
 		# the kiosk's "Español" choice on the welcome screen (1280x800, std VGA)
 		if seen "RIVERGUI POINTER" "$1" && ! echo "$done_" | grep -q pointed; then
 			done_="$done_ pointed"; pointer_click 510 234 || true
+		fi
+		# the desk checklist, once the guest says the desktop is up and its checks are done
+		if [ "$PROOF" = 1 ] && [ "$1" = installed ] && seen "RIVERGUI DESKPROOF begin" "$1" && ! echo "$done_" | grep -qw proofran; then
+			done_="$done_ proofran"; desk_proof
 		fi
 		seen "RIVERTEST END $1" "$1" && return 0
 		kill -0 "$QPID" 2>/dev/null || return 1
@@ -573,7 +702,8 @@ if seen "RIVERTEST OK export" live; then
 	KEY="$(sed -n 's/^RIVERGUI KEY //p' "$WORK/serial-live.log" | tr -d '\r' | head -1)"
 	echo "qemu-gui-test: phase 2 — installed"
 	: > "$WORK/serial-installed.log"
-	start_vm installed
+	# shellcheck disable=SC2086 # PROOF_ARGS is a word list
+	start_vm installed $PROOF_ARGS
 	# "assphrase", not "passphrase": the prompt ZFS prints is "Passphrase for zriver:" with a
 	# capital P, and `seen` is a case-SENSITIVE `grep -aq`. So this never matched, the recovery
 	# key below was never sent, the pool was never unlocked, and `follow` then sat for its full
@@ -620,12 +750,21 @@ if [ "$PROFILE" = workstation ]; then
 			echo "RIVERTEST OK screen-$s" >> "$WORK/results.txt"
 		else echo "RIVERTEST FAIL screen-$s (${png:-no frame}: $(grep -m1 FAIL "$WORK/screen-$s.txt" 2>/dev/null))" >> "$WORK/results.txt"; fi
 	done
+	# The desktop frame must have structure: a black screen with a cursor passes the entropy
+	# check above (the size-and-entropy floor is low on purpose), not this one.
+	png="$(ls "$WORK"/shots/installed-*-desk.png 2>/dev/null | head -1)"
+	if [ -n "$png" ] && "$GT" screen "$png" -expect entropy=1.5:,colors=16: > "$WORK/screen-desk-alive.txt" 2>&1; then
+		echo "RIVERTEST OK screen-desk-alive" >> "$WORK/results.txt"
+	else echo "RIVERTEST FAIL screen-desk-alive (${png:-no frame}: $(cat "$WORK/screen-desk-alive.txt" 2>/dev/null))" >> "$WORK/results.txt"; fi
+	# the desk proof's rows: one RIVERTEST line each (OK, SKIP for hardware-only, FAIL)
+	if [ "$PROOF" = 1 ] && [ -f "$ARTIFACTS/rows.txt" ]; then cat "$ARTIFACTS/rows.txt" >> "$WORK/results.txt"; fi
 fi
 if [ "$PROFILE" = server ]; then
 	want="gui-kiosk gui-recovery gui-pointer gui-edition gui-install harness-wired export unlocked fb-ready fb-k0s fb-finish golden"
 else
 	# (assert-golden checks a server; a workstation is checked by its own lines)
-	want="gui-desktop gui-edition gui-install harness-wired export unlocked home-mounted home-owner firewall machine-id greeting no-base-name hostname desk-login screen-greeter screen-desk net-ready"
+	want="gui-desktop gui-edition gui-install harness-wired export unlocked home-mounted home-owner firewall machine-id greeting no-base-name hostname desk-login desk-stable screen-greeter screen-desk screen-desk-alive net-ready"
+	[ "$PROOF" = 0 ] || want="$want $("$GT" list -checklist "$CHECKLIST")"
 fi
 # the profile's hooks (tests/installed.d): hook-<name> and every check each one declares
 want="$want $HOOK_WANT"
@@ -635,5 +774,6 @@ fail=0
 # shellcheck disable=SC2086 # the list of checks
 verdict "$WORK/results.txt" $want || fail=1
 echo "  screens: $(cd "$WORK/shots" && ls ./*.png 2>/dev/null | tr '\n' ' ')"
+[ "$PROOF" = 0 ] || echo "  desk proof: $ARTIFACTS (results.json, results.tsv, numbered PNGs)"
 [ "$KEEP" = 1 ] || rm -f "$WORK/target.qcow2"
 exit "$fail"

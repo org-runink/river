@@ -48,8 +48,9 @@ import (
 // it plans; and that every installer command is built by build/20-installer-binaries.sh and
 // packaged by runink-installer.
 
-// installerTestOnly are the installer/ commands that are tests only and never ship.
-var installerTestOnly = []string{"fakemeta"}
+// installerTestOnly are the installer/ commands that are tests only and never ship (fakemeta,
+// and guitest: the host-side helper of build/qemu-gui-test.sh's desk proof).
+var installerTestOnly = []string{"fakemeta", "guitest"}
 
 const (
 	installerSrc = "installer/lib"
