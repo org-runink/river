@@ -90,8 +90,11 @@ build provenance ([RELEASE.md](RELEASE.md)). Until the first release is publishe
 * **s6 supervision, never systemd.** s6 / s6-rc / s6-linux-init + elogind as PID 1 and
   service manager; the login screen (greetd), Bluetooth and printing run as s6 services, each with its own
   reliable logger.
-* **A DEsk developer desktop.** [DEsk](https://github.com/fyzugx/DEsk) on Wayland (windows as
-  paper on a desk, built from its release with the Runink fork's patches), greetd for login,
+* **A DEsk developer desktop.** [DEsk](https://github.com/fyzugx/DEsk) v0.2.1 on Wayland
+  (windows as paper on a desk, built from upstream's release with the Runink fork's patches, so the
+  desk, drawer, bookcase, post box, camera, calculator, notebook and front door are upstream's;
+  what still differs, and what is not yet proven on a booted image, is in
+  [docs/DESKTOP-DESK-PLAN.md](docs/DESKTOP-DESK-PLAN.md), phase C), greetd for login,
   PipeWire, Firefox with telemetry off, no app store, no Flatpak, and developer tools: `git`,
   `curl`, `base-devel`, `go`, foot, Mousepad.
 * **One kernel.** `linux-runink`, a pinned fork of the zen kernel 7.2.x stable series,

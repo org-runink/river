@@ -48,7 +48,7 @@ None.
   a fallback for X programs started without a session bus). Its pkgrel sorts above the
   distribution's, so a sysupgrade does not swap the X11 build back in.
 - **DEsk packages.** `[runink]` gains `runink-wlroots0.18` (wlroots 0.18.3), `runink-desk`
-  (DEsk 0.1.4 with the Runink fork's patches: no Python in its build, elogind instead of
+  (DEsk 0.2.1 with the Runink fork's patches: no Python in its build, elogind instead of
   systemd, the weather off until a user turns it on), and the login screen's `runink-cage`
   and `runink-gtkgreet`. All are built from sha256-pinned sources with muon, a C
   implementation of meson, which the builder image now bootstraps. The image does not install
@@ -116,6 +116,17 @@ None.
   `20-clone-rootfs` deletes `/etc/greetd/live.toml` and fails on any greetd
   `initial_session` left on the target, and `32-locale-keyboard` keys on DEsk's session.
   The QEMU harnesses' desktop checks still expect Plasma until they are rewritten.
+- **`runink-desk` is DEsk v0.2.1** (it was v0.1.4), the upstream release of 2026-11-22, pinned by
+  tag and sha256, with the same five patches rebased onto it. A Runink River user now has what
+  upstream's README describes: Print as a camera that also films (`Shift+Print`), the calculator,
+  the notebook and pen, the Control Panel in four parts (night, display, sleep, airplane),
+  `Super+P` display modes, touch, the desk mat and woods, the clipboard (`Super+V`), favourites,
+  the spread-out `Alt+Tab` and half-screen snapping, and a first login that lays most of the room
+  from pictures made in advance. The build still runs no Python (the three steps are the same
+  as in v0.1.4: C helpers and a Go word check); `art/looks/bake.py` and `art/kit.py`, the
+  Blender scripts behind `desk-look bake`, are not installed. `runink-desk` now also depends on
+  `gtk3`, `pango` and `freetype2`, and its package step fails if `desk-notepad`, `desk-look`
+  or `desk-mat` were not built. Not yet run on a booted image (docs/DESKTOP-DESK-PLAN.md).
 - **The node-state directory is `/var/lib/tide`** (it was `/var/lib/core`). A server install
   now mounts `<pool>/state` there, and the model payload's `<pool>/models` at
   `/var/lib/tide/models/shared`; the cloud first-boot tool does the same for its encrypted

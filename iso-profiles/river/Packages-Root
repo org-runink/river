@@ -149,8 +149,17 @@ wdisplays
 grim
 wl-clipboard
 libnotify
+# rsvg-convert: DEsk rasterises the SVG icons of the programs on its shelves with it (without it
+# their sheets show an initial). gtk3 already depends on librsvg, so this adds nothing to the
+# closure; it is named so the desk keeps it if gtk3 stops needing it.
+librsvg
 # DEsk's own typefaces (URW base 35).
 gsfonts
+# NOT here (the v0.2.1 review, docs/DESKTOP-DESK-PLAN.md phase C; Arch depends lists of 2026-11-23):
+# power-profiles-daemon (needs upower and polkit, a service s6 does not have yet; powerprofilesctl is
+# Python) and iio-sensor-proxy (libssc, polkit, the same missing service) for DEsk's POWER SAVE
+# and auto-rotate; yad (webkit2gtk) for the screen-share chooser; ibus (Python) and fcitx5
+# (depends on systemd; DEsk's own fields type through IBus only) for CJK input.
 
 # ── applications (daily desktop) ───────────────────────────────────────────────────────
 # DEsk's standard set: the classic GTK programs, which leave their frame to the desk and lie
