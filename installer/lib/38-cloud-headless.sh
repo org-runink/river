@@ -71,8 +71,9 @@ for p in $MUST_GO; do
 	fi
 done
 
-# Files the profile overlay put on the image for the desktop, which no package owns.
-rm -rf "$TARGET/etc/greetd" "$TARGET/etc/xdg" "$TARGET/etc/pam.d/greetd" "$TARGET/etc/firefox" \
+# Files the profile overlay put on the image for the desktop, which no package owns (the overlay adds
+# dependencies.d entries to the greetd service, so its directory outlives the package).
+rm -rf "$TARGET/etc/greetd" "$TARGET/etc/xdg" "$TARGET/etc/pam.d/greetd" "$TARGET/etc/s6/sv/greetd" "$TARGET/etc/firefox" \
 	"$TARGET/etc/plymouth" "$TARGET/usr/share/plymouth" "$TARGET/usr/share/wallpapers" \
 	"$TARGET/usr/share/applications" "$TARGET/usr/share/icons/hicolor/scalable/apps/river"* 2>/dev/null || true
 for s in greetd-srv greetd sddm-srv bluetoothd-srv cupsd-srv; do
