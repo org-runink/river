@@ -13,6 +13,7 @@
 72-models-payload      | downstream editions only: unpacks a model payload, and this image carries no models
 73-downstream-payloads | downstream editions only: copies a private medium's encrypted payloads (docs/PAYLOADS.md); this image has none
 74-cloud-payload       | cloud images only (docs/CLOUD-IMAGES.md): the cloud counterpart of 72-models-payload
+38-cloud-headless       | cloud images only (docs/cloud/edition.md): removes the desktop from the clone for the headless base edition
 76-setup-answers       | downstream scripted installs only: runink-autoinstall --setup-answers (docs/PAYLOADS.md, "First-boot hand-off")
 77-firstboot-ui        | downstream server editions only: the first-boot kiosk; the workstation boots to its desktop login
 78-cloud-target        | cloud images only (docs/CLOUD-IMAGES.md): serial console, initramfs drivers, NIC and SSH for a cloud VM

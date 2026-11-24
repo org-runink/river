@@ -32,6 +32,12 @@ their packages, the installer and (once it has code) the RIVER runtime.
 None.
 
 ### Added
+- Cloud edition for Compute Engine ([docs/cloud/edition.md](docs/cloud/edition.md)): a headless
+  install of the ISO system (`installer/runink-cloud-install`, steps `38-cloud-headless` and the
+  base profile of `78-cloud-target`), per-account SSH keys and a `startup-script` runner in
+  `river-cloud-init`, `build/cloud-image.sh` without a downstream profile (10G disk), and
+  `build/cloud-base-test.sh`. A cloud-installer contract change for downstream profiles: the
+  `ssh-keys` handling is per account on the `base` profile only; the `node` profile is unchanged.
 
 - **Desk proof for the QEMU GUI harness.** `build/qemu-gui-test.sh --desk-proof` drives the installed desktop through QMP keys and pointer, judges frames by structure (not exact pixels), asks the guest for process evidence, and reports the 30-row checklist in `build/desk-checklist.json` as PASS, FAIL or NOT PROVABLE IN QEMU ([docs/DESK-PROOF.md](docs/DESK-PROOF.md)). The default run gains `desk-stable` and `screen-desk-alive`.
 - **aarch64 kernel and OpenZFS packages.** `linux-runink` and `runink-zfs` build for

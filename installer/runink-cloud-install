@@ -1,0 +1,67 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# runink-cloud-install — the unattended install of the cloud edition, run as root in the live
+# ISO session (build/cloud-image.sh boots the ISO and runs it). It installs the live system onto
+# ONE blank disk, found by serial, with the installer's own steps: the same clone, kernel,
+# initramfs, GRUB and s6 database as the ISO installer, with the cloud disk layout (12-cloud-disk:
+# ESP + autoexpanding ZFS pool) and the cloud steps. There is no second installer: this only
+# orders the steps in installer/lib/ and sets their RUNINK_* variables.
+#
+#   runink-cloud-install --serial SERIAL [--hostname NAME] [--pool NAME] [--libdir DIR]
+#
+# Nothing is asked. The disk must show no partition, filesystem or pool signature; the boot
+# medium can never be the target. Output ends with "AUTOINSTALL-DONE" on success.
+set -eu
+
+SERIAL="" HOSTNAME_="river" POOL="zriver" LIBDIR=""
+for d in /usr/local/lib/runink-install "$(dirname "$0")/lib"; do [ -d "$d" ] && { LIBDIR="$d"; break; }; done
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--serial) SERIAL="${2:?}"; shift 2 ;;
+		--hostname) HOSTNAME_="${2:?}"; shift 2 ;;
+		--pool) POOL="${2:?}"; shift 2 ;;
+		--libdir) LIBDIR="${2:?}"; shift 2 ;;
+		*) echo "runink-cloud-install: unknown argument $1" >&2; exit 2 ;;
+	esac
+done
+fail() { echo "AUTOINSTALL FAILED: $*" >&2; exit 1; }
+[ -n "$SERIAL" ] || fail "--serial is required (the one disk to erase)"
+[ "$(id -u)" -eq 0 ] || fail "run as root"
+[ -d /sys/firmware/efi ] || fail "not booted in UEFI mode"
+[ -d "$LIBDIR" ] || fail "no step library at $LIBDIR"
+
+# The disk, by serial. Exactly one, whole disk, and not the medium this session runs from.
+DISK=""
+for d in $(lsblk -dnpo NAME,TYPE | awk '$2 == "disk" {print $1}'); do
+	[ "$(lsblk -dnro SERIAL "$d" 2>/dev/null)" = "$SERIAL" ] || continue
+	[ -z "$DISK" ] || fail "two disks have serial $SERIAL"
+	DISK="$d"
+done
+[ -n "$DISK" ] || fail "no disk with serial $SERIAL"
+if grep -qs "^$DISK" /proc/mounts || [ -n "$(lsblk -nro MOUNTPOINT "$DISK" | grep .)" ]; then fail "$DISK is mounted (the boot medium?)"; fi
+[ -z "$(lsblk -nro NAME "$DISK" | sed 1d)" ] || fail "$DISK has partitions; the cloud image is built on a blank disk"
+[ -z "$(blkid -p "$DISK" 2>/dev/null || true)" ] || fail "$DISK carries a filesystem or pool signature"
+echo "install: target $DISK (serial $SERIAL, $(($(blockdev --getsize64 "$DISK") / 1073741824)) GiB)"
+
+: "${RUNINK_CLOUD:=gce}"
+export RUNINK_CLOUD RUNINK_CLOUD_PROFILE="${RUNINK_CLOUD_PROFILE:-base}" RUNINK_UNATTENDED=1
+export RUNINK_DISK="$DISK" RUNINK_POOL="$POOL" RUNINK_HOSTNAME="$HOSTNAME_" RUNINK_TARGET=/mnt
+export RUNINK_POOL_TOPOLOGY=single
+RUNINK_BE="runink-$(sed 's/[^0-9.]//g' /etc/runink-os-version 2>/dev/null || true)"
+export RUNINK_BE
+case "$RUNINK_BE" in runink-) RUNINK_BE=runink-1 ;; esac
+export RUNINK_PROFILE_ROOT="${RUNINK_PROFILE_ROOT:-/run/archiso/bootmnt/runink}"
+mkdir -p /mnt
+
+# 05 (plan check) and 10 (the encrypted node pool) are replaced by 12; 60, 70, 72-76 are the
+# node's artifacts, secrets, models and plan: a base image has none of them (no payload).
+for step in 12-cloud-disk 20-clone-rootfs 30-target-config 35-pacman-keyring 38-cloud-headless \
+	40-boot-grub-zfs 50-runink-user 78-cloud-target 80-enable-s6 85-cloud-finalize 90-export; do
+	f="$LIBDIR/$step.sh"
+	[ -f "$f" ] || fail "missing step $f"
+	echo; echo "===> $step"
+	sh "$f" || fail "step $step"
+done
+echo "AUTOINSTALL-DONE"

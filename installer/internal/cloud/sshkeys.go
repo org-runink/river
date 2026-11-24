@@ -27,6 +27,55 @@ var keyTypes = map[string]bool{
 func ParseSSHKeys(text string, now time.Time) []string {
 	var out []string
 	seen := map[string]bool{}
+	for _, k := range parseSSHKeys(text, now) {
+		if seen[k.blob] {
+			continue
+		}
+		seen[k.blob] = true
+		out = append(out, k.typ+" "+k.blob+" "+sanitizeComment(k.user))
+	}
+	return out
+}
+
+// ValidUser says whether name may become a local account from `ssh-keys` metadata: a
+// portable Unix name (lower case, at most 32 characters), and never root.
+func ValidUser(name string) bool {
+	if name == "" || len(name) > 32 || name == "root" {
+		return false
+	}
+	for i, c := range name {
+		switch {
+		case c == '_' || (c >= 'a' && c <= 'z'):
+		case i > 0 && (c == '-' || (c >= '0' && c <= '9')):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// ParseSSHKeysByUser turns `ssh-keys` metadata into authorized_keys lines per account: the
+// USERNAME of each line is the account that may use the key (the base image's behaviour, as
+// on a Compute Engine guest environment). A line whose USERNAME is not a valid local name, or
+// is root, is skipped; expired and malformed keys are dropped as in ParseSSHKeys.
+func ParseSSHKeysByUser(text string, now time.Time) map[string][]string {
+	out := map[string][]string{}
+	seen := map[string]bool{}
+	for _, k := range parseSSHKeys(text, now) {
+		if !ValidUser(k.user) || seen[k.user+" "+k.blob] {
+			continue
+		}
+		seen[k.user+" "+k.blob] = true
+		out[k.user] = append(out[k.user], k.typ+" "+k.blob+" "+sanitizeComment(k.user))
+	}
+	return out
+}
+
+type sshKey struct{ user, typ, blob string }
+
+// parseSSHKeys returns every well-formed, unexpired key of the metadata text, in order.
+func parseSSHKeys(text string, now time.Time) []sshKey {
+	var out []sshKey
 	for _, raw := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -44,11 +93,7 @@ func ParseSSHKeys(text string, now time.Time) []string {
 		if strings.HasPrefix(comment, "google-ssh ") && expired(strings.TrimPrefix(comment, "google-ssh "), now) {
 			continue
 		}
-		if seen[f[1]] {
-			continue
-		}
-		seen[f[1]] = true
-		out = append(out, f[0]+" "+f[1]+" "+sanitizeComment(user))
+		out = append(out, sshKey{user, f[0], f[1]})
 	}
 	return out
 }

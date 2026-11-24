@@ -30,6 +30,9 @@ done
 # river-cloud-watch (a longrun: SSH keys follow metadata changes without a reboot) is enabled
 # when the image carries it; an image without it applies keys at boot only, as before.
 [ -f "$TARGET/etc/s6/sv/river-cloud-watch/type" ] && CLOUD_SERVICES="$CLOUD_SERVICES river-cloud-watch"
+# river-cloud-startup (the base edition's `startup-script` runner) likewise.
+[ -f "$TARGET/etc/s6/sv/river-cloud-startup/type" ] && CLOUD_SERVICES="$CLOUD_SERVICES river-cloud-startup"
+# (The base edition must also have no desktop service in the boot database; checked below.)
 # On a cloud image the stack (k0s on /var/lib/k0s, the payload on /var/lib/tide) must not
 # start before river-cloud-init has unlocked and mounted the encrypted data datasets.
 : > "$TARGET/etc/s6/adminsv/rc-local/dependencies.d/river-cloud-init"
@@ -44,6 +47,11 @@ for s in $CLOUD_SERVICES; do
 done
 chroot_run "s6-rc-db -c /etc/s6/rc/compiled dependencies rc-local" | grep -qx river-cloud-init \
 	|| { echo "cloud-finalize: rc-local does not depend on river-cloud-init" >&2; exit 1; }
+if [ "${RUNINK_CLOUD_PROFILE:-node}" = base ]; then
+	for s in greetd-srv sddm-srv bluetoothd-srv cupsd-srv; do
+		! printf "%s\n" "$db" | grep -qx "$s" || { echo "cloud-finalize: desktop service $s is in the boot database" >&2; exit 1; }
+	done
+fi
 echo "cloud-finalize: s6 boot database has $CLOUD_SERVICES; rc-local waits for river-cloud-init"
 
 # --- per-machine identity -----------------------------------------------------------------
@@ -56,7 +64,7 @@ rm -rf "$TARGET/var/lib/NetworkManager"/*         # leases, and secret_key (per-
 find "$TARGET/etc/NetworkManager/system-connections" -type f ! -name river0.nmconnection -delete 2>/dev/null || true
 rm -f "$TARGET/etc/udev/rules.d/70-persistent-net.rules"
 # Enrollment state and anything that described the BUILD machine.
-find "$TARGET/etc/runink" -mindepth 1 -maxdepth 1 ! -name '*.example' -exec rm -rf {} + 2>/dev/null || true
+find "$TARGET/etc/runink" -mindepth 1 -maxdepth 1 ! -name "*.example" ! -name fw-open -exec rm -rf {} + 2>/dev/null || true
 rm -rf "$TARGET/var/lib/runink"/* "$TARGET/var/lib/river-cloud/keys" "$TARGET/var/lib/river-cloud/instance-id"
 rm -f "$TARGET/etc/runink/enrollment.env" "$TARGET/etc/k0s/join-token"
 # Credentials: keys come from instance metadata, never from the image.
@@ -144,6 +152,6 @@ for u in root runink; do
 	case "$h" in '!'*|'*'*) ;; *) bad "$u has a usable password" ;; esac
 done
 find "$TARGET/home" "$TARGET/root" -name authorized_keys 2>/dev/null | grep -q . && bad "an authorized_keys file remains"
-[ -n "$(find "$TARGET/etc/runink" -mindepth 1 ! -name '*.example' 2>/dev/null)" ] && bad "/etc/runink holds node state"
+[ -n "$(find "$TARGET/etc/runink" -mindepth 1 ! -name "*.example" ! -name fw-open 2>/dev/null)" ] && bad "/etc/runink holds node state"
 [ "$fail" -eq 0 ] || exit 1
 echo "cloud-finalize: per-machine identity cleared (machine-id, host keys, hostid, random seed, NM state, enrollment, passwords locked)"
