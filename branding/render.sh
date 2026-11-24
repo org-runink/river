@@ -24,10 +24,10 @@
 # wallpaper) and the icons; the size budgets themselves are enforced by
 # river lint branding-sync.
 #
-# EVERY visual surface carries the Runink River community mark, the M2 mascot: the
-# brown-and-white puppy grinning over the front of a three-log raft on the water. Its one
-# source is branding/mascot/river-mascot.svg; this script generates the mark files from it
-# (branding/logo/river-mark.svg, river-mark-small.svg) and everything else from those, set on
+# EVERY visual surface carries the Runink River community mark, the Runink mascot: a brown,
+# white and tan puppy with a glowing cyan cube in its mouth. Its one
+# source is branding/mascot/runink-mascot.png; this script generates the mark files from it
+# (branding/logo/river-mark.svg, river-mark-small.svg; the PNG icons straight from the PNG), set on
 # the dark palette (branding/palette.md); on dark grounds beside the light wordmark of
 # logo/river-lockup-dark.svg: GRUB (live and installed), Plymouth, the wallpaper,
 # the hicolor icon `runink-river` (os-release LOGO=, the installer's edition icon), the
@@ -88,74 +88,49 @@ art() {
 	if grep -q '<!-- RIVER-ART ' "$2"; then echo "render: art: unexpanded placeholder in $1" >&2; exit 1; fi
 }
 
-# ── the community mark: the M2 mascot (branding/mascot/river-mascot.svg) ─────────────────
-# The mascot is the ONE source of the mark: the brown-and-white puppy grinning over the front of
-# a three-log raft on the water. Both mark files are GENERATED from it, before anything else
-# (the outline mode draws the mark into the dark lockup too):
-#   logo/river-mark.svg        the mascot's art, one top-level element per line, on the
-#                              512-unit square MARK_VIEWBOX: the whole drawing, ears and
-#                              water included (the mascot file's own viewBox is a tighter
-#                              bust crop that clips an ear tip and the water). 32 px and up.
-#   logo/river-mark-small.svg  the same art, cropped to the head (SMALL_VIEWBOX), for the
-#                              16-24 px icons and favicons, where the whole puppy on its
-#                              raft closes up into a smudge. Every element is still drawn;
-#                              the crop only frames the face.
-# Its ids are prefixed river-m2- (the lockups and wallpapers embed the mark in bigger SVGs).
+# ── the community mark: the Runink mascot (branding/mascot/runink-mascot.png) ────────────
+# The mascot is the ONE source of the mark: a brown, white and tan puppy with a glowing cyan
+# cube in its mouth, as a sticker with a cream outline. It is raster art (a 768 px PNG, 256
+# colours, alpha); a vector master would render sharper at small sizes, and when there is one
+# it replaces the raster embedded below. Both mark files are GENERATED from it, before anything
+# else (the outline mode draws the mark into the dark lockup too):
+#   logo/river-mark.svg        the mascot on the 384-unit square MARK_PX (the PNG resampled
+#                              to MARK_PX and embedded as a data URI, so every surface that draws
+#                              "the mark" draws one file). 32 px and up.
+#   logo/river-mark-small.svg  the head and the cube only (SMALL_CROP of the master, 242 units),
+#                              for the 16-24 px icons and favicons, where the whole puppy closes
+#                              up into a smudge.
+# The image is xlink:href, not href: Qt's SVG renderer (the icon theme) only reads that form.
 # Each generated file records the mascot's sha256, which river lint branding-sync checks.
-MASCOT="$B/mascot/river-mascot.svg"
-MARK_VIEWBOX="0 0 512 512"
-SMALL_VIEWBOX="95 20 280 280"
-# mark_elements <mascot.svg> <out> — the mascot's drawing elements, one top-level element
-# per line (after its <title>), ids prefixed
-mark_elements() {
-	LC_ALL=C awk '
-	{ s = s $0 "\n" }
-	END {
-		t = index(s, "</title>"); if (!t) { print "render: mark: no <title> in the mascot" > "/dev/stderr"; exit 1 }
-		s = substr(s, t + 8)
-		c = 0; for (p = length(s); p > 0; p--) if (substr(s, p, 6) == "</svg>") { c = p; break }
-		if (!c) { print "render: mark: no </svg> in the mascot" > "/dev/stderr"; exit 1 }
-		s = substr(s, 1, c - 1); gsub(/\n/, " ", s)
-		# ids -> river-m2-<id>, and every reference to them
-		r = s; n = 0
-		while (match(r, /id="[^"]*"/)) { ids[++n] = substr(r, RSTART + 4, RLENGTH - 5); r = substr(r, RSTART + RLENGTH) }
-		for (i = 1; i <= n; i++) {
-			gsub("id=\"" ids[i] "\"", "id=\"river-m2-" ids[i] "\"", s)
-			gsub("url\\(#" ids[i] "\\)", "url(#river-m2-" ids[i] ")", s)
-		}
-		d = 0; cur = ""
-		while (match(s, /<[^>]*>/)) {
-			pre = substr(s, 1, RSTART - 1); tag = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
-			if (d == 0 && pre ~ /[^ ]/) { print "render: mark: text outside an element: " pre > "/dev/stderr"; exit 1 }
-			cur = cur (d > 0 ? pre : "") tag
-			if (tag ~ /^<!--/) { if (d == 0) cur = ""; continue }
-			if (tag ~ /^<\//) d--; else if (tag !~ /\/>$/) d++
-			if (d < 0) { print "render: mark: unbalanced mascot markup" > "/dev/stderr"; exit 1 }
-			if (d == 0) { print " " cur; cur = "" }
-		}
-		if (d != 0) { print "render: mark: unbalanced mascot markup" > "/dev/stderr"; exit 1 }
-	}' "$1" > "$2"
-	[ "$(wc -l < "$2")" -gt 10 ] || { echo "render: mark: $1 split into too few elements" >&2; exit 1; }
-}
-# mark_file <viewBox> <what> <elements> <out>
+command -v magick >/dev/null 2>&1 || { echo "render: need ImageMagick 7 (magick)" >&2; exit 1; }
+MASCOT="$B/mascot/runink-mascot.png"
+MARK_PX=384
+SMALL_PX=242
+# the head and the cube, in master pixels (the master is square with a small transparent margin)
+SMALL_CROP="484x484+244+28"
+# mark_file <px> <what> <png> <out> — an SVG that is just the image, px units square
 mark_file() {
 	{
-		printf '<svg viewBox="%s" xmlns="http://www.w3.org/2000/svg">\n' "$1"
+		printf '<svg viewBox="0 0 %s %s" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">\n' "$1" "$1"
 		printf ' <!-- SPDX-FileCopyrightText: 2026 Runink\n      SPDX-License-Identifier: LicenseRef-Runink-Trademark\n'
-		printf '      Runink River community mark, %s: the M2 mascot, a brown-and-white puppy\n' "$2"
-		printf '      grinning over the front of a three-log raft on the water. GENERATED by\n'
-		printf '      branding/render.sh from branding/mascot/river-mascot.svg, whose sha256 is\n'
+		printf '      Runink River community mark, %s: the Runink mascot, a brown, white and tan\n' "$2"
+		printf '      puppy with a glowing cyan cube in its mouth. GENERATED by branding/render.sh from\n'
+		printf '      branding/mascot/runink-mascot.png, whose sha256 is\n'
 		printf '      mascot-sha256 %s\n' "$(sha256sum "$MASCOT" | cut -d' ' -f1)"
 		printf '      Edit the mascot and re-run; never edit this file. -->\n'
 		printf ' <title>Runink River</title>\n'
-		cat "$3"
+		printf ' <image width="%s" height="%s" xlink:href="data:image/png;base64,%s"/>\n' "$1" "$1" "$(base64 -w0 "$3")"
 		printf '</svg>\n'
 	} > "$4"
 }
 mkdir -p "$TMP/m2"
-mark_elements "$MASCOT" "$TMP/m2/elements"
-mark_file "$MARK_VIEWBOX" "primary (32 px and up)" "$TMP/m2/elements" "$B/logo/river-mark.svg"
-mark_file "$SMALL_VIEWBOX" "small (the head, for 16-24 px)" "$TMP/m2/elements" "$B/logo/river-mark-small.svg"
+# the embedded image: the (square) master, resampled with Lanczos, 256 colours undithered
+magick "$MASCOT" -background none \
+	-filter Lanczos -resize "${MARK_PX}x${MARK_PX}" -colors 256 +dither -define png:compression-level=9 -strip "$TMP/m2/mark.png"
+magick "$MASCOT" -crop "$SMALL_CROP" +repage -background none \
+	-filter Lanczos -resize "${SMALL_PX}x${SMALL_PX}" -colors 256 +dither -define png:compression-level=9 -strip "$TMP/m2/small.png"
+mark_file "$MARK_PX" "primary (32 px and up)" "$TMP/m2/mark.png" "$B/logo/river-mark.svg"
+mark_file "$SMALL_PX" "small (the head, for 16-24 px)" "$TMP/m2/small.png" "$B/logo/river-mark-small.svg"
 
 # ── --outline: live-text lockup sources -> outlined branding/logo/*.svg ─────────────────────
 if [ "${1:-}" = "--outline" ]; then
@@ -201,7 +176,6 @@ EOF
 	exit 0
 fi
 
-command -v magick >/dev/null 2>&1 || { echo "render: need ImageMagick 7 (magick)" >&2; exit 1; }
 
 # ── tools ──────────────────────────────────────────────────────────────────────────────
 if command -v rsvg-convert >/dev/null 2>&1; then
@@ -296,49 +270,6 @@ for i in 0 1 2; do
 done
 ship "$P" "$WS/usr/share/plymouth/themes/river"
 
-# ── the community mark in layers (the terminal greeting's frames) ────────────────────────
-# The mark is split into five LAYERS, generated here from branding/logo/river-mark.svg (never
-# hand-drawn), in the mark's own drawing order: back (the raft's back logs and the puppy's
-# body, legs and chest), head (the puppy's head), front (the log ends and the front paws on
-# them), water (the water band) and waves (the wave lines and the two leaves on the water).
-# The split is by position, keyed on the two elements that start a layer: the head is the
-# mark's one top-level <g transform="matrix(...)">, and the water is its one fill="#9ed8d2"
-# element. The script checks that the layers stacked in order ARE the mark's elements, byte
-# for byte, in the mark's own 512-unit viewBox (MARK_VIEWBOX); frame() below composes the
-# terminal greeting from them.
-[ "$MARK_VIEWBOX" = "0 0 512 512" ] || { echo "render: mark layers: frame() assumes MARK_VIEWBOX 0 0 512 512" >&2; exit 1; }
-MARK_SRC="$B/logo/river-mark.svg"
-ML="$TMP/mark"
-LAYERS="back head front water waves"
-mkdir -p "$ML"
-: > "$ML/defs.body"
-awk -v D="$ML" '
-	function put(n) { print > (D "/" n ".body"); print > (D "/all.body") }
-	BEGIN { layer = "back" }
-	/^ *<svg/ || /^ *<\/svg>/ || /^ *<\?xml/ || /^ *<title>/ { next }
-	/^ *<!--/ { inc = !index($0, "-->"); next }
-	inc { if (index($0, "-->")) inc = 0; next }
-	/^ *<defs>/ { print > (D "/defs.body"); next }
-	/^ *<g transform="matrix\(/ { if (layer != "back") bad = 1; put("head"); layer = "front"; heads++; next }
-	/fill="#9ed8d2"/ { if (layer != "front") bad = 1; put("water"); layer = "waves"; waters++; next }
-	/^ *<[a-z]/ { put(layer); next }
-	/[^ ]/ { print "render: mark layers: unclassified line in river-mark.svg: " $0 > "/dev/stderr"; bad = 1 }
-	END {
-		if (heads != 1 || waters != 1) { print "render: mark layers: want one head group and one water element, got " heads + 0 " and " waters + 0 > "/dev/stderr"; bad = 1 }
-		exit bad
-	}
-' "$MARK_SRC" || { echo "render: mark layers: river-mark.svg no longer has the shape the animation splits" >&2; exit 1; }
-stack=""
-for n in $LAYERS; do
-	[ -s "$ML/$n.body" ] || { echo "render: mark layers: layer $n is empty (river-mark.svg changed?)" >&2; exit 1; }
-	stack="$stack $ML/$n.body"
-done
-# the layers, stacked in order, are exactly the mark's drawing elements
-# shellcheck disable=SC2086
-cat $stack > "$ML/stack.body"
-cmp -s "$ML/stack.body" "$ML/all.body" || {
-	echo "render: mark layers: the stacked layers do not reproduce river-mark.svg (element order changed?)" >&2; exit 1; }
-
 # ── wallpaper ──────────────────────────────────────────────────────────────────────────────
 # One KDE wallpaper package, two variants: Plasma picks contents/images_dark/ when the colour
 # scheme is dark and contents/images/ otherwise. ONE resolution per variant, 3840x2160 (Plasma
@@ -390,14 +321,20 @@ for d in "$EM"/*/; do
 	ship "$d" "$WS/usr/share/wallpapers/$(basename "$d")"
 done
 
-# icon <name> <svg> <px> <outdir> — square transparent PNG, rendered at 4x and downscaled
-# (sharper small sizes).
+# png <px> <out> [crop] — square transparent PNG straight from the 768 px mascot (Lanczos; the
+# crop, a magick geometry in master pixels, frames the head and the cube for the small forms),
+# 256 colours undithered, which keeps the 256 px icon under 80 KiB.
+png() {
+	mkdir -p "$(dirname "$2")"
+	# shellcheck disable=SC2086
+	magick "$MASCOT" ${3:+-crop $3 +repage} -background none -filter Lanczos -resize "${1}x${1}" \
+		-colors 256 +dither -define png:compression-level=9 -strip "$2"
+	pngopt "$2"
+}
+# icon <name> <px> <outdir> [crop]
 icon() {
-	out="$4/${3}x${3}/apps/$1.png"
-	mkdir -p "$(dirname "$out")"
-	svg2png "$2" "$TMP/icon-big.png" $(($3 * 4)) $(($3 * 4)) >/dev/null
-	magick "$TMP/icon-big.png" -resize "${3}x${3}" -strip "$out"
-	pngopt "$out"
+	out="$3/${2}x${2}/apps/$1.png"
+	png "$2" "$out" "${4:-}"
 	printf 'render: %-78s %5s B\n' "${out#"$ROOT"/}" "$(wc -c < "$out")"
 }
 MARK="$B/logo/river-mark.svg"
@@ -405,16 +342,16 @@ SMALL="$B/logo/river-mark-small.svg"
 
 # ── hicolor icon `runink-river` (os-release LOGO=, Info Center, the Kickoff button,
 #    the installer's edition icon) ──────────────────────────────────────────────────────────
-# scalable = the mark (river-mark.svg: the whole puppy on its raft, transparent; its dark
-# outline and cream and brown fills read on dark panels and light ones). The small mark
-# (river-mark-small.svg: the same art cropped to the head) at 24 px and below, where the
+# scalable = the mark (river-mark.svg: the whole puppy with its cube, transparent; its dark
+# outline and cream sticker border read on dark panels and light ones). The small mark
+# (the same art cropped to the head and the cube) at 24 px and below, where the
 # whole puppy closes up into a smudge; the whole mark from 32 px.
 IC="$B/icons/hicolor"
 rm -rf "$IC"
 mkdir -p "$IC/scalable/apps"
 cp "$MARK" "$IC/scalable/apps/runink-river.svg"
-for px in 16 22 24; do icon runink-river "$SMALL" "$px" "$IC"; done
-for px in 32 48 64 128 256; do icon runink-river "$MARK" "$px" "$IC"; done
+for px in 16 22 24; do icon runink-river "$px" "$IC" "$SMALL_CROP"; done
+for px in 32 48 64 128 256; do icon runink-river "$px" "$IC"; done
 ship "$IC" "$WS/usr/share/icons/hicolor"
 
 # ── Favicons (not shipped into an overlay from here) ─────────────────────────────────────
@@ -426,10 +363,7 @@ FV="$B/icons/favicon"
 rm -rf "$FV"
 mkdir -p "$FV"
 for px in 16 32 48; do
-	if [ "$px" -le 24 ]; then src="$SMALL"; else src="$MARK"; fi
-	svg2png "$src" "$TMP/fav-big.png" $((px * 4)) $((px * 4)) >/dev/null
-	magick "$TMP/fav-big.png" -resize "${px}x${px}" -strip "$FV/favicon-$px.png"
-	pngopt "$FV/favicon-$px.png"
+	if [ "$px" -le 24 ]; then png "$px" "$FV/favicon-$px.png" "$SMALL_CROP"; else png "$px" "$FV/favicon-$px.png"; fi
 done
 magick "$FV/favicon-16.png" "$FV/favicon-32.png" "$FV/favicon-48.png" "$FV/favicon.ico"
 cp "$SMALL" "$FV/favicon.svg"
@@ -498,29 +432,10 @@ halfblock() {
 		}
 	}' > "$2"
 }
-# frame <dy> <dx> <out.svg> — the mark with the raft (the puppy aboard: layers back, head,
-# front) moved down dy and the waves layer moved right dx (clipped to the water band), in the
-# mark's 512 units (at 44 px one pixel is about 11.6 units). Composed from the same layers
-# split above, so it fails loudly with them if the mark changes shape.
-frame() {
-	wd="$(sed -n 's/^ *<path d="\([^"]*\)".*/\1/p' "$ML/water.body")"
-	[ -n "$wd" ] || { echo "render: frame: the water layer is not one <path d=...> (river-mark.svg changed?)" >&2; exit 1; }
-	{
-		printf '<svg viewBox="%s" xmlns="http://www.w3.org/2000/svg">\n' "$MARK_VIEWBOX"
-		printf '<defs><clipPath id="river-water"><path d="%s"/></clipPath></defs>\n' "$wd"
-		cat "$ML/defs.body"
-		printf '<g transform="translate(0 %s)">\n' "$1"
-		cat "$ML/back.body" "$ML/head.body" "$ML/front.body"
-		printf '</g>\n'
-		cat "$ML/water.body"
-		printf '<g clip-path="url(#river-water)"><g transform="translate(%s 0)">\n' "$2"
-		cat "$ML/waves.body"
-		printf '</g></g>\n</svg>\n'
-	} > "$3"
-}
 rm -rf "$B/fastfetch"
 mkdir -p "$B/fastfetch"
-svg2png "$B/logo/river-mark.svg" "$TMP/ff.png" 44 44 >/dev/null
+# Lanczos from the embedded mark image: truer at 44 px than the SVG renderer's downscale.
+magick "$TMP/m2/mark.png" -background none -filter Lanczos -resize 44x44 -depth 8 "$TMP/ff.png"
 halfblock "$TMP/ff.png" "$B/fastfetch/river-mark.ansi"
 for f in "$B/fastfetch/river-mark.ansi"; do
 	[ "$(wc -l < "$f")" -eq 22 ] || { echo "render: $f is not 22 rows" >&2; exit 1; }

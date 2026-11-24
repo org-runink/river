@@ -4,6 +4,6 @@
      branding/plymouth/river/logo.png and of the Plasma start-up splash image
      (branding/render.sh swaps the placeholder for branding/logo/river-lockup-dark.svg, so
      both come from the one source). -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="280" viewBox="0 0 1260 280">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1260" height="280" viewBox="0 0 1260 280">
   <!-- RIVER-ART src=logo/river-lockup-dark.svg x=630 y=0 height=280 anchor=middle -->
 </svg>

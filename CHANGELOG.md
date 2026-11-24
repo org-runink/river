@@ -104,6 +104,17 @@ None.
 
 ### Changed
 
+- **The Runink mascot is the Runink River community mark.** The brown, white and tan puppy with
+  a glowing cyan cube in its mouth replaces the puppy on a raft on every surface: the GRUB
+  background, the Plymouth logo, both wallpapers, the lockups, the `runink-river` hicolor icons
+  (and so `LOGO=` in os-release and the installer's header mark), the favicons, the terminal
+  greeting, `/etc/issue` and the website. The mascot is raster art, so
+  `branding/mascot/runink-mascot.png` (768 px, 256 colours) is now the one source and replaces
+  `branding/mascot/river-mascot.{svg,png}`; `branding/render.sh` embeds a resampled copy in the
+  generated `river-mark*.svg` and renders the icons from the PNG. A vector master would render
+  sharper at small sizes. Downstream editions that draw `branding/logo/river-mark.svg` get the
+  new art after their next pin bump; the file names did not change.
+
 - **Installer steps `78-cloud-target` and `85-cloud-finalize` (downstream contract).** These
   are shared steps, so a downstream cloud profile copies both at its next pin bump.
   - **78** writes `RIVER_CLOUD_PROFILE` (from `RUNINK_CLOUD_PROFILE`, default `node`) into

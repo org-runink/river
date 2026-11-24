@@ -45,7 +45,7 @@ path = ["branding/render.sh", "branding/**/*.md"]
 SPDX-FileCopyrightText = "2026 The RIVER Authors"
 SPDX-License-Identifier = "MIT"
 
-# Runink BRAND assets: the Runink River community mark (the M2 mascot, a puppy on a raft) and
+# Runink BRAND assets: the Runink River community mark (the Runink mascot, a puppy with a glowing cube) and
 # everything rendered from it: the hicolor icons and favicons, the GRUB background, the
 # Plymouth logo, the Runink River wallpaper, /etc/issue. All rights
 # reserved, trademark of Runink. A community build must replace them (docs/LICENSING.md).

@@ -56,7 +56,7 @@ disableKinds = ["taxonomy", "term", "rss"]
   [[module.mounts]]
     source = "data"
     target = "data"
-  # The Runink River logo (the M2 mascot), served straight from branding/logo/ so the site
+  # The Runink River logo (the Runink mascot), served straight from branding/logo/ so the site
   # never holds a second copy of the project mark (LicenseRef-Runink-Trademark, REUSE.toml).
   # One mount per file: a directory mount would publish the other marks too, and its file
   # filter changed name between Hugo 0.147 (includeFiles) and 0.153+ (files).
@@ -67,11 +67,8 @@ disableKinds = ["taxonomy", "term", "rss"]
     source = "../branding/logo/river-mark-small.svg"
     target = "static/brand/river-mark-small.svg"
   [[module.mounts]]
-    source = "../branding/mascot/river-mascot.svg"
-    target = "static/brand/river-mascot.svg"
-  [[module.mounts]]
-    source = "../branding/mascot/river-mascot.png"
-    target = "static/brand/river-mascot.png"
+    source = "../branding/mascot/runink-mascot.png"
+    target = "static/brand/runink-mascot.png"
 
 [outputs]
   home = ["html"]
