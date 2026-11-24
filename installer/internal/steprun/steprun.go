@@ -85,7 +85,7 @@ func AppendFile(path, line string) {
 	if path == "" {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- the installer's own log path
 	if err != nil {
 		return
@@ -108,7 +108,7 @@ func Persist(logFile, targetRoot string) string {
 		return ""
 	}
 	dst := filepath.Join(targetRoot, "var/log", filepath.Base(logFile))
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return ""
 	}
 	if err := os.WriteFile(dst, b, 0o600); err != nil {
