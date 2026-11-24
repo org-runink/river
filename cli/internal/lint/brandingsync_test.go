@@ -27,7 +27,7 @@ func brandFixture(t *testing.T) string {
 	mascot := "<svg>mascot</svg>\n"
 	s := sha256.Sum256([]byte(mascot))
 	mark := "<svg><!-- mascot-sha256 " + hex.EncodeToString(s[:]) + "\n--></svg>\n"
-	w("branding/mascot/river-mascot.svg", mascot)
+	w("branding/mascot/runink-mascot.png", mascot)
 	for _, f := range []string{"river-mark.svg", "river-mark-small.svg", "river-lockup.svg", "river-lockup-dark.svg"} {
 		w("branding/logo/"+f, mark)
 	}
@@ -152,8 +152,8 @@ func TestBrandingSyncFailures(t *testing.T) {
 		{"emerald copy", "MISSING: " + O + "usr/share/wallpapers/Abstract (copy of branding/wallpapers/emerald/Abstract)", func(t *testing.T, d string) {
 			os.RemoveAll(filepath.Join(d, O+"usr/share/wallpapers/Abstract"))
 		}},
-		{"stale mark", "branding/logo/river-mark.svg does not draw the current branding/mascot/river-mascot.svg", func(t *testing.T, d string) {
-			lbWrite(t, d, "branding/mascot/river-mascot.svg", "<svg>new mascot</svg>\n")
+		{"stale mark", "branding/logo/river-mark.svg does not draw the current branding/mascot/runink-mascot.png", func(t *testing.T, d string) {
+			lbWrite(t, d, "branding/mascot/runink-mascot.png", "<svg>new mascot</svg>\n")
 		}},
 		{"os-release", "os-release LOGO is not runink-river", func(t *testing.T, d string) {
 			lbWrite(t, d, O+"etc/os-release", "LOGO=archlinux\n")

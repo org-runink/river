@@ -292,21 +292,21 @@ func BrandingSync(_ context.Context, repo string, w io.Writer) error {
 		}
 	}
 
-	// The community mark is the M2 mascot: branding/logo/river-mark.svg and
-	// river-mark-small.svg are GENERATED from branding/mascot/river-mascot.svg, and each records
+	// The community mark is the Runink mascot: branding/logo/river-mark.svg and
+	// river-mark-small.svg are GENERATED from branding/mascot/runink-mascot.png, and each records
 	// the mascot's sha256, which the lockups carry along (they embed the mark). A mascot edit
 	// without a re-render, or a hand-drawn mark, fails here.
 	mascotSum := ""
-	if b, err := os.ReadFile(at("branding/mascot/river-mascot.svg")); err == nil {
+	if b, err := os.ReadFile(at("branding/mascot/runink-mascot.png")); err == nil {
 		s := sha256.Sum256(b)
 		mascotSum = hex.EncodeToString(s[:])
 	} else {
-		r.fail("MISSING: branding/mascot/river-mascot.svg (the mark's one source)")
+		r.fail("MISSING: branding/mascot/runink-mascot.png (the mark's one source)")
 	}
 	for _, f := range []string{"branding/logo/river-mark.svg", "branding/logo/river-mark-small.svg", "branding/logo/river-lockup.svg",
 		"branding/logo/river-lockup-dark.svg", O + "/usr/share/icons/hicolor/scalable/apps/runink-river.svg"} {
 		if mascotSum == "" || !brandLineMatch(at(f), regexp.MustCompile(`mascot-sha256 `+mascotSum+`$`)) {
-			r.fail("%s does not draw the current branding/mascot/river-mascot.svg (re-run branding/render.sh; for the dark lockup, its outline mode)", f)
+			r.fail("%s does not draw the current branding/mascot/runink-mascot.png (re-run branding/render.sh; for the dark lockup, its outline mode)", f)
 		}
 	}
 

@@ -237,7 +237,7 @@ restated for a desktop. Changing them again needs the TSC's sign-off (GOVERNANCE
   copy (`river lint branding-sync`). Colours come from `branding/palette.md` only
   (dark-first, one sage accent; the old warm palette is retired and the lint rejects it).
   Text in artwork is outlined by `branding/render.sh` in outline mode, never rendered live.
-  The Runink River community mark (the M2 mascot `branding/mascot/river-mascot.svg`, its one
+  The Runink River community mark (the Runink mascot `branding/mascot/runink-mascot.png`, its one
   source; the marks generated from it, `branding/logo/river-mark*.svg`, `river-lockup*.svg`;
   `runink-tagline.svg`, `branding/ascii/`) and every render of it are Runink brand
   assets (`LicenseRef-Runink-Trademark`, all rights reserved); a community build swaps them
