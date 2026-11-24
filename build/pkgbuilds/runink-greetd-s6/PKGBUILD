@@ -10,7 +10,7 @@
 # (iso-profiles/river/live-overlay; 20-clone-rootfs deletes it on install).
 pkgname=runink-greetd-s6
 pkgver=2026.10
-pkgrel=1
+pkgrel=2
 pkgdesc="s6 service for greetd, the Runink River login screen"
 arch=('any')
 url="https://github.com/org-runink/river"
@@ -24,7 +24,12 @@ package() {
 	install -d "$sv/dependencies.d"
 	printf 'longrun\n' > "$sv/type"
 	local d
-	for d in zfs-mount plymouth-quit elogind; do
+	# elogind only: the package must compile on its own. zfs-mount and plymouth-quit are defined by
+	# the profile's root overlay, which is copied AFTER the packages are installed, so naming them
+	# here made the s6 repository fail to compile at install time ("undefined service name") and
+	# never create its `current` set. The profile adds those two dependencies the same way it adds
+	# runink-fw to NetworkManager (root-overlay/etc/s6/sv/greetd/dependencies.d).
+	for d in elogind; do
 		: > "$sv/dependencies.d/$d"
 	done
 	cat > "$sv/run" <<'RUN'
