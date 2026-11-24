@@ -54,6 +54,16 @@ if [ -n "$installed" ]; then
 		done
 	fi
 fi
+# greetd is listed before runink-greetd-s6, which depends on it, so the one-at-a-time loop above cannot
+# remove it ("greetd kept (a kept package needs it)") until that service package is gone. Retry it, with
+# its greeters, once the loop has run.
+grp=""
+for p in greetd greetd-agreety greetd-tuigreet; do
+	chroot "$TARGET" pacman -Q "$p" >/dev/null 2>&1 && grp="$grp $p"
+done
+# shellcheck disable=SC2086 # a package list
+if [ -n "$grp" ]; then chroot_run "pacman -Rns --noconfirm $grp" >/dev/null 2>&1 || echo "headless: the greetd group is still installed:$grp"; fi
+
 for p in $MUST_GO; do
 	if chroot "$TARGET" pacman -Q "$p" >/dev/null 2>&1; then
 		echo "headless: $p is still installed" >&2
