@@ -53,11 +53,13 @@ func screenIndex(s string) int {
 
 // Config is how river-installer starts the wizard.
 type Config struct {
-	Version   string // /etc/runink-os-version
-	StateFile string // non-secret progress, so a restarted backend resumes (0600, on /run)
-	RunDir    string // private scratch dir on /run (0700)
-	Pool      string
-	Logf      func(format string, args ...any)
+	Version    string // /etc/runink-os-version
+	StateFile  string // non-secret progress, so a restarted backend resumes (0600, on /run)
+	RunDir     string // private scratch dir on /run (0700)
+	Pool       string
+	LogFile    string // the install log on the live system (default DefaultLogFile)
+	TargetRoot string // where the new system is mounted (default /mnt); the log is copied there
+	Logf       func(format string, args ...any)
 }
 
 // Wizard is the install flow.
@@ -143,9 +145,18 @@ type installView struct {
 	Steps      []stepState `json:"steps"`
 	Error      string      `json:"error,omitempty"`
 	FailedStep string      `json:"failed_step,omitempty"`
-	StartedAt  int64       `json:"started_at,omitempty"`
-	Percent    int         `json:"percent"`
-	ETA        int         `json:"eta_seconds"`
+	// What a failed step shows the operator (the reason is the step's own last lines).
+	Reason      string   `json:"reason,omitempty"`        // e.g. "exit code 1"
+	Tail        []string `json:"tail,omitempty"`          // the failed step's last lines
+	State       string   `json:"state,omitempty"`         // StateNotInstalled | StatePartial
+	LogPath     string   `json:"log_path,omitempty"`      // the log on the live system
+	LogOnTarget string   `json:"log_on_target,omitempty"` // and on the new system, when it exists
+	// Notices are the install-notice lines steps printed (a deferred step, for example); shown
+	// on the failure and on the done screen.
+	Notices   []string `json:"notices,omitempty"`
+	StartedAt int64    `json:"started_at,omitempty"`
+	Percent   int      `json:"percent"`
+	ETA       int      `json:"eta_seconds"`
 }
 
 type stepState struct {
@@ -160,6 +171,12 @@ type stepState struct {
 func New(cfg Config, sys System) *Wizard {
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, ...any) {}
+	}
+	if cfg.LogFile == "" {
+		cfg.LogFile = DefaultLogFile
+	}
+	if cfg.TargetRoot == "" {
+		cfg.TargetRoot = "/mnt"
 	}
 	if cfg.Pool == "" {
 		cfg.Pool = "zriver"
@@ -235,18 +252,24 @@ type accountView struct {
 
 // MachineView is the friendly summary of the probe and plan.
 type MachineView struct {
-	Status      string      `json:"status"`
-	Error       string      `json:"error,omitempty"`
-	CPU         string      `json:"cpu,omitempty"`
-	Cores       int         `json:"cores,omitempty"`
-	Threads     int         `json:"threads,omitempty"`
-	PsABI       string      `json:"psabi,omitempty"`
-	MemoryGiB   float64     `json:"memory_gib,omitempty"`
-	Virtual     bool        `json:"virtual"`
-	UEFI        bool        `json:"uefi"`
-	Verdict     string      `json:"verdict,omitempty"`
-	Refusals    []string    `json:"refusals,omitempty"`
-	Warnings    []string    `json:"warnings,omitempty"`
+	Status    string   `json:"status"`
+	Error     string   `json:"error,omitempty"`
+	CPU       string   `json:"cpu,omitempty"`
+	Cores     int      `json:"cores,omitempty"`
+	Threads   int      `json:"threads,omitempty"`
+	PsABI     string   `json:"psabi,omitempty"`
+	MemoryGiB float64  `json:"memory_gib,omitempty"`
+	Virtual   bool     `json:"virtual"`
+	UEFI      bool     `json:"uefi"`
+	Verdict   string   `json:"verdict,omitempty"`
+	Refusals  []string `json:"refusals,omitempty"`
+	Warnings  []string `json:"warnings,omitempty"`
+	// MemoryFirmware: Linux sees less memory than is installed (the plan states why and what
+	// the firmware setup offers). Shown before the install; it never blocks it.
+	MemoryFirmware *planner.MemoryFinding `json:"memory_firmware,omitempty"`
+	// MemoryLines is the memory breakdown (system, graphics, installed total, borrowable), always
+	// shown; a part that could not be read says "unknown".
+	MemoryLines []string    `json:"memory_lines,omitempty"`
 	Layout      string      `json:"layout,omitempty"`
 	UsableBytes uint64      `json:"usable_bytes,omitempty"`
 	Disks       []diskView  `json:"disks,omitempty"`
@@ -348,6 +371,10 @@ func (w *Wizard) machineViewLocked() *MachineView {
 		var pl planner.Plan
 		if json.Unmarshal(m.Plan, &pl) == nil {
 			mv.Verdict, mv.Refusals, mv.Warnings = pl.Verdict, pl.Refusals, pl.Warnings
+			mv.MemoryFirmware = pl.MemoryFirmware
+			if pl.MemoryBreakdown != nil {
+				mv.MemoryLines = pl.MemoryBreakdown.Lines
+			}
 			mv.Layout, mv.UsableBytes = pl.Storage.Layout, pl.Storage.UsableBytes
 			special := map[string]bool{}
 			if pl.Storage.SpecialVdev != nil {
@@ -1009,33 +1036,46 @@ func (w *Wizard) runInstall(ctx context.Context) {
 	confirmed := append([]string(nil), w.st.Machine.Confirmed...)
 	w.mu.Unlock()
 
-	fail := func(step, key string, err error) {
+	fail := func(step, key string, err error, tail []string) {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		w.st.Install.Status, w.st.Install.Error, w.st.Install.FailedStep = "failed", key, step
+		w.st.Install.Reason = exitReason(err)
+		w.st.Install.Tail = lastLines(tail, tailLines)
+		if len(w.st.Install.Tail) == 0 {
+			w.st.Install.Tail = []string{err.Error()}
+		}
+		w.st.Install.State = stepSituation(step)
+		w.st.Install.LogPath = w.cfg.LogFile
 		for i := range w.st.Install.Steps {
 			if w.st.Install.Steps[i].ID == step {
 				w.st.Install.Steps[i].Status = "failed"
 			}
 		}
 		w.appendLogLocked(fmt.Sprintf("installer: %s failed: %v", step, err))
+		if p := persistLog(w.cfg.LogFile, w.cfg.TargetRoot); p != "" {
+			w.st.Install.LogOnTarget = p
+		}
 		w.cfg.Logf("install failed at %s", step)
 		w.changedLocked()
 	}
 
+	w.mu.Lock()
+	w.appendLogLocked("=== install started " + w.now().UTC().Format(time.RFC3339))
+	w.mu.Unlock()
 	// A retry starts from a clean slate: nothing mounted at the target, the pool not imported.
 	if err := w.sys.PrepareRetry(ctx, w.cfg.Pool); err != nil {
-		fail("00-preflight", "err.install.prepare", err)
+		fail("00-preflight", "err.install.prepare", err, nil)
 		return
 	}
 	planEnv, err := w.sys.Resolve(ctx, plan, confirmed)
 	if err != nil {
-		fail("05-hwplan-verify", "err.install.resolve", err)
+		fail("05-hwplan-verify", "err.install.resolve", err, nil)
 		return
 	}
 	env, cleanup, err := w.installEnv(planEnv, confirmed)
 	if err != nil {
-		fail("00-preflight", "err.install.env", err)
+		fail("00-preflight", "err.install.env", err, nil)
 		return
 	}
 	defer cleanup()
@@ -1052,9 +1092,14 @@ func (w *Wizard) runInstall(ctx context.Context) {
 			stdin = strings.NewReader(w.key + "\n")
 			w.mu.Unlock()
 		}
+		var stepLines []string
 		err := w.sys.RunStep(ctx, s.ID, env, stdin, func(line string) {
 			w.mu.Lock()
 			w.appendLogLocked(line)
+			stepLines = append(stepLines, w.redactLocked(line))
+			if n, ok := strings.CutPrefix(line, NoticePrefix); ok {
+				w.st.Install.Notices = append(w.st.Install.Notices, s.ID+": "+w.redactLocked(strings.TrimSpace(n)))
+			}
 			// rsync's overall percentage can step back while it discovers files: never show that.
 			if p := progressOf(line); p >= 0 && i < len(w.st.Install.Steps) && p > w.st.Install.Steps[i].Progress {
 				w.st.Install.Steps[i].Progress = p
@@ -1064,14 +1109,23 @@ func (w *Wizard) runInstall(ctx context.Context) {
 			w.mu.Unlock()
 		})
 		if err != nil {
-			fail(s.ID, "err.install.step", err)
+			w.mu.Lock()
+			w.appendLogLocked("installer: step " + s.ID + " exited: " + exitReason(err))
+			w.mu.Unlock()
+			fail(s.ID, "err.install.step", err, stepLines)
 			return
 		}
 		w.setStep(i, "done", 100, int(w.now().Sub(start).Seconds()))
+		w.mu.Lock()
+		if p := persistLog(w.cfg.LogFile, w.cfg.TargetRoot); p != "" {
+			w.st.Install.LogOnTarget = p
+		}
+		w.mu.Unlock()
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.st.Install.Status, w.st.Install.Percent, w.st.Install.ETA = "done", 100, 0
+	w.st.Install.LogPath = w.cfg.LogFile
 	w.st.Screen = "done"
 	// The key has done its job: the operator saw it, the pool is sealed with it. Forget it.
 	w.key, w.pass = "", ""
@@ -1140,6 +1194,7 @@ func progressOf(line string) int {
 // appendLogLocked keeps the install log, with every secret this process knows removed.
 func (w *Wizard) appendLogLocked(line string) {
 	line = w.redactLocked(line)
+	appendFile(w.cfg.LogFile, line)
 	w.logs = append(w.logs, line)
 	if len(w.logs) > 5000 {
 		w.logs = w.logs[len(w.logs)-5000:]

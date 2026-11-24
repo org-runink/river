@@ -216,6 +216,11 @@ echo "An existing UNENCRYPTED pool is refused (ZFS cannot encrypt in place — s
 printf 'Type YES to proceed: '; read -r confirm
 [ "$confirm" = "YES" ] || { echo "aborted."; exit 1; }
 
+# river-steprun (Go, installer/steprun) keeps the install log, the exit code and the failure
+# report of every step, and repeats the steps' install-notice lines at the end.
+command -v river-steprun >/dev/null 2>&1 || { echo "runink-install: river-steprun is missing from the live image (runink-installer package); refusing to install without step reports" >&2; exit 1; }
+river-steprun init || exit 1
+
 # --- Run ordered steps ----------------------------------------------------
 for step in \
 	00-preflight \
@@ -233,11 +238,11 @@ for step in \
 	90-export
 do
 	f="$LIBDIR/$step.sh"
-	[ -f "$f" ] || { echo "installer: missing step $f" >&2; exit 1; }
+	[ -f "$f" ] || { echo "installer: missing step $f (the installer image is incomplete)" >&2; exit 1; }
 	echo; echo "===> $step"
-	# shellcheck disable=SC1090
-	sh "$f" || { echo "installer: step $step FAILED" >&2; exit 1; }
+	river-steprun run --step "$step" --file "$f" || exit 1
 done
+river-steprun summary
 
 echo
 echo "=== install complete — reboot into Runink River ==="

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/org-runink/river/installer/internal/hw"
+	"github.com/org-runink/river/installer/internal/planner"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,7 +50,8 @@ func newRig(t *testing.T, sys *FakeSystem) *rig {
 	if sys == nil {
 		sys = &FakeSystem{USB: []USBDrive{{Dev: "/dev/sdx", Model: "Stick", SizeGB: 16}}}
 	}
-	w := New(Config{Version: "test", StateFile: filepath.Join(dir, "state.json"), RunDir: dir, Logf: logs.logf}, sys)
+	w := New(Config{Version: "test", StateFile: filepath.Join(dir, "state.json"), RunDir: dir, Logf: logs.logf,
+		LogFile: filepath.Join(dir, "install.log"), TargetRoot: filepath.Join(dir, "target")}, sys)
 	r := &rig{t: t, w: w, sys: sys, logs: logs, dir: dir}
 	r.srv = httptest.NewServer(w.Handler(Guard{Port: 0}))
 	t.Cleanup(r.srv.Close)
@@ -583,5 +586,90 @@ func TestModelsRequired(t *testing.T) {
 		if !strings.Contains(env, want) {
 			t.Errorf("72-models-payload env lacks %q", want)
 		}
+	}
+}
+
+// A failed step must show the operator what failed (the step's own last lines and its exit
+// code), where the whole log is, and what state the machine is left in; and the log must
+// really be on disk, redacted like the screen's copy.
+func TestInstallFailureReportsReasonLogAndState(t *testing.T) {
+	r := newRig(t, &FakeSystem{FailStep: "50-runink-user"})
+	r.toRecovery()
+	r.ackRecovery()
+	v := r.waitView("failure", func(v View) bool { return v.Install.Status == "failed" })
+	in := v.Install
+	if in.FailedStep != "50-runink-user" || in.Reason != "exit code 1" {
+		t.Errorf("failed step/reason: %q / %q", in.FailedStep, in.Reason)
+	}
+	if got := strings.Join(in.Tail, "\n"); !strings.Contains(got, "simulated failure") || !strings.Contains(got, "the last thing it said") {
+		t.Errorf("the step's last lines are not shown: %q", got)
+	}
+	if in.State != StatePartial {
+		t.Errorf("a failure after the boot loader leaves %q, want %q", in.State, StatePartial)
+	}
+	if in.LogPath != filepath.Join(r.dir, "install.log") {
+		t.Errorf("log path %q", in.LogPath)
+	}
+	b, err := os.ReadFile(in.LogPath)
+	if err != nil || !strings.Contains(string(b), "simulated failure") || !strings.Contains(string(b), "step 50-runink-user exited: exit code 1") {
+		t.Errorf("the log file does not carry the failure: %v %q", err, b)
+	}
+	if st, _ := os.Stat(in.LogPath); st == nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("log mode %v", st)
+	}
+}
+
+// Before the boot loader is written a failure leaves nothing bootable, and the log is copied
+// onto the new system when its tree exists (so it can be read after the next boot).
+func TestInstallFailureEarlyAndLogOnTarget(t *testing.T) {
+	r := newRig(t, &FakeSystem{FailStep: "40-boot-grub-zfs"})
+	if err := os.MkdirAll(filepath.Join(r.dir, "target", "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r.toRecovery()
+	r.ackRecovery()
+	v := r.waitView("failure", func(v View) bool { return v.Install.Status == "failed" })
+	if v.Install.State != StateNotInstalled {
+		t.Errorf("state %q", v.Install.State)
+	}
+	if v.Install.LogOnTarget != "/var/log/install.log" {
+		t.Errorf("log on target %q", v.Install.LogOnTarget)
+	}
+	if b, err := os.ReadFile(filepath.Join(r.dir, "target/var/log/install.log")); err != nil || !strings.Contains(string(b), "simulated failure") {
+		t.Errorf("target log: %v %q", err, b)
+	}
+}
+
+// A step that succeeds but prints an install-notice (a deferred step) is not silent: the
+// notice is kept for the done screen.
+func TestInstallNoticesSurviveToTheDoneScreen(t *testing.T) {
+	r := newRig(t, &FakeSystem{NoticeStep: "50-runink-user"})
+	r.toRecovery()
+	r.ackRecovery()
+	v := r.waitView("done", func(v View) bool { return v.Screen == "done" })
+	if len(v.Install.Notices) != 1 || !strings.Contains(v.Install.Notices[0], "50-runink-user: the models were deferred") {
+		t.Errorf("notices: %v", v.Install.Notices)
+	}
+}
+
+func TestMachineViewShowsMemoryBreakdownAndFirmwareNote(t *testing.T) {
+	probe, err := os.ReadFile("../planner/testdata/evo-x3-64g-of-128g.probe.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p hw.Probe
+	if err := json.Unmarshal(probe, &p); err != nil {
+		t.Fatal(err)
+	}
+	pl := planner.Build(&p, nil, planner.Options{Profile: planner.ProfileServer})
+	planJSON, _ := json.Marshal(pl)
+	w := New(Config{}, &FakeSystem{})
+	w.st.Machine = machineState{Status: "done", Probe: probe, Plan: planJSON}
+	mv := w.machineViewLocked()
+	if len(mv.MemoryLines) < 4 || !strings.HasPrefix(mv.MemoryLines[2], "Installed total: 128.0 GB") {
+		t.Errorf("memory lines: %v", mv.MemoryLines)
+	}
+	if mv.MemoryFirmware == nil || mv.MemoryFirmware.Kind != planner.MemFirmwareGPU {
+		t.Errorf("firmware note: %+v", mv.MemoryFirmware)
 	}
 }

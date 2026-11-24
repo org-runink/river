@@ -315,9 +315,12 @@ const SCREENS = {
       return `<h1 tabindex="-1">${T("machine.title")}</h1><div class="alert">${T(m.error || "err.machine.probe")}</div>
         ${actions(true, `<button class="primary" data-act="probe">${T("machine.retry")}</button>`)}`;
     }
+    const mf = m.memory_firmware;
+    const memfw = mf ? `<div class="alert" role="alert" id="memfw"><h2>${T("machine.memfw.title")}</h2><p>${esc(mf.summary)}</p><p>${esc(mf.consequence)}</p><p><b>${T("machine.memfw.todo")}</b> ${esc(mf.fix)}</p></div>` : "";
     const facts = `<div class="card"><dl class="kv">
       <dt>${T("machine.cpu")}</dt><dd>${esc(m.cpu || "-")} <small>(${T("machine.cores", { cores: m.cores, threads: m.threads })})</small></dd>
-      <dt>${T("machine.memory")}</dt><dd>${esc(Math.round(m.memory_gib))} GB</dd></dl></div>`;
+      <dt>${T("machine.memory")}</dt><dd>${esc(Math.round(m.memory_gib))} GB</dd></dl>
+      ${(m.memory_lines || []).length ? `<ul class="memlines" id="memlines">${m.memory_lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}</div>`;
     const details = `<details><summary>${T("app.details")}</summary><dl class="kv">
       <dt>${T("machine.layout")}</dt><dd>${esc(m.layout || "-")}</dd>
       <dt>${T("machine.usable")}</dt><dd>${m.usable_bytes ? gb(m.usable_bytes) : "-"}</dd>
@@ -327,19 +330,19 @@ const SCREENS = {
       ${m.verdict === "refused" ? `<p><button data-act="lab" id="btn-lab">${T("machine.lab")}</button></p><p class="help">${T("machine.lab.help")}</p>` : ""}
       </details>`;
     if (m.verdict === "refused") {
-      return `<h1 tabindex="-1">${T("machine.refused.title")}</h1>${facts}
+      return `<h1 tabindex="-1">${T("machine.refused.title")}</h1>${facts}${memfw}
         <div class="alert"><p>${T("machine.refused.text", { edition: ed.title })}</p><ul>${(m.refusals || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>
         ${details}${actions(true, `<button class="primary" data-act="probe">${T("machine.retry")}</button>`)}`;
     }
     const disks = m.disks || [];
     if (!disks.length) {
-      return `<h1 tabindex="-1">${T("machine.title")}</h1>${facts}<div class="alert">${T("machine.nodisk")}</div>${details}
+      return `<h1 tabindex="-1">${T("machine.title")}</h1>${facts}${memfw}<div class="alert">${T("machine.nodisk")}</div>${details}
         ${actions(true, `<button class="primary" data-act="probe">${T("machine.retry")}</button>`)}`;
     }
     const dl = disks.map((d) => `<div class="disk"><div><div class="big">${esc(d.model || d.name)} · ${gb(d.size_bytes)}</div>
       <small>${esc(d.name)} · ${T("machine.serial", { serial: d.serial })}</small></div></div>`).join("");
     const layout = disks.length > 1 && has("machine.layout." + m.layout) ? `<p>${T("machine.layout." + m.layout, { n: disks.length })}</p>` : "";
-    return `<h1 tabindex="-1">${T("machine.title")}</h1>${facts}
+    return `<h1 tabindex="-1">${T("machine.title")}</h1>${facts}${memfw}
       ${m.lab ? `<div class="note">${T("machine.lab.on")}</div>` : ""}
       <h2>${T(disks.length > 1 ? "machine.eraseN" : "machine.erase1")}</h2>${dl}${layout}
       <p>${T("machine.everything", { them: t(disks.length > 1 ? "machine.them" : "machine.it") })}</p>${details}
@@ -401,7 +404,8 @@ const SCREENS = {
     if (i.status === "failed") {
       const fs = i.failed_step ? t(has("step." + i.failed_step) ? "step." + i.failed_step : i.failed_step) : "";
       return `<h1 tabindex="-1">${T("install.failed.title")}</h1>
-        <div class="alert"><p>${T("install.failed.text", { step: fs })}</p>${i.error ? `<p class="help">${T(i.error)}</p>` : ""}</div>
+        <div class="alert" role="alert"><p>${T("install.failed.text", { step: fs })}</p>${i.error ? `<p class="help">${T(i.error)}</p>` : ""}</div>
+        ${failReport(i)}
         <ul class="steps">${steps}</ul>
         <p><button data-act="log" id="btn-log">${T("install.log")}</button></p>${showLog ? `<pre class="log" id="log">${esc(logLines.join("\n"))}</pre>` : ""}
         ${actions(false, `<button class="primary" data-act="retry">${T("install.retry")}</button>`)}`;
@@ -414,10 +418,23 @@ const SCREENS = {
   },
 
   done() {
-    return `<h1 tabindex="-1">${T("done.title")}</h1><div class="card"><div class="status">${icon("ok")}${T("done.text", { edition: selfEdition().title })}</div></div>
+    const nn = (S.install.notices || []);
+    const notices = nn.length ? `<div class="note" role="status" id="notices"><b>${T("done.notices")}</b><ul>${nn.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
+    const where = S.install.log_on_target ? `<p class="help">${T("done.log", { path: S.install.log_on_target })}</p>` : "";
+    return `<h1 tabindex="-1">${T("done.title")}</h1><div class="card"><div class="status">${icon("ok")}${T("done.text", { edition: selfEdition().title })}</div></div>${notices}${where}
       ${actions(false, `<button class="primary" data-act="reboot">${T("done.restart")}</button>`)}`;
   },
 };
+
+// What a failed step shows: the reason (its own last lines and exit code), what state the
+// machine is in, where the whole log is, and what to do next. Never just "a step failed".
+function failReport(i) {
+  const tail = (i.tail || []).length ? `<pre class="log" id="fail-tail">${esc(i.tail.join("\n"))}</pre>` : "";
+  const state = i.state ? `<p><b>${T("install.state." + i.state)}</b></p>` : "";
+  const log = i.log_path ? `<p class="help">${T("install.logat", { path: i.log_path })}${i.log_on_target ? " " + T("install.logtarget", { path: i.log_on_target }) : ""}</p>` : "";
+  const nn = (i.notices || []).length ? `<ul>${i.notices.map((n) => `<li class="help">${esc(n)}</li>`).join("")}</ul>` : "";
+  return `<h2>${T("install.reason")}${i.reason ? " (" + esc(i.reason) + ")" : ""}</h2>${tail}${state}${nn}${log}<p>${T("install.next")}</p>`;
+}
 
 function netKind(st) {
   const fam = [st.ipv4 ? "IPv4" : "", st.ipv6 ? "IPv6" : ""].filter(Boolean).join(" + ");

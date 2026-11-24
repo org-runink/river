@@ -62,11 +62,17 @@ type CPU struct {
 	AMXInt8       bool     `json:"amx_int8"`
 }
 
-// Memory is from /proc/meminfo.
+// Memory is from /proc/meminfo, plus the installed size from the SMBIOS memory devices.
 type Memory struct {
 	TotalBytes     uint64 `json:"total_bytes"`
 	AvailableBytes uint64 `json:"available_bytes"`
 	SwapTotalBytes uint64 `json:"swap_total_bytes"`
+	// InstalledBytes is the sum of the populated SMBIOS type 17 (memory device) entries:
+	// the RAM the firmware says is fitted or soldered. 0 when InstalledKnown is false (no
+	// SMBIOS tables, or not readable). MemTotal is lower: the kernel never sees what the
+	// firmware reserves for itself or hands to an integrated GPU as dedicated video memory.
+	InstalledBytes uint64 `json:"installed_bytes,omitempty"`
+	InstalledKnown bool   `json:"installed_known,omitempty"`
 }
 
 // GPU is one PCI display-class device.
@@ -81,6 +87,10 @@ type GPU struct {
 	// needs the vendor tool, which the live medium does not carry.
 	VRAMBytes uint64 `json:"vram_bytes"`
 	VRAMKnown bool   `json:"vram_known"`
+	// GTTBytes is amdgpu mem_info_gtt_total: the system memory the GPU may map (0 when
+	// GTTKnown is false). On an APU it is carved out of MemTotal on demand, unlike VRAM.
+	GTTBytes uint64 `json:"gtt_bytes,omitempty"`
+	GTTKnown bool   `json:"gtt_known,omitempty"`
 }
 
 // Disk is one whole block device.

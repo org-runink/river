@@ -113,10 +113,21 @@ func (r *Resolved) Env(pl *Plan) string {
 	kv("RUNINK_SPECIAL_DISKS", strings.Join(r.SpecialDisks, " "))
 	kv("RUNINK_ZFS_ARC_MAX", fmt.Sprint(pl.ZFS.ARCMaxBytes))
 	kv("RUNINK_ZRAM_SIZE", fmt.Sprintf("%dM", pl.Swap.ZramMiB))
+	// What the firmware hides from Linux (plan.memory_firmware); 0 = nothing known. A profile
+	// that can use that memory (an APU's GPU taking system memory on demand) sizes from these.
+	kv("RUNINK_MEM_INSTALLED_MIB", fmt.Sprint(pl.Hardware.MemInstalledMiB))
+	kv("RUNINK_MEM_GPU_RESERVED_MIB", fmt.Sprint(gpuReservedMiB(pl)))
 	kv("RUNINK_INFERENCE_THREADS", fmt.Sprint(pl.CPU.InferenceThreads))
 	return b.String()
 }
 
 func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func gpuReservedMiB(pl *Plan) int64 {
+	if pl.MemoryFirmware == nil {
+		return 0
+	}
+	return pl.MemoryFirmware.GPUReservedMiB
 }

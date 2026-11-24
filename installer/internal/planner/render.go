@@ -30,6 +30,16 @@ func Text(pl *Plan) string {
 	for _, r := range pl.Warnings {
 		w("  WARNING: %s\n", r)
 	}
+	if mb := pl.MemoryBreakdown; mb != nil {
+		w("MEMORY\n")
+		for _, l := range mb.Lines {
+			w("  %s\n", l)
+		}
+		w("\n")
+	}
+	if f := pl.MemoryFirmware; f != nil {
+		w("WHY THE MEMORY IS SPLIT\n  %s\n  %s\n  What to do: %s\n\n", f.Summary, f.Consequence, f.Fix)
+	}
 	if len(pl.Refusals)+len(pl.Warnings) > 0 {
 		w("\n")
 	}

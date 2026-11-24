@@ -22,7 +22,7 @@
 # river-pair and river-pair-announce (same module, same flags) are the two sides of opt-in LAN
 # install pairing (docs/INSTALL.md, "LAN installs"): the operator machine and the target.
 #
-# Output: $OUT_DIR/installer-bin/{river-hwprobe,river-plan,river-modelpack,river-payloadpack,
+# Output: $OUT_DIR/installer-bin/{river-steprun,river-hwprobe,river-plan,river-modelpack,river-payloadpack,
 #   river-cloud-init,river-netcheck,river-netsetup,river-pair,river-pair-announce,river-installer,
 #   river-live-fallback,river-desk}
 #
@@ -44,7 +44,7 @@ command -v go >/dev/null 2>&1 || { echo "20-installer-binaries: go toolchain req
 
 LDFLAGS="-s -w"
 
-for b in hwprobe:river-hwprobe plan:river-plan modelpack:river-modelpack payloadpack:river-payloadpack \
+for b in steprun:river-steprun hwprobe:river-hwprobe plan:river-plan modelpack:river-modelpack payloadpack:river-payloadpack \
 	cloudinit:river-cloud-init netcheck:river-netcheck pair:river-pair pairannounce:river-pair-announce \
 	gui:river-installer livefallback:river-live-fallback desk:river-desk; do
 	echo "  building ${b#*:} from installer/${b%%:*} (GOAMD64=v1)"

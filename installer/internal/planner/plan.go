@@ -108,24 +108,29 @@ type Options struct {
 // /etc/runink/install-plan.json on the installed node as the per-node source of truth for
 // the inference deployment of a downstream platform.
 type Plan struct {
-	Schema      string       `json:"schema"`
-	GeneratedAt string       `json:"generated_at,omitempty"`
-	Verdict     string       `json:"verdict"` // ok | degraded | refused
-	Refusals    []string     `json:"refusals,omitempty"`
-	Warnings    []string     `json:"warnings,omitempty"`
-	Notes       []string     `json:"notes,omitempty"`
-	Lab         bool         `json:"lab"`
-	Profile     Profile      `json:"profile"`
-	Hardware    Hardware     `json:"hardware"`
-	CPU         CPUPlan      `json:"cpu"`
-	Memory      MemoryPlan   `json:"memory"`
-	Tiers       []TierPlan   `json:"tiers"`
-	Accelerator Accelerator  `json:"accelerator"`
-	Storage     StoragePlan  `json:"storage"`
-	ZFS         ZFSTunables  `json:"zfs"`
-	Swap        SwapPlan     `json:"swap"`
-	Network     NetworkCheck `json:"network"`
-	Build       BuildPlan    `json:"build"`
+	Schema      string   `json:"schema"`
+	GeneratedAt string   `json:"generated_at,omitempty"`
+	Verdict     string   `json:"verdict"` // ok | degraded | refused
+	Refusals    []string `json:"refusals,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
+	Lab         bool     `json:"lab"`
+	Profile     Profile  `json:"profile"`
+	Hardware    Hardware `json:"hardware"`
+	// MemoryFirmware is set when Linux sees much less memory than is installed (firmware
+	// reserves it, typically for an integrated GPU). Informational: it never refuses a plan.
+	MemoryFirmware *MemoryFinding `json:"memory_firmware,omitempty"`
+	// MemoryBreakdown is always set: the memory picture, shown to the operator every time.
+	MemoryBreakdown *MemoryBreakdown `json:"memory_breakdown,omitempty"`
+	CPU             CPUPlan          `json:"cpu"`
+	Memory          MemoryPlan       `json:"memory"`
+	Tiers           []TierPlan       `json:"tiers"`
+	Accelerator     Accelerator      `json:"accelerator"`
+	Storage         StoragePlan      `json:"storage"`
+	ZFS             ZFSTunables      `json:"zfs"`
+	Swap            SwapPlan         `json:"swap"`
+	Network         NetworkCheck     `json:"network"`
+	Build           BuildPlan        `json:"build"`
 }
 
 // Profile names the image profile and the node's size class.
@@ -136,17 +141,18 @@ type Profile struct {
 
 // Hardware is the probe, summarised: what the plan was made for.
 type Hardware struct {
-	PsABI         string `json:"psabi"`
-	AVX512        bool   `json:"avx512"`
-	AMX           bool   `json:"amx"`
-	PhysicalCores int    `json:"physical_cores"`
-	Threads       int    `json:"threads"`
-	Sockets       int    `json:"sockets"`
-	MemTotalMiB   int64  `json:"mem_total_mib"`
-	UEFI          bool   `json:"uefi"`
-	TPM2          bool   `json:"tpm2"`
-	GPUs          int    `json:"gpus"`
-	Virtual       bool   `json:"virtual"`
+	PsABI           string `json:"psabi"`
+	AVX512          bool   `json:"avx512"`
+	AMX             bool   `json:"amx"`
+	PhysicalCores   int    `json:"physical_cores"`
+	Threads         int    `json:"threads"`
+	Sockets         int    `json:"sockets"`
+	MemTotalMiB     int64  `json:"mem_total_mib"`
+	MemInstalledMiB int64  `json:"mem_installed_mib,omitempty"` // SMBIOS; 0 = not readable
+	UEFI            bool   `json:"uefi"`
+	TPM2            bool   `json:"tpm2"`
+	GPUs            int    `json:"gpus"`
+	Virtual         bool   `json:"virtual"`
 }
 
 // CPUPlan splits the physical cores between the node and inference.
@@ -284,6 +290,9 @@ func Build(p *hw.Probe, m *Manifest, opt Options) *Plan {
 		MemTotalMiB: memMiB, UEFI: p.Firmware.UEFI, TPM2: p.TPM.Present && p.TPM.Version == "2.0",
 		GPUs: len(p.GPUs), Virtual: p.Host.Virtual,
 	}
+	pl.Hardware.MemInstalledMiB = int64(p.Memory.InstalledBytes >> 20)
+	pl.MemoryFirmware = memoryFinding(p)
+	pl.MemoryBreakdown = memoryBreakdown(p)
 	ws := opt.Profile == ProfileWorkstation
 	minCores, minMem, minMemNote, minPoolGiB := MinPhysicalCores, int64(MinMemTotalMiB), "16 GB", int64(MinPoolUsableGiB)
 	if ws {
