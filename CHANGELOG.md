@@ -167,6 +167,7 @@ None.
 
 ### Fixed
 
+- The Runink River ISO build failed in the live layer (`s6-rc-set-change: unable to opendir /etc/s6/repo/sources/current/masked`): `runink-greetd-s6` named `zfs-mount` and `plymouth-quit` as dependencies, but the profile's root overlay defines them and is copied after the packages, so the s6 repository could not compile at install time and never got its `current` set. The package now depends on `elogind` only (pkgrel 2) and the root overlay adds the two dependencies, as it does for `NetworkManager-srv`.
 - **A stick that cannot start the desktop now says what the machine is, on screen and on the
   stick.** The fallback screen holds a one-screen hardware summary (GPU and its udev seat
   tags, `seat0 CanGraphical`, every network device and rfkill state, PCI devices with no
