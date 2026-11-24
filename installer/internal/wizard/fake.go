@@ -27,6 +27,7 @@ var demoProbe []byte
 type FakeSystem struct {
 	Delay      time.Duration // per simulated action; 0 = instant
 	FailStep   string        // a step that fails once
+	NoticeStep string        // a step that prints an install-notice line
 	failed     bool
 	Offline    bool
 	RefuseAll  bool // make every plan refused (a machine below the minimums)
@@ -117,6 +118,9 @@ func (f *FakeSystem) RunStep(ctx context.Context, step string, env []string, std
 	}
 	f.mu.Unlock()
 	out("===> " + step)
+	if step == f.NoticeStep {
+		out(NoticePrefix + "the models were deferred: nothing was written")
+	}
 	if step == "20-clone-rootfs" {
 		for p := 0; p <= 100; p += 20 {
 			out(fmt.Sprintf("    1,234,567,890  %d%%   98.76MB/s    0:00:12 (xfr#1, to-chk=0/1)", p))
@@ -132,6 +136,7 @@ func (f *FakeSystem) RunStep(ctx context.Context, step string, env []string, std
 		out("disk-zfs: debug stdin=" + strings.TrimSpace(f.StepStdin[step]))
 	}
 	if fail {
+		out(step + ": the last thing it said")
 		out(step + ": simulated failure")
 		return errors.New("exit status 1")
 	}

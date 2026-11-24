@@ -57,6 +57,9 @@ func (pr *Prober) Probe() (*Probe, error) {
 		return nil, err
 	}
 	out.Memory = mem
+	if n, ok := pr.installedMemory(); ok {
+		out.Memory.InstalledBytes, out.Memory.InstalledKnown = n, true
+	}
 	out.Host = Host{
 		Vendor:  pr.read("sys/class/dmi/id/sys_vendor"),
 		Product: pr.read("sys/class/dmi/id/product_name"),
@@ -293,6 +296,11 @@ func (pr *Prober) gpus() []GPU {
 		if v := readTrim(filepath.Join(d, "mem_info_vram_total")); v != "" { // amdgpu
 			if n, err := strconv.ParseUint(v, 10, 64); err == nil {
 				g.VRAMBytes, g.VRAMKnown = n, true
+			}
+		}
+		if v := readTrim(filepath.Join(d, "mem_info_gtt_total")); v != "" { // amdgpu
+			if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+				g.GTTBytes, g.GTTKnown = n, true
 			}
 		}
 		// Integrated: Intel's iGPU is always 00:02.0. AMD Zen APUs put the iGPU behind the

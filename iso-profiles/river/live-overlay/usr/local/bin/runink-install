@@ -216,6 +216,12 @@ echo "An existing UNENCRYPTED pool is refused (ZFS cannot encrypt in place — s
 printf 'Type YES to proceed: '; read -r confirm
 [ "$confirm" = "YES" ] || { echo "aborted."; exit 1; }
 
+# steprun.sh keeps the install log, the exit code and the failure report of every step.
+# shellcheck source=installer/lib/steprun.sh
+. "$LIBDIR/steprun.sh"
+steprun_init
+echo "The install log is written to $STEPRUN_LOG (and copied to the new system when it exists)."
+
 # --- Run ordered steps ----------------------------------------------------
 for step in \
 	00-preflight \
@@ -233,11 +239,11 @@ for step in \
 	90-export
 do
 	f="$LIBDIR/$step.sh"
-	[ -f "$f" ] || { echo "installer: missing step $f" >&2; exit 1; }
+	[ -f "$f" ] || { echo "installer: missing step $f (the installer image is incomplete)" >&2; exit 1; }
 	echo; echo "===> $step"
-	# shellcheck disable=SC1090
-	sh "$f" || { echo "installer: step $step FAILED" >&2; exit 1; }
+	steprun_run "$step" "$f" || { steprun_fail "$step" "$STEPRUN_RC"; exit 1; }
 done
+steprun_summary
 
 echo
 echo "=== install complete — reboot into Runink River ==="

@@ -324,3 +324,85 @@ func TestDiskSerialSources(t *testing.T) {
 		}
 	}
 }
+
+// smbios17 builds one SMBIOS type 17 structure (formatted area only; the kernel's raw file
+// also carries the string set, which the decoder ignores).
+func smbios17(size uint16, ext uint32, length byte) []byte {
+	b := make([]byte, length)
+	b[0], b[1] = 17, length
+	b[0x0C], b[0x0D] = byte(size), byte(size>>8)
+	if length >= 0x20 {
+		b[0x1C], b[0x1D], b[0x1E], b[0x1F] = byte(ext), byte(ext>>8), byte(ext>>16), byte(ext>>24)
+	}
+	return b
+}
+
+// The installed RAM is the sum of the populated type 17 entries: MB units, KB units, the
+// extended-size escape, and an empty socket and an unknown size counted as nothing. The EVO-X3
+// case (128 GB soldered LPDDR5X as eight 16 GB devices) is the example.
+func TestInstalledMemoryFromSMBIOS(t *testing.T) {
+	root := fixtureTree(t)
+	tr := tree{t, root}
+	put := func(name string, b []byte) { tr.file("sys/firmware/dmi/entries/"+name+"/raw", string(b)) }
+	for i := 0; i < 8; i++ {
+		put("17-"+string(rune('0'+i)), smbios17(0x7FFF, 16384, 0x28)) // 16 GiB each, extended size
+	}
+	put("17-8", smbios17(0, 0, 0x28))                                     // empty socket
+	put("17-9", smbios17(0xFFFF, 0, 0x28))                                // size unknown
+	put("17-10", []byte{16, 0x0F, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) // type 16: ignored
+	p, err := (&Prober{Root: root}).Probe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Memory.InstalledKnown || p.Memory.InstalledBytes != 128<<30 {
+		t.Errorf("installed = %d known=%v, want 128 GiB", p.Memory.InstalledBytes, p.Memory.InstalledKnown)
+	}
+	// Plain MB and KB units.
+	if n, ok := smbiosDeviceBytes(smbios17(8192, 0, 0x22)); !ok || n != 8<<30 {
+		t.Errorf("8192 MB = %d, %v", n, ok)
+	}
+	if n, ok := smbiosDeviceBytes(smbios17(0x8000|4096, 0, 0x22)); !ok || n != 4<<20 {
+		t.Errorf("4096 KB = %d, %v", n, ok)
+	}
+	if _, ok := smbiosDeviceBytes([]byte{17, 4}); ok {
+		t.Error("a truncated structure decoded")
+	}
+}
+
+// No SMBIOS entries (a VM without tables, an unreadable /sys): installed is unknown, never 0
+// reported as a fact, and the probe still succeeds.
+func TestInstalledMemoryUnknownWithoutSMBIOS(t *testing.T) {
+	p, err := (&Prober{Root: fixtureTree(t)}).Probe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Memory.InstalledKnown || p.Memory.InstalledBytes != 0 {
+		t.Errorf("installed reported without SMBIOS: %+v", p.Memory)
+	}
+}
+
+// amdgpu's memory sizes are read from the PCI device directory (the same files appear under
+// /sys/class/drm/card*/device/).
+func TestGPUGTTAndVRAM(t *testing.T) {
+	root := fixtureTree(t)
+	tr := tree{t, root}
+	d := "sys/bus/pci/devices/0000:c5:00.0/"
+	tr.file(d+"class", "0x030000")
+	tr.file(d+"vendor", "0x1002")
+	tr.file(d+"device", "0x1586")
+	tr.file(d+"mem_info_vram_total", "68719476736")
+	tr.file(d+"mem_info_gtt_total", "16106127360")
+	p, err := (&Prober{Root: root}).Probe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var g *GPU
+	for i := range p.GPUs {
+		if p.GPUs[i].Vendor == "amd" {
+			g = &p.GPUs[i]
+		}
+	}
+	if g == nil || !g.VRAMKnown || g.VRAMBytes != 64<<30 || !g.GTTKnown || g.GTTBytes != 15<<30 {
+		t.Fatalf("amd gpu = %+v", g)
+	}
+}

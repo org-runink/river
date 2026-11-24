@@ -236,3 +236,10 @@ func TestModelsFetchPasses(t *testing.T) {
 		t.Fatalf("%v\n%s%s", err, out.String(), errb.String())
 	}
 }
+
+func TestSteprunPasses(t *testing.T) {
+	var out, errb bytes.Buffer
+	if err := Steprun(context.Background(), repoRoot(t), &out, &errb); err != nil {
+		t.Fatalf("%v\n%s%s", err, out.String(), errb.String())
+	}
+}

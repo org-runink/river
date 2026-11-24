@@ -43,13 +43,41 @@ DS="$POOL/models"
 
 log() { echo "models-payload: $*"; }
 REQUIRED="${RUNINK_MODELS_REQUIRED:-0}"
+# Nothing here may fail silently. Every way out prints, in plain words, what happened, the
+# exact reason and what to do next (die), or an install-notice line the install drivers repeat
+# at the end (notice). SAID records that a message was printed; the EXIT trap below reports
+# anything that stopped the step without one (an unexpected tool failure under `set -e`).
+SAID=""
+die() { # die REASON [NEXT-LINE...]: print and fail the step
+	SAID=1
+	log "FAILED: $1" >&2
+	shift
+	for _l in "$@"; do echo "models-payload:   $_l" >&2; done
+	echo "models-payload:   Full log: $STEPLOG_HINT" >&2
+	exit 1
+}
+STEPLOG_HINT="${RUNINK_INSTALL_LOG:-/var/log/runink-install.log}"
+notice() { echo "install-notice: models: $*"; }
+PASSDIR=""
+cleanup() {
+	_rc=$?
+	[ -z "$PASSDIR" ] || rm -rf "$PASSDIR"
+	if [ "$_rc" -ne 0 ] && [ -z "$SAID" ]; then
+		log "FAILED unexpectedly (exit $_rc): a command above failed and printed the reason." >&2
+		echo "models-payload:   What to do: run the installer again; if it fails the same way, keep the log ($STEPLOG_HINT) and ask for help." >&2
+	fi
+}
+trap cleanup EXIT INT TERM
+# gib BYTES: "12.3 GiB" for a message.
+gib() { awk -v b="$1" 'BEGIN { printf "%.1f GiB", b / 1073741824 }'; }
 # required_or_defer MESSAGE: in required mode, fail with it; otherwise defer the models.
 required_or_defer() {
 	if [ "$REQUIRED" = 1 ]; then
-		log "REQUIRED (RUNINK_MODELS_REQUIRED=1): $1; this node must carry its models, so the install stops" >&2
-		exit 1
+		die "REQUIRED (RUNINK_MODELS_REQUIRED=1): $1. This node must carry its models, so the install stops and the computer is NOT ready." \
+			"What to do: fix the cause above and run the installer again; the model passphrase is on the medium's label or from whoever made it."
 	fi
 	log "$1; models DEFERRED, nothing written"
+	notice "DEFERRED: $1. The computer installs WITHOUT models; they arrive at enrollment (MODEL_STORE_URL) or when the install is run again with the passphrase."
 	exit 0
 }
 
@@ -72,19 +100,23 @@ find_payload() {
 if [ "${RUNINK_SKIP_MODELS:-0}" = 1 ]; then
 	[ "$REQUIRED" = 1 ] && required_or_defer "RUNINK_SKIP_MODELS=1 asks to skip the model payload"
 	log "skipped (RUNINK_SKIP_MODELS=1): no model set written; enrollment can still sync them"
+	notice "SKIPPED on request (RUNINK_SKIP_MODELS=1). The computer installs WITHOUT models; enrollment can still sync them."
 	exit 0
 fi
 if ! PAYLOAD="$(find_payload)"; then
 	[ "$REQUIRED" = 1 ] && required_or_defer "no model payload (river-models/MANIFEST) on the boot medium"
 	log "no model payload on the install medium; the models arrive at enrollment (MODEL_STORE_URL)"
+	notice "this medium carries no model payload. The computer installs WITHOUT models; they arrive at enrollment (MODEL_STORE_URL)."
 	exit 0
 fi
 # content <files> <bytes> of the MANIFEST: what the unpack writes.
 SET_BYTES="$(awk '$1 == "content" { print $3 }' "$PAYLOAD/MANIFEST")"
-case "$SET_BYTES" in ''|*[!0-9]*) log "$PAYLOAD/MANIFEST has no content line" >&2; exit 1 ;; esac
+case "$SET_BYTES" in ''|*[!0-9]*) die "$PAYLOAD/MANIFEST has no content line (the payload's manifest is unreadable or damaged)." "What to do: re-create the install medium from a verified download." ;; esac
 log "model payload found at $PAYLOAD ($(awk '$1 == "content" { print $2 }' "$PAYLOAD/MANIFEST") file(s), $SET_BYTES bytes)"
-command -v river-modelpack >/dev/null 2>&1 || { log "river-modelpack missing from the live image" >&2; exit 1; }
-[ -f "$LOCK" ] || { log "no $LOCK on the live image: cannot verify the payload, refusing" >&2; exit 1; }
+command -v river-modelpack >/dev/null 2>&1 || die "river-modelpack is missing from the live image, so the model payload cannot be opened." \
+	"The install medium is incomplete or was not made by the official build." "What to do: re-create the install medium from a verified download and run the installer again."
+[ -f "$LOCK" ] || die "no $LOCK on the live image: the payload cannot be verified, so it is refused." \
+	"What to do: re-create the install medium from a verified download and run the installer again."
 
 # --- an existing dataset (re-install into an imported pool) ----------------------------
 if zfs list -H "$DS" >/dev/null 2>&1; then
@@ -94,8 +126,8 @@ if zfs list -H "$DS" >/dev/null 2>&1; then
 		log "$DS matches $LOCK; keeping it"
 		exit 0
 	fi
-	log "$DS does NOT match $LOCK. It is left untouched; destroy it (zfs destroy -r $DS) and re-run to unpack the medium's set." >&2
-	exit 1
+	die "$DS already exists and does NOT match $LOCK. It is left untouched." \
+		"What to do: if its contents are not needed, destroy it (zfs destroy -r $DS) and run the installer again to unpack the medium's set."
 fi
 
 # --- the passphrase ----------------------------------------------------------------------
@@ -105,11 +137,9 @@ fi
 PASSDIR="$(mktemp -d "${RUNINK_MODELS_RUNDIR:-/run}/river-models.XXXXXX")"
 chmod 0700 "$PASSDIR"
 PASS="$PASSDIR/passphrase"
-cleanup() { rm -rf "$PASSDIR"; }
-trap cleanup EXIT INT TERM
 
 if [ -n "${RUNINK_MODELS_PASSPHRASE_FILE:-}" ]; then
-	[ -r "$RUNINK_MODELS_PASSPHRASE_FILE" ] || { log "cannot read $RUNINK_MODELS_PASSPHRASE_FILE" >&2; exit 1; }
+	[ -r "$RUNINK_MODELS_PASSPHRASE_FILE" ] || die "cannot read the passphrase file $RUNINK_MODELS_PASSPHRASE_FILE." "What to do: check that the file exists and is readable by root."
 	( umask 077; head -n 1 "$RUNINK_MODELS_PASSPHRASE_FILE" > "$PASS" )
 	attempts=1
 elif [ -t 0 ]; then
@@ -125,28 +155,44 @@ fi
 # --- the dataset ---------------------------------------------------------------------------
 enc="$(zfs get -H -o value encryption "$POOL")"
 if [ "$enc" = off ]; then
-	log "pool $POOL is not encrypted; refusing to put the model set on it in the clear" >&2
-	exit 1
+	die "pool $POOL is not encrypted; refusing to put the model set on it in the clear." \
+		"What to do: the pool must be created by this installer (encrypted); an existing unencrypted pool cannot be used."
 fi
 # Room for the whole set (plus 2%), checked before hours of reading rather than after.
 avail="$(zfs get -Hp -o value available "$POOL")"
-case "$avail" in ''|*[!0-9]*) log "cannot read the free space of $POOL" >&2; exit 1 ;; esac
+case "$avail" in ''|*[!0-9]*) die "cannot read the free space of pool $POOL." "What to do: run the installer again; if it repeats, check the disk with zpool status $POOL." ;; esac
 if [ "$avail" -lt $((SET_BYTES + SET_BYTES / 50)) ]; then
-	log "pool $POOL has $avail bytes free; the model set needs $SET_BYTES (+2%); nothing written" >&2
-	exit 1
+	die "NOT ENOUGH FREE SPACE for the models: pool $POOL has $(gib "$avail") free ($avail bytes); the model set needs $(gib $((SET_BYTES + SET_BYTES / 50))) ($SET_BYTES bytes + 2%); $(gib $((SET_BYTES + SET_BYTES / 50 - avail))) more is needed. Nothing was written." \
+		"What to do: install onto a bigger disk (or add one to the pool), or run the installer again and skip the models (they can be added at enrollment)."
 fi
 zfs create -o mountpoint="$MODELS_MP" -o com.sun:auto-snapshot=false -o atime=off \
-	-o recordsize=1M -o compression=off "$DS"
+	-o recordsize=1M -o compression=off "$DS" \
+	|| die "cannot create the encrypted dataset $DS for the models (zfs said the line above)." "What to do: check the pool with zpool status $POOL and run the installer again."
 [ "$(zfs get -H -o value encryption "$DS")" != off ] \
-	|| { zfs destroy -r "$DS"; log "$DS came out unencrypted; destroyed" >&2; exit 1; }
+	|| { zfs destroy -r "$DS"; die "$DS came out unencrypted; it was destroyed and no model set was written." "What to do: run the installer again; if it repeats, the pool's encryption is broken: ask for help."; }
 DEST="$(zfs get -H -o value mountpoint "$DS")"
 case "$DEST" in "$TARGET"*) ;; *) DEST="$TARGET$MODELS_MP" ;; esac
-[ -d "$DEST" ] || { zfs destroy -r "$DS"; log "$DS is not mounted at $DEST" >&2; exit 1; }
+[ -d "$DEST" ] || { zfs destroy -r "$DS"; die "$DS is not mounted at $DEST." "What to do: run the installer again."; }
 
-fail() {
-	log "$1" >&2
+fail() { # fail MESSAGE: destroy the partial dataset, then die
 	zfs destroy -r "$DS" 2>/dev/null || true
-	exit 1
+	die "$1" "No model set is left on this computer: the dataset was destroyed." \
+		"What to do: run the installer again; if it repeats, re-create the install medium from a verified download."
+}
+# classify ERRFILE ATTEMPT ATTEMPTS: print the reason river-modelpack failed, in plain words, and
+# set CLASS (auth | medium | other). The names come from river-modelpack's own messages.
+classify() {
+	if grep -q 'authentication failed' "$1"; then
+		CLASS=auth
+		REASON="WRONG PASSPHRASE (or the payload was altered): the model payload did not open."
+	elif grep -q 'medium is damaged\|does not match MANIFEST' "$1"; then
+		CLASS=medium
+		_part="$(sed -n 's/.*part \([^ ]*\) does not match MANIFEST.*/\1/p' "$1" | head -n 1)"
+		REASON="PAYLOAD READ ERROR / sha256 MISMATCH in ${_part:+the file $_part of }the payload on the install medium ($PAYLOAD)."
+	else
+		CLASS=other
+		REASON="river-modelpack failed: $(tail -n 3 "$1" | tr '\n' ' ')"
+	fi
 }
 
 n=0
@@ -171,23 +217,40 @@ while :; do
 	fi
 	log "unpacking into $DS (this reads the whole payload from the medium: $SET_BYTES bytes before compression)"
 	rc=0
-	river-modelpack unpack --payload "$PAYLOAD" --lock "$LOCK" --dest "$DEST" --passphrase-file "$PASS" || rc=$?
+	ERRF="$PASSDIR/modelpack.err"
+	river-modelpack unpack --payload "$PAYLOAD" --lock "$LOCK" --dest "$DEST" --passphrase-file "$PASS" 2> "$ERRF" || rc=$?
+	cat "$ERRF" >&2
 	[ "$rc" -eq 0 ] && break
+	classify "$ERRF"
 	# Start clean for the next attempt (or leave nothing behind).
 	zfs destroy -r "$DS"
 	if [ "$n" -ge "$attempts" ]; then
-		log "unpacking FAILED (see above); $DS destroyed, no model set on this node" >&2
-		exit 1
+		case "$CLASS" in
+		auth) _next="What to do: run the installer again and type the right passphrase (it is on the medium's label or from whoever made it), or skip the models and add them at enrollment." ;;
+		medium) _next="What to do: the stick or disc is damaged or was written wrongly. Re-create the install medium from a verified download and run the installer again." ;;
+		*) _next="What to do: run the installer again; if it repeats, keep the log and ask for help." ;;
+		esac
+		die "$REASON No attempts left; $DS was destroyed and no model set is on this computer." "$_next"
 	fi
-	log "unpacking failed; try again ($n/$attempts)" >&2
+	SAID=1
+	if [ "$CLASS" = auth ]; then
+		log "$REASON Attempts left: $((attempts - n)) of $attempts. Type the passphrase again." >&2
+	else
+		log "$REASON Attempts left: $((attempts - n)) of $attempts; trying again." >&2
+	fi
+	SAID=""
 	zfs create -o mountpoint="$MODELS_MP" -o com.sun:auto-snapshot=false -o atime=off \
 		-o recordsize=1M -o compression=off "$DS"
 done
 
 # Independent re-check with coreutils against the build-time manifest of the same lock.
 if [ -f "$SUMS" ]; then
-	( cd "$DEST" && sha256sum --quiet -c "$SUMS" ) || fail "files do not match $SUMS; $DS destroyed"
+	if ! ( cd "$DEST" && sha256sum -c "$SUMS" > "$PASSDIR/sums.out" 2>&1 ); then
+		_bad="$(grep -v ': OK$' "$PASSDIR/sums.out" | head -n 5 | tr '\n' ';')"
+		fail "SHA256 MISMATCH after unpacking against $SUMS: $_bad the files named here are missing or wrong."
+	fi
 	log "sha256sum -c $SUMS: every file OK"
 fi
 chmod -R a+rX "$DEST"
 log "model set installed and verified: $(zfs get -H -o value used "$DS") in $DS"
+notice "installed and verified ($(zfs get -H -o value used "$DS") in $DS)."

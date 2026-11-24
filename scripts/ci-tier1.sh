@@ -114,6 +114,7 @@ run "$RIVER" test external-profile --repo .
 run "$RIVER" test installed-hooks --repo .
 # 9c. the model payload step's required mode (installer/lib/72-models-payload.sh), with fake zfs.
 run "$RIVER" test models-required --repo .
+run "$RIVER" test steprun --repo .
 # 9d. build/models-fetch.sh: a subset (MODELS_ONLY) and the upstream token (HF_TOKEN_FILE), locally.
 run "$RIVER" test models-fetch --repo .
 
