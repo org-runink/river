@@ -5,6 +5,8 @@ SPDX-License-Identifier: MIT
 
 # Runink River on Google Cloud (Compute Engine)
 
+> **Update 2026-11-23:** the headless cloud edition, its unattended install and its test harness are in the tree: [edition.md](edition.md).
+>
 > **Status: design, with phase 1 in code.** This page says how Runink River becomes an image
 > anyone can start on Compute Engine. It is free, like Fedora CoreOS: no paid tier and no
 > licence gate. It lists what Google requires, how Runink River meets each item, which paths

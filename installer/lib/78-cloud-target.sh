@@ -54,6 +54,12 @@ case "$PROFILE" in
 	node|base) ;;
 	*) echo "cloud-target: RUNINK_CLOUD_PROFILE=$PROFILE (want node or base)" >&2; exit 1 ;;
 esac
+# The base edition is headless and serial-only: one console, at 115200 (the cloud edition, docs/cloud/edition.md).
+if [ "$PROFILE" = base ]; then
+	SERIAL_KERNEL="console=ttyS0,115200n8"
+	SERIAL_GRUB="serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1"
+	SERIAL_BAUD="115200,38400"
+fi
 
 # The running kernel is the target's (the same linux-runink package), so its config is the
 # target's. A kernel without /proc/config.gz cannot be checked, and that fails the build too.
@@ -198,6 +204,46 @@ if [ -f "$TARGET/usr/local/bin/runink-firstboot.sh" ] && ! grep -q runink-firstb
 		{ print }
 	' "$RCLOCAL" > "$RCLOCAL.new" && mv "$RCLOCAL.new" "$RCLOCAL"
 	chmod +x "$RCLOCAL"
+fi
+fi
+
+# --- base profile only: the guest bootstrap, SSH reachable, accounts ----------------------------
+if [ "$PROFILE" = base ]; then
+# The s6 services of river-cloud-init (docs/cloud/gcp.md section 2.9). A downstream profile that
+# ships its own keeps them (nothing is overwritten).
+svc() { # svc NAME TYPE DEPENDENCIES... ; the script (up or run) is on stdin
+	_n="$1" _t="$2"; shift 2
+	_d="$TARGET/etc/s6/sv/$_n"
+	[ -f "$_d/type" ] && return 0
+	mkdir -p "$_d/dependencies.d"
+	echo "$_t" > "$_d/type"
+	for _x in "$@"; do : > "$_d/dependencies.d/$_x"; done
+	if [ "$_t" = oneshot ]; then cat > "$_d/up"; else cat > "$_d/run"; chmod 0755 "$_d/run"; fi
+}
+detach() { printf '/bin/sh -c "setsid /usr/local/bin/river-cloud-init %s </dev/null >/dev/null 2>&1 &"\n' "$1"; }
+printf '%s\n' "/bin/sh -c \"/usr/local/bin/river-cloud-init identity || echo 'river-cloud-identity: failed' >&2; exit 0\"" \
+	| svc river-cloud-identity oneshot mount-filesystems remount-root
+echo "/usr/local/bin/river-cloud-init boot" | svc river-cloud-init oneshot river-cloud-identity NetworkManager-srv
+detach late | svc river-cloud-late oneshot river-cloud-init
+detach startup | svc river-cloud-startup oneshot river-cloud-init
+printf '#!/bin/execlineb -P\nfdmove -c 2 1\n/usr/local/bin/river-cloud-init watch\n' | svc river-cloud-watch longrun river-cloud-init
+
+# SSH is closed by the host firewall until /etc/runink/fw-open lists it (invariant 7). An
+# instance with no way in is useless, so the base image opens tcp 22 and nothing else.
+install -d -m 0700 "$TARGET/etc/runink"
+printf '# Cloud edition: SSH (installer step 78-cloud-target). Nothing else is opened.\ntcp 22\n' > "$TARGET/etc/runink/fw-open"
+chmod 0600 "$TARGET/etc/runink/fw-open"
+
+# The accounts named in metadata `ssh-keys` are administrators, as with Compute Engine's guest
+# environment: wheel, without a password (they have none; login is by key only).
+cat > "$TARGET/etc/sudoers.d/20-river-cloud" <<'SUDO'
+# Cloud edition (installer step 78-cloud-target): metadata-listed accounts have no password.
+%wheel ALL=(ALL:ALL) NOPASSWD: ALL
+SUDO
+chmod 0440 "$TARGET/etc/sudoers.d/20-river-cloud"
+# The NIC takes its MTU from DHCP (Compute Engine sends 1460); nothing may force another.
+if grep -rqs '^[[:space:]]*\(ethernet\.\)\?mtu[[:space:]]*=' "$TARGET/etc/NetworkManager"; then
+	echo "cloud-target: a NetworkManager file forces an MTU; the VPC's 1460 must come from DHCP" >&2; exit 1
 fi
 fi
 

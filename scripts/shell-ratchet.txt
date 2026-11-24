@@ -16,6 +16,7 @@ build/build-all.sh
 build/build-kernel-zfs.sh
 build/ci-runner-prep.sh
 build/cloud-image.sh
+build/cloud-base-test.sh
 build/cloud-image-test.sh
 build/iso-root-stage.sh
 build/k0s-airgap.sh
@@ -39,6 +40,7 @@ installer/lib/20-clone-rootfs.sh
 installer/lib/30-target-config.sh
 installer/lib/32-locale-keyboard.sh
 installer/lib/35-pacman-keyring.sh
+installer/lib/38-cloud-headless.sh
 installer/lib/40-boot-grub-zfs.sh
 installer/lib/50-runink-user.sh
 installer/lib/60-load-artifacts.sh
@@ -56,6 +58,7 @@ installer/lib/hwplan.sh
 installer/lib/memtune.sh
 installer/lib/pair-menu.sh
 installer/netsetup/river-netsetup
+installer/runink-cloud-install
 installer/remediation/esp-fstab-repair.sh
 install.sh
 iso-profiles/river/live-overlay/etc/s6/sv/river-installer/run

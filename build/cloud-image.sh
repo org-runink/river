@@ -2,10 +2,13 @@
 # SPDX-FileCopyrightText: 2026 The RIVER Authors
 # SPDX-License-Identifier: MIT
 #
-# cloud-image.sh — build a server CLOUD IMAGE from a server ISO built from a downstream server
-# profile (RIVER_PROFILE_DIR names it; Runink River itself is a workstation and has no cloud
-# installer), as the calling user (no root; needs a writable /dev/kvm). docs/CLOUD-IMAGES.md is
-# the design.
+# cloud-image.sh — build a CLOUD IMAGE from an ISO, as the calling user (no root; needs a
+# writable /dev/kvm). Two kinds:
+#   - no RIVER_PROFILE_DIR: the in-tree BASE (cloud) edition, from the Runink River ISO,
+#     installed headless by installer/runink-cloud-install (default disk 10G).
+#     docs/cloud/edition.md.
+#   - RIVER_PROFILE_DIR=<dir>: a downstream server image, from the server ISO built from that
+#     profile, which supplies the cloud installer (default disk 64G). docs/CLOUD-IMAGES.md.
 #
 #   build/cloud-image.sh [options] ISO
 #
@@ -27,10 +30,11 @@
 #
 # Options:
 #   --cloud NAME           the target cloud (default gce; the only one built so far)
-#   --name NAME            image name (default runink-river-server-x86-64-<ISO date>[-payload])
+#   --name NAME            image name (default runink-river-x86-64-<ISO date>, or
+#                          runink-river-server-x86-64-<ISO date>[-payload] with a profile)
 #   --out DIR              default ~/.cache/river-build/cloud-out
-#   --disk-size SIZE       raw disk size in GiB, like 64G (default 64G: the install planner's
-#                          smallest target disk, and room for the model payload to unpack)
+#   --disk-size SIZE       raw disk size in GiB, like 64G (default 10G for the base edition; 64G
+#                          for a downstream profile: the planner's smallest target disk)
 #   --no-models            do not carry the ISO's model payload into the image
 #   --expect-payload none|present   fail unless the ISO's downstream payload is as stated
 #   --mem MiB --cpus N     build VM size (default 6144, 4)
@@ -48,12 +52,12 @@ CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 # shellcheck source=build/qemu-lib.sh
 . "$HERE/qemu-lib.sh"
 
-CLOUD=gce NAME="" OUT="$CACHE/river-build/cloud-out" DISK_SIZE=64G MODELS=1 EXPECT_PAYLOAD=""
+CLOUD=gce NAME="" OUT="$CACHE/river-build/cloud-out" DISK_SIZE="" MODELS=1 EXPECT_PAYLOAD=""
 MEM=6144 CPUS=4 WORK="" KEEP=0 DRY=0 ISO=""
 SERIAL_ID="RIVERCLOUD0001"
 
 die() { echo "cloud-image: $*" >&2; exit 2; }
-usage() { sed -n '5,43p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '5,50p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -78,8 +82,14 @@ done
 [ -n "$ISO" ] || usage
 [ -f "$ISO" ] || die "no ISO at $ISO"
 case "$CLOUD" in gce) ;; aws|azure) die "--cloud $CLOUD is planned, not built yet (docs/CLOUD-IMAGES.md)" ;; *) die "unknown --cloud $CLOUD" ;; esac
+BASE=0; [ -n "${RIVER_PROFILE_DIR:-}" ] || BASE=1   # no downstream profile: the in-tree base (cloud) edition
+[ -n "$DISK_SIZE" ] || { if [ "$BASE" = 1 ]; then DISK_SIZE=10G; else DISK_SIZE=64G; fi; }
 case "$DISK_SIZE" in *[!0-9G]*|G*|'') die "--disk-size in whole GiB, like 64G" ;; *G) ;; *) die "--disk-size in whole GiB, like 64G" ;; esac
-[ "${DISK_SIZE%G}" -ge 64 ] || die "--disk-size below 64G: the install planner refuses target disks under 64 GiB"
+if [ "$BASE" = 1 ]; then
+	[ "${DISK_SIZE%G}" -ge 8 ] || die "--disk-size below 8G: the base edition needs room for the system and its first-boot growth"
+else
+	[ "${DISK_SIZE%G}" -ge 64 ] || die "--disk-size below 64G: the install planner refuses target disks under 64 GiB"
+fi
 case "$EXPECT_PAYLOAD" in ''|none|present) ;; *) die "--expect-payload none or present" ;; esac
 case "$MEM$CPUS" in *[!0-9]*) die "--mem and --cpus are numbers" ;; esac
 missing=""
@@ -92,7 +102,7 @@ LABEL="$(blkid -s LABEL -o value "$ISO" 2>/dev/null || true)"
 [ -n "$LABEL" ] || die "cannot read the ISO volume label of $ISO"
 if [ -z "$NAME" ]; then
 	d="$(basename "$ISO" | grep -Eo '[0-9]{8}' | head -1 || true)"
-	NAME="runink-river-server-x86-64-${d:-$(date +%Y%m%d)}"
+	if [ "$BASE" = 1 ]; then NAME="runink-river-x86-64-${d:-$(date +%Y%m%d)}"; else NAME="runink-river-server-x86-64-${d:-$(date +%Y%m%d)}"; fi
 fi
 echo "$NAME" | grep -Eq '^[a-z]([-a-z0-9]{0,52}[a-z0-9])?$' || die "--name must be a Compute Engine image name ([a-z][-a-z0-9]*, at most 54 characters before -payload)"
 [ -n "$WORK" ] || WORK="$CACHE/river-build/cloud-work/$(date +%Y%m%d-%H%M%S)"
@@ -124,19 +134,27 @@ rm -rf "$KIT"; mkdir -p "$KIT/overlay/usr/local/bin" "$KIT/overlay/usr/local/lib
 # The cloud installer (runink-autoinstall, the river-cloud-* s6 services, the private firewall
 # ruleset) belongs to a server distribution's profile, not to Runink River's: RIVER_PROFILE_DIR
 # names that downstream profile (docs/BUILD.md, "Downstream distributions").
-[ -n "${RIVER_PROFILE_DIR:-}" ] || die "set RIVER_PROFILE_DIR to the downstream server profile the ISO was built from (Runink River has no cloud installer)"
+if [ "$BASE" = 0 ]; then
 OVL="$RIVER_PROFILE_DIR/root-overlay"
 for f in usr/local/bin/runink-autoinstall usr/local/bin/river-perms usr/local/lib/runink-net/runink-firewall.nft; do
 	[ -f "$OVL/$f" ] || die "$OVL has no $f (not a server profile with the cloud installer?)"
 done
+fi
 echo "cloud-image: building river-cloud-init (GOAMD64=v1, stdlib only)"
 ( cd "$REPO/installer" && CGO_ENABLED=0 GOAMD64=v1 go build -trimpath -ldflags='-s -w' \
 	-o "$KIT/overlay/usr/local/bin/river-cloud-init" ./cloudinit )
-cp "$OVL/usr/local/bin/runink-autoinstall" "$OVL/usr/local/bin/river-perms" "$KIT/overlay/usr/local/bin/"
-cp "$OVL"/usr/local/lib/runink-install/*.sh "$KIT/overlay/usr/local/lib/runink-install/"
-cp -R "$OVL"/etc/s6/sv/river-cloud-* "$KIT/overlay/etc/s6/sv/"
-mkdir -p "$KIT/overlay/usr/local/lib/runink-net"
-cp "$OVL/usr/local/lib/runink-net/runink-firewall.nft" "$KIT/overlay/usr/local/lib/runink-net/"
+if [ "$BASE" = 1 ]; then
+	# The in-tree base edition: this checkout's steps and unattended driver; the s6 services are
+	# written by step 78-cloud-target, the firewall is the ISO's own.
+	cp "$REPO/installer/runink-cloud-install" "$KIT/overlay/usr/local/bin/"
+	cp "$REPO"/installer/lib/*.sh "$KIT/overlay/usr/local/lib/runink-install/"
+else
+	cp "$OVL/usr/local/bin/runink-autoinstall" "$OVL/usr/local/bin/river-perms" "$KIT/overlay/usr/local/bin/"
+	cp "$OVL"/usr/local/lib/runink-install/*.sh "$KIT/overlay/usr/local/lib/runink-install/"
+	cp -R "$OVL"/etc/s6/sv/river-cloud-* "$KIT/overlay/etc/s6/sv/"
+	mkdir -p "$KIT/overlay/usr/local/lib/runink-net"
+	cp "$OVL/usr/local/lib/runink-net/runink-firewall.nft" "$KIT/overlay/usr/local/lib/runink-net/"
+fi
 cat > "$KIT/config" <<EOF
 TARGET_SERIAL=$SERIAL_ID
 SOURCE_REF=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo main)
@@ -178,6 +196,33 @@ echo "RIVERTEST END cloud-build"
 sync
 poweroff -f 2>/dev/null || poweroff
 EOF
+if [ "$BASE" = 1 ]; then
+# The base edition's live script: no plan, no payload; the unattended driver does the install.
+cat > "$KIT/live.sh" <<'LIVE'
+#!/bin/sh
+# Runs as root on the LIVE system; results go to the serial port.
+exec >/dev/ttyS0 2>&1
+set -u
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin
+. /run/rt/config
+ok() { echo "RIVERTEST OK $1"; }
+ko() { echo "RIVERTEST FAIL $1${2:+ ($2)}"; }
+echo "RIVERTEST BEGIN cloud-build"
+( cd /run/rt/overlay && find . -type f ) | while read -r f; do
+	f="${f#./}"
+	mkdir -p "/$(dirname "$f")" && cp "/run/rt/overlay/$f" "/$f"
+	case "$f" in usr/local/bin/*|usr/local/lib/runink-install/*) chmod 0755 "/$f" ;; *) chmod 0644 "/$f" ;; esac
+	echo "RIVERTEST NOTE overlay /$f"
+done
+echo "RIVERTEST PAYLOAD none"
+export RUNINK_SOURCE_REF="$SOURCE_REF" RUNINK_CLOUD="$CLOUD" RUNINK_CLOUD_PROFILE=base
+runink-cloud-install --serial "$TARGET_SERIAL" 2>&1 | tee /run/rt-install.log
+grep -q AUTOINSTALL-DONE /run/rt-install.log && ok install || ko install
+echo "RIVERTEST END cloud-build"
+sync
+poweroff -f 2>/dev/null || poweroff
+LIVE
+fi
 rm -f "$WORK/kit.img"
 mkfs.vfat -C -n RIVERTEST "$WORK/kit.img" 131072 >/dev/null
 for f in "$KIT"/*; do mcopy -s -i "$WORK/kit.img" "$f" ::/; done
@@ -221,6 +266,7 @@ grep -q 'RIVERTEST OK install$' "$WORK/results-build.txt" || {
 	exit 1
 }
 PAYLOAD="$(sed -n 's/^RIVERTEST PAYLOAD //p' "$WORK/results-build.txt" | head -1)"
+[ "$BASE" = 0 ] || PAYLOAD=none   # the base edition carries no payload by construction
 echo "cloud-image: downstream platform payload in the ISO: ${PAYLOAD:-unknown}"
 if [ -n "$EXPECT_PAYLOAD" ] && [ "$PAYLOAD" != "$EXPECT_PAYLOAD" ]; then
 	echo "cloud-image: FAIL — --expect-payload $EXPECT_PAYLOAD, the ISO has: $PAYLOAD" >&2; exit 1

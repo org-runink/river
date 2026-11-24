@@ -15,12 +15,14 @@
 //	                            reguid, the model payload, the instance's install plan
 //	river-cloud-init watch      s6 river-cloud-watch (longrun): re-applies the SSH keys whenever
 //	                            instance or project metadata changes (wait_for_change)
+//	river-cloud-init startup    s6 river-cloud-startup (base profile): runs the `startup-script` metadata value
+//	                            once per boot, detached; output in /var/log/river-cloud-startup.log
 //	river-cloud-init reseal     re-wrap the data key with the configured provider (rotation)
 //	river-cloud-init status     print /run/river-cloud/status
 //
 // The profile comes from RIVER_CLOUD_PROFILE in cloud.env: "node" (the default; everything
-// above) or "base" (a general-purpose image: identity, hostname, SSH keys and disk growth
-// only; no data datasets, no enrollment, no cluster address; docs/cloud/gcp.md).
+// above) or "base" (a general-purpose image: identity, hostname, per-account SSH keys, the startup script and
+// disk growth only; no data datasets, no enrollment, no cluster address; docs/cloud/gcp.md).
 //
 // Exit status: 0 done, 1 failed (boot: the data datasets are NOT available, so rc-local and
 // the k0s node do not start), 2 usage.
@@ -38,6 +40,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -99,6 +102,8 @@ func main() {
 		err = late()
 	case "watch":
 		err = watch()
+	case "startup":
+		err = startup()
 	case "reseal":
 		err = reseal()
 	case "status":
@@ -117,7 +122,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: river-cloud-init identity|boot|late|reseal|status")
+	fmt.Fprintln(os.Stderr, "usage: river-cloud-init identity|boot|late|watch|startup|reseal|status")
 	os.Exit(2)
 }
 
@@ -481,26 +486,65 @@ func setHostname(ctx context.Context, md *cloud.Metadata) error {
 	return nil
 }
 
-// sshKeys writes the metadata server's keys for the runink admin. The file lives on the boot
-// environment (public keys, root-owned 0644) so the admin can log in and repair a node whose
-// data datasets did not unlock; sshd reads it through AuthorizedKeysFile
-// (etc/ssh/sshd_config.d/05-river-cloud.conf). Rewritten at every boot and, where the river-cloud-watch
-// longrun runs, on every metadata change, so a key removed from metadata stops working then.
-func sshKeys(ctx context.Context, md *cloud.Metadata) error {
+// managedHeader marks a key file river-cloud-init wrote, so it removes only its own files.
+const managedHeader = "# Written by river-cloud-init from instance metadata (ssh-keys); rewritten on every change.\n"
+
+// authKeysDir is where sshd looks for per-account keys (AuthorizedKeysFile in 05-river-cloud.conf).
+const authKeysDir = "/etc/ssh/authorized_keys.d"
+
+// metadataSSHKeys returns the ssh-keys text of instance and (unless blocked) project metadata.
+// Anything but a value or "not found" is an error, so a metadata hiccup never reads as "no
+// keys" and never removes the keys already installed.
+func metadataSSHKeys(ctx context.Context, md *cloud.Metadata) (string, error) {
 	var text []string
+	get := func(p string) (string, bool, error) {
+		v, err := md.Get(ctx, p)
+		if errors.Is(err, cloud.ErrNotFound) {
+			return "", false, nil
+		}
+		return v, err == nil, err
+	}
 	for _, p := range []string{"instance/attributes/ssh-keys", "instance/attributes/sshKeys"} {
-		if v, err := md.Get(ctx, p); err == nil {
+		v, ok, err := get(p)
+		if err != nil {
+			return "", err
+		}
+		if ok {
 			text = append(text, v)
 		}
 	}
-	block, _ := md.Get(ctx, "instance/attributes/block-project-ssh-keys")
+	block, _, err := get("instance/attributes/block-project-ssh-keys")
+	if err != nil {
+		return "", err
+	}
 	if strings.TrimSpace(strings.ToLower(block)) != "true" {
-		if v, err := md.Get(ctx, "project/attributes/ssh-keys"); err == nil {
+		v, ok, err := get("project/attributes/ssh-keys")
+		if err != nil {
+			return "", err
+		}
+		if ok {
 			text = append(text, v)
 		}
 	}
-	keys := cloud.ParseSSHKeys(strings.Join(text, "\n"), time.Now())
-	body := "# Written by river-cloud-init from instance metadata (ssh-keys); rewritten on every change.\n"
+	return strings.Join(text, "\n"), nil
+}
+
+// sshKeys installs the metadata server's keys. On a node image every key goes to the one admin
+// account (runink); on a base image each key goes to the account named in its `ssh-keys` line
+// (userKeys). The files live on the boot environment (public keys, root-owned 0644) and sshd
+// reads them through AuthorizedKeysFile (etc/ssh/sshd_config.d/05-river-cloud.conf). They are
+// rewritten at every boot and, where the river-cloud-watch longrun runs, on every metadata
+// change, so a key removed from metadata stops working then.
+func sshKeys(ctx context.Context, md *cloud.Metadata) error {
+	text, err := metadataSSHKeys(ctx, md)
+	if err != nil {
+		return err
+	}
+	if p, _ := profile(readCloudEnv()); p == profileBase {
+		return userKeys(authKeysDir, cloud.ParseSSHKeysByUser(text, time.Now()), ensureUser)
+	}
+	keys := cloud.ParseSSHKeys(text, time.Now())
+	body := managedHeader
 	for _, k := range keys {
 		body += k + "\n"
 	}
@@ -509,6 +553,156 @@ func sshKeys(ctx context.Context, md *cloud.Metadata) error {
 	}
 	setStatus("ssh_keys", fmt.Sprint(len(keys)))
 	return nil
+}
+
+// userKeys writes dir/<user> for every account in byUser (creating the account first, with
+// ensure, when it is missing) and removes the key files it wrote earlier for accounts that
+// are no longer listed. A file without managedHeader is never touched. An account that cannot
+// be created gets no key file; the others are still written, and the error comes back.
+func userKeys(dir string, byUser map[string][]string, ensure func(string) error) error {
+	users := make([]string, 0, len(byUser))
+	for u := range byUser {
+		users = append(users, u)
+	}
+	sort.Strings(users)
+	var written []string
+	var failed []string
+	nkeys := 0
+	for _, u := range users {
+		if err := ensure(u); err != nil {
+			logger.Printf("user %s: %v", u, err)
+			failed = append(failed, u)
+			continue
+		}
+		body := managedHeader + strings.Join(byUser[u], "\n") + "\n"
+		if err := writeFileAtomic(filepath.Join(dir, u), []byte(body), 0o644); err != nil {
+			return err
+		}
+		written = append(written, u)
+		nkeys += len(byUser[u])
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		n := e.Name()
+		if slices.Contains(written, n) || strings.HasSuffix(n, ".new") || !e.Type().IsRegular() {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(dir, n)); err == nil && strings.HasPrefix(string(b), managedHeader) {
+			_ = os.Remove(filepath.Join(dir, n))
+		}
+	}
+	setStatus("ssh_keys", fmt.Sprint(nkeys))
+	setStatus("ssh_users", strings.Join(written, ","))
+	if len(failed) > 0 {
+		return fmt.Errorf("no account for %s", strings.Join(failed, ", "))
+	}
+	return nil
+}
+
+// ensureUser creates the account when the system has none of that name: a home directory, bash,
+// no password (the password field is "*", so no password can ever match), and the wheel group
+// when there is one (78-cloud-target gives wheel sudo on a base image, as Compute Engine's guest
+// environment does for the users in metadata).
+func ensureUser(name string) error {
+	_, err := user.Lookup(name)
+	if err == nil {
+		return nil
+	}
+	var unknown user.UnknownUserError
+	if !errors.As(err, &unknown) {
+		return err
+	}
+	args := []string{"-m", "-s", "/bin/bash", "-p", "*"}
+	if _, gerr := user.LookupGroup("wheel"); gerr == nil {
+		args = append(args, "-G", "wheel")
+	}
+	if _, err := run(nil, "useradd", append(args, name)...); err != nil {
+		return err
+	}
+	logger.Printf("account %s created (no password)", name)
+	return nil
+}
+
+// --- startup-script -----------------------------------------------------------------------------
+
+const (
+	startupAttr = "startup-script"
+	startupPath = stateDir + "/startup-script"
+	startupLog  = "/var/log/river-cloud-startup.log"
+)
+
+// startup is the s6 oneshot river-cloud-startup's job (detached, like late): once per boot, run
+// the `startup-script` metadata value (instance, else project) as root. Only the base profile
+// runs it; the node profile never executes metadata. The script's output goes to startupLog,
+// never to this program's log, and the script itself is deleted when it ends.
+func startup() error {
+	env := readCloudEnv()
+	p, err := profile(env)
+	if err != nil {
+		return err
+	}
+	if p != profileBase {
+		setStatus("startup_script", "not-enabled")
+		return nil
+	}
+	ctx := context.Background()
+	md := metadataClient(env)
+	wctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	_, err = md.Wait(wctx, 2*time.Second)
+	cancel()
+	if err != nil {
+		setStatus("startup_script", "metadata-unreachable")
+		return nil // the boot goes on; nothing is run that was not read
+	}
+	script, err := md.Attr(ctx, startupAttr)
+	if errors.Is(err, cloud.ErrNotFound) {
+		setStatus("startup_script", "none")
+		return nil
+	}
+	if err != nil {
+		setStatus("startup_script", "read-failed")
+		return err
+	}
+	code, err := runStartupScript(script, startupPath, startupLog)
+	if err != nil {
+		setStatus("startup_script", "failed-to-start")
+		return err
+	}
+	setStatus("startup_script", fmt.Sprintf("ran-exit-%d", code))
+	return nil
+}
+
+// runStartupScript writes script to path (0700), runs it (directly when it begins with a
+// shebang, else with /bin/sh), appends its output to logPath (0600), deletes it, and returns the
+// exit code. An error means it could not be started.
+func runStartupScript(script, path, logPath string) (int, error) {
+	if err := writeFileAtomic(path, []byte(script), 0o700); err != nil {
+		return -1, err
+	}
+	defer os.Remove(path)
+	lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) // #nosec G304 -- a constant path of this program
+	if err != nil {
+		return -1, err
+	}
+	defer lf.Close()
+	fmt.Fprintf(lf, "=== startup-script start %s (%d bytes)\n", time.Now().UTC().Format(time.RFC3339), len(script))
+	cmd := exec.Command("/bin/sh", path) // #nosec G204 -- the script is the instance owner's own metadata, run as root by design (docs/cloud/edition.md)
+	if strings.HasPrefix(script, "#!") {
+		cmd = exec.Command(path) // #nosec G204 -- as above
+	}
+	cmd.Stdout, cmd.Stderr = lf, lf
+	err = cmd.Run()
+	code := 0
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+	case errors.As(err, &ee):
+		code = ee.ExitCode()
+	default:
+		return -1, err
+	}
+	fmt.Fprintf(lf, "=== startup-script exit %d\n", code)
+	return code, nil
 }
 
 // grow extends the root pool's partition to the end of its disk and the pool with it.

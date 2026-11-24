@@ -367,3 +367,36 @@ func TestFileHandlerFollowsFile(t *testing.T) {
 		t.Fatalf("ETag did not move after the edit: %q, %v", t2, err)
 	}
 }
+
+func TestParseSSHKeysByUser(t *testing.T) {
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	in := strings.Join([]string{
+		"alice:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuAAAAAAAAAAAAAAAAAAAAA alice@example.org",
+		"alice:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAC second",
+		"alice:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuAAAAAAAAAAAAAAAAAAAAA duplicate",
+		"bob:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuAAAAAAAAAAAAAAAAAAAAA same key, other account",
+		"root:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuBBBBBBBBBBBBB",
+		"Bad.Name:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuCCCCCCCCCCCCC",
+		"x;rm:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuDDDDDDDDDDDDD",
+		"old:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuEEEEEEEEEEEEE google-ssh {\"userName\":\"old\",\"expireOn\":\"2020-01-01T00:00:00+0000\"}",
+	}, "\n")
+	got := ParseSSHKeysByUser(in, now)
+	if len(got) != 2 || len(got["alice"]) != 2 || len(got["bob"]) != 1 {
+		t.Fatalf("got %v; want alice with 2 keys and bob with 1, nothing for root, a bad name or an expired key", got)
+	}
+	if got["alice"][0] != "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOuAAAAAAAAAAAAAAAAAAAAA metadata:alice" {
+		t.Errorf("first key line %q", got["alice"][0])
+	}
+}
+
+func TestValidUser(t *testing.T) {
+	for n, want := range map[string]bool{
+		"alice": true, "a_b-c9": true, "_svc": true, "root": false, "": false, "9lives": false,
+		"-x": false, "Alice": false, "a b": false, "a:b": false, "a/b": false,
+		"abcdefghijklmnopqrstuvwxyzabcdef": true, "abcdefghijklmnopqrstuvwxyzabcdefg": false,
+	} {
+		if got := ValidUser(n); got != want {
+			t.Errorf("ValidUser(%q) = %v, want %v", n, got, want)
+		}
+	}
+}

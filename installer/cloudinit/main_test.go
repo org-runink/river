@@ -8,7 +8,10 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -133,5 +136,106 @@ func TestWatchLoop(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("watchLoop did not stop on cancel")
+	}
+}
+
+func okEnsure(string) error { return nil }
+
+// A base image writes one key file per account, removes the files it wrote for accounts that
+// left metadata, never touches a file it did not write, and gives no key to an account it
+// could not create.
+func TestUserKeys(t *testing.T) {
+	logger = log.New(io.Discard, "", 0)
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir) // setStatus writes /run, which is not writable here; errors are ignored
+	own := filepath.Join(dir, "unmanaged")
+	if err := os.WriteFile(own, []byte("ssh-ed25519 AAAA admin-made\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	k := func(s string) []string { return []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI" + s + " metadata:x"} }
+	if err := userKeys(dir, map[string][]string{"alice": k("A"), "bob": k("B")}, okEnsure); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"alice", "bob"} {
+		b, err := os.ReadFile(filepath.Join(dir, u))
+		if err != nil || !strings.HasPrefix(string(b), managedHeader) || !strings.Contains(string(b), "ssh-ed25519") {
+			t.Fatalf("%s: %q, %v", u, b, err)
+		}
+	}
+	// bob leaves metadata, carol cannot be created.
+	ensure := func(u string) error {
+		if u == "carol" {
+			return errors.New("useradd failed")
+		}
+		return nil
+	}
+	err := userKeys(dir, map[string][]string{"alice": k("A"), "carol": k("C")}, ensure)
+	if err == nil || !strings.Contains(err.Error(), "carol") {
+		t.Fatalf("want an error naming carol, got %v", err)
+	}
+	for u, want := range map[string]bool{"alice": true, "bob": false, "carol": false, "unmanaged": true} {
+		if _, e := os.Stat(filepath.Join(dir, u)); (e == nil) != want {
+			t.Errorf("%s present=%v, want %v", u, e == nil, want)
+		}
+	}
+}
+
+// A metadata error that is not "not found" must not be read as "no keys".
+func TestMetadataSSHKeysError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Metadata-Flavor", "Google")
+		if strings.HasSuffix(r.URL.Path, "/block-project-ssh-keys") {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	md := &cloud.Metadata{Base: srv.URL + "/computeMetadata/v1"}
+	if v, err := metadataSSHKeys(context.Background(), md); err == nil {
+		t.Fatalf("a 500 was read as %q, nil error", v)
+	}
+	cfg := &fake.Config{InstanceID: "1", Hostname: "h.example.internal"}
+	ok := httptest.NewServer(cfg.Handler())
+	defer ok.Close()
+	v, err := metadataSSHKeys(context.Background(), &cloud.Metadata{Base: ok.URL + "/computeMetadata/v1"})
+	if err != nil || v != "" {
+		t.Fatalf("no keys at all is not an error: %q, %v", v, err)
+	}
+}
+
+func TestRunStartupScript(t *testing.T) {
+	logger = log.New(io.Discard, "", 0)
+	dir := t.TempDir()
+	marker, logp, sp := filepath.Join(dir, "marker"), filepath.Join(dir, "log"), filepath.Join(dir, "script")
+	// no shebang: run with sh; the exit code is passed on
+	code, err := runStartupScript("echo ran > "+marker+"\necho out-line\nexit 3\n", sp, logp)
+	if err != nil || code != 3 {
+		t.Fatalf("code %d, err %v", code, err)
+	}
+	if b, _ := os.ReadFile(marker); strings.TrimSpace(string(b)) != "ran" {
+		t.Errorf("script did not run: %q", b)
+	}
+	lb, _ := os.ReadFile(logp)
+	if !strings.Contains(string(lb), "out-line") || !strings.Contains(string(lb), "exit 3") {
+		t.Errorf("log %q", lb)
+	}
+	if exists(sp) {
+		t.Error("the script was left on disk")
+	}
+	if st, _ := os.Stat(logp); st.Mode().Perm() != 0o600 {
+		t.Errorf("log mode %v", st.Mode().Perm())
+	}
+	// shebang: run directly
+	code, err = runStartupScript("#!/bin/sh\necho direct >> "+marker+"\n", sp, logp)
+	if err != nil || code != 0 {
+		t.Fatalf("code %d, err %v", code, err)
+	}
+	if b, _ := os.ReadFile(marker); !strings.Contains(string(b), "direct") {
+		t.Errorf("shebang script did not run: %q", b)
+	}
+	// a shebang naming a missing interpreter is a start failure, not an exit code
+	if _, err = runStartupScript("#!/nonexistent/interp\n", sp, logp); err == nil {
+		t.Error("a missing interpreter was not an error")
 	}
 }
