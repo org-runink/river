@@ -54,6 +54,16 @@ if [ -n "$installed" ]; then
 		done
 	fi
 fi
+# greetd is listed before runink-greetd-s6, which depends on it, so the one-at-a-time loop above cannot
+# remove it ("greetd kept (a kept package needs it)") until that service package is gone. Retry it, with
+# its greeters, once the loop has run.
+grp=""
+for p in greetd greetd-agreety greetd-tuigreet; do
+	chroot "$TARGET" pacman -Q "$p" >/dev/null 2>&1 && grp="$grp $p"
+done
+# shellcheck disable=SC2086 # a package list
+if [ -n "$grp" ]; then chroot_run "pacman -Rns --noconfirm $grp" >/dev/null 2>&1 || echo "headless: the greetd group is still installed:$grp"; fi
+
 for p in $MUST_GO; do
 	if chroot "$TARGET" pacman -Q "$p" >/dev/null 2>&1; then
 		echo "headless: $p is still installed" >&2
@@ -61,8 +71,9 @@ for p in $MUST_GO; do
 	fi
 done
 
-# Files the profile overlay put on the image for the desktop, which no package owns.
-rm -rf "$TARGET/etc/greetd" "$TARGET/etc/xdg" "$TARGET/etc/pam.d/greetd" "$TARGET/etc/firefox" \
+# Files the profile overlay put on the image for the desktop, which no package owns (the overlay adds
+# dependencies.d entries to the greetd service, so its directory outlives the package).
+rm -rf "$TARGET/etc/greetd" "$TARGET/etc/xdg" "$TARGET/etc/pam.d/greetd" "$TARGET/etc/s6/sv/greetd" "$TARGET/etc/firefox" \
 	"$TARGET/etc/plymouth" "$TARGET/usr/share/plymouth" "$TARGET/usr/share/wallpapers" \
 	"$TARGET/usr/share/applications" "$TARGET/usr/share/icons/hicolor/scalable/apps/river"* 2>/dev/null || true
 for s in greetd-srv greetd sddm-srv bluetoothd-srv cupsd-srv; do
@@ -70,10 +81,10 @@ for s in greetd-srv greetd sddm-srv bluetoothd-srv cupsd-srv; do
 done
 
 # The workstation's initramfs hooks name kms and plymouth, which are gone with the desktop; a
-# hook that is not installed fails mkinitcpio. Later drop-ins win, so this one sorts after zfs.conf
+# hook that is not installed fails mkinitcpio. Later drop-ins win, so this one must sort after zfs.conf (zy- does, yy- does not)
 # and 78-cloud-target's zz-river-cloud.conf adds the cloud's drivers on top.
 install -d -m 0755 "$TARGET/etc/mkinitcpio.conf.d"
-cat > "$TARGET/etc/mkinitcpio.conf.d/yy-river-headless.conf" <<'EOF'
+cat > "$TARGET/etc/mkinitcpio.conf.d/zy-river-headless.conf" <<'EOF'
 # Cloud edition (installer step 38-cloud-headless): no display, so no kms and no splash.
 HOOKS=(base udev autodetect microcode modconf keyboard keymap block zfs filesystems)
 EOF

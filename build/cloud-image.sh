@@ -246,13 +246,18 @@ if seen "No bootable option or device was found" build; then
 	start_vm build $MEDIUM_ARGS
 	sleep 30
 fi
+# The base edition is the desktop live medium (greetd + cage): a wlroots compositor owns VT1 and only
+# Ctrl+Alt+F2 reaches the console on VT2; Alt+F2 stays in the compositor, so the typed kit command
+# landed in the installer window and "the live system never ran the kit". A downstream server
+# profile has no compositor: Alt+F2, as before (same split as qemu-test.sh and qemu-gui-test.sh).
+if [ "$BASE" = 1 ]; then VTKEY=ctrl-alt-f2; else VTKEY=alt-f2; fi
 BOOT="sudo sh -c \"mkdir -p /run/rt; mount -r -L RIVERTEST /run/rt; sh /run/rt/live.sh\""
 tries=0
 until seen "RIVERTEST BEGIN cloud-build" build; do
 	tries=$((tries + 1))
 	[ "$tries" -le 4 ] || { echo "cloud-image: the live system never ran the kit (see $WORK/*.png)" >&2; shot never-ran; exit 1; }
 	sleep 40
-	mon "sendkey alt-f2"; sleep 2
+	mon "sendkey $VTKEY"; sleep 2
 	type_line runink; sleep 2; type_line runink; sleep 3
 	type_line "$BOOT"
 	sleep 20
