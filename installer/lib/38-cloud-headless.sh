@@ -81,10 +81,10 @@ for s in greetd-srv greetd sddm-srv bluetoothd-srv cupsd-srv; do
 done
 
 # The workstation's initramfs hooks name kms and plymouth, which are gone with the desktop; a
-# hook that is not installed fails mkinitcpio. Later drop-ins win, so this one sorts after zfs.conf
+# hook that is not installed fails mkinitcpio. Later drop-ins win, so this one must sort after zfs.conf (zy- does, yy- does not)
 # and 78-cloud-target's zz-river-cloud.conf adds the cloud's drivers on top.
 install -d -m 0755 "$TARGET/etc/mkinitcpio.conf.d"
-cat > "$TARGET/etc/mkinitcpio.conf.d/yy-river-headless.conf" <<'EOF'
+cat > "$TARGET/etc/mkinitcpio.conf.d/zy-river-headless.conf" <<'EOF'
 # Cloud edition (installer step 38-cloud-headless): no display, so no kms and no splash.
 HOOKS=(base udev autodetect microcode modconf keyboard keymap block zfs filesystems)
 EOF
