@@ -36,24 +36,31 @@ import (
 )
 
 // sessionProbe is one way of telling that a graphical session exists. The first that
-// matches wins; none of them needs the session to be healthy, only present, because a
-// desktop that draws anything at all can open the installer itself.
+// matches wins. A probe matches only when the session is present AND a display is being
+// driven (display.go): a compositor that is present but could not open a graphics device is
+// the case this program exists for.
 type sessionProbe struct {
 	name string
 	find func() bool
 }
 
 func probes() []sessionProbe {
+	// A session counts only while a display is actually being driven (display.go). A compositor
+	// that is present but could not open a graphics device is exactly the case this program
+	// exists for, so presence alone is not enough.
+	both := func(present func() bool) func() bool {
+		return func() bool { return present() && driven() }
+	}
 	return []sessionProbe{
 		// A Wayland compositor publishes its socket under the user's runtime directory.
-		{"wayland socket", func() bool { return globAny("/run/user/*/wayland-*") }},
+		{"wayland socket", both(func() bool { return globAny("/run/user/*/wayland-*") })},
 		// An X server publishes its socket here. Runink River is Wayland, but a
 		// downstream profile may not be.
-		{"X socket", func() bool { return globAny("/tmp/.X11-unix/X*") }},
+		{"X socket", both(func() bool { return globAny("/tmp/.X11-unix/X*") })},
 		// The compositor itself, in case the sockets live somewhere unusual: the live
 		// medium's installer session is weston (etc/greetd/live.toml), a desktop is DEsk.
-		{"weston", func() bool { return pgrep("weston") }},
-		{"desk", func() bool { return pgrep("desk") }},
+		{"weston", both(func() bool { return pgrep("weston") })},
+		{"desk", both(func() bool { return pgrep("desk") })},
 	}
 }
 
