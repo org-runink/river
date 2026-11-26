@@ -16,7 +16,7 @@ verified ([Download & verify]({{< relref "download" >}})).
 {{< callout type="warning" >}}
 `install.sh` downloads **the latest published release**. Until the first River release is
 tagged and published, there is nothing for it to fetch and this path cannot work — use
-**By hand** below with a locally built image. See [Releases](../releases/) for what exists.
+**By hand** below with a locally built image. See [Releases]({{< relref "/docs/releases" >}}) for what exists.
 {{< /callout >}}
 
 `install.sh` downloads and verifies the image first, then writes it:
