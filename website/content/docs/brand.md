@@ -19,11 +19,9 @@ to an unrelated Wayland compositor.
 
 ## The logo
 
-<div style="display:flex;flex-wrap:wrap;gap:16px;margin:16px 0">
-  <div style="background:#212121;border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:center;width:180px;height:180px"><img src="../../brand/river-mark.svg" width="140" height="140" alt="The Runink River logo: a brown, white and tan puppy with a glowing cyan cube in its mouth"></div>
-  <div style="background:#f4f3ee;border:1px solid #d6d5cc;border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:center;width:180px;height:180px"><img src="../../brand/river-mark.svg" width="140" height="140" alt="The same logo on a light ground"></div>
-  <div style="background:#212121;border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:center;width:180px;height:180px"><img src="../../brand/river-mark-small.svg" width="48" height="48" alt="The small form of the logo, the puppy's head, for 24 pixels and below"></div>
-</div>
+![The Runink River logo: a brown, white and tan puppy with a glowing cyan cube in its mouth](../../brand/river-mark.svg)
+
+![The small form of the logo, the puppy's head, for 24 pixels and below](../../brand/river-mark-small.svg)
 
 The Runink River logo is **the Runink mascot**, the mascot for Runink River and the people
 who build on it: a brown, white and tan puppy with a glowing cyan cube in its mouth, drawn as
