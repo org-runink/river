@@ -1,0 +1,172 @@
+# Architecture
+
+*How a Runink River machine is put together: the image's two layers, the boot chain from GRUB to the desktop, the s6 service graph, and the packages Runink River builds itself.*
+
+<!--
+SPDX-FileCopyrightText: 2026 The RIVER Authors
+SPDX-License-Identifier: MIT
+-->
+
+This page describes how the workstation image is built and how an installed machine comes
+up. Every name on it (packages, services, files) is taken from the source tree; follow the
+links to read the code.
+
+## The layers
+
+| Layer | What it is | Source |
+|---|---|---|
+| Kernel | `linux-runink` 7.2.7-zen1: the zen kernel's 7.2.x stable series, the only kernel on the image. Its packages also build for aarch64; the image is x86_64 only | [`build/pkgbuilds/runink-kernel/`](https://github.com/org-runink/river/blob/main/build/pkgbuilds/runink-kernel/) |
+| Root filesystem | OpenZFS 2.4.4 as a separate module package (`runink-zfs`) plus its userland and initramfs hook (`runink-zfs-utils`), built for x86_64 and aarch64 | [`build/pkgbuilds/runink-zfs/`](https://github.com/org-runink/river/blob/main/build/pkgbuilds/runink-zfs/) |
+| Init | s6, s6-rc and s6-linux-init, driven by the `s6` front end | [`iso-profiles/river/root-overlay/etc/s6/`](https://github.com/org-runink/river/blob/main/iso-profiles/river/root-overlay/etc/s6/) |
+| Desktop | DEsk (a wlroots compositor that is the whole desktop) on Wayland, greetd with gtkgreet in cage, PipeWire, NetworkManager, Bluetooth and printing, each with its s6 service package | [`iso-profiles/river/profile.yaml`](https://github.com/org-runink/river/blob/main/iso-profiles/river/profile.yaml) |
+| Installer | `river-installer` (graphical), `runink-install` (text), `river-hwprobe`, `river-plan`, `river-netsetup` and the numbered install steps | [`installer/`](https://github.com/org-runink/river/blob/main/installer/) |
+| Host policy | the `runink-fw` firewall, `river-perms`, `river-sandbox`, sysctl and zram tuning | [`iso-profiles/river/root-overlay/usr/local/bin/`](https://github.com/org-runink/river/blob/main/iso-profiles/river/root-overlay/usr/local/bin/) |
+
+Everything else on the image (Firefox, the desktop's programs, the libraries and tools) is a distribution
+package from pinned mirrors. Today those come from Artix Linux, through Artix's ISO tooling:
+that is the **transitional** builder, which Runink River is replacing with its own
+from-source base ([below](#the-transitional-builder-and-the-own-base)).
+
+## The image: two layers, one golden system
+
+The ISO holds two squashfs layers ([`iso-profiles/river/profile.yaml`](https://github.com/org-runink/river/blob/main/iso-profiles/river/profile.yaml)):
+
+- **`rootfs`** is the finished system: every package the installed machine has, plus the
+  profile's `root-overlay/`. An installed machine is a copy of it.
+- **`livefs`** is for the live medium only and sits on top of `rootfs`: the live user's
+  session (greetd starts the installer in weston with no login; a text console on Ctrl+Alt+F2), its passwordless `sudo`, the live
+  hostname and the graphical installer's s6 service. `Packages-Live` adds two packages:
+  `runink-grub-live` (the live GRUB scaffolding) and `weston`, whose kiosk shell shows the
+  installer before any desktop starts.
+
+The installer does not download or resolve packages. Step `20-clone-rootfs` copies the
+running live system onto the new ZFS boot environment with `rsync`, and then removes what
+belongs only to the live medium (the no-login greetd session `/etc/greetd/live.toml`, the autologin drop-ins, the live `sudo` rule, the installer
+itself and its service, the machine-id and the SSH host keys). This is why an install works
+with no network at all.
+
+The package set is an allow-list. `Packages-Root` is curated by hand, never by package
+group; `river lint profile-manifest` checks that every package `profile.yaml` installs
+is on it, and `river lint closure` checks the whole dependency closure against
+`forbidden.closure`. Nothing on this list may enter the image, directly or as a dependency:
+
+| Kept out | Why |
+|---|---|
+| `podman`, `docker`, `docker-compose`, `podman-compose` | no container runtime in the base image |
+| `flatpak`, `flatpak-kcm`, `discover`, `packagekit`, `packagekit-qt6` | no second software supply chain beside the pinned pacman repositories |
+| `plasma-workspace`, `kwin`, `sddm` | DEsk and greetd replaced KDE Plasma and SDDM; they stay out |
+| `aws-cli`, `aws-cli-v2`, `google-cloud-cli`, `google-cloud-sdk`, `azure-cli` | no cloud vendor tooling in the base image |
+| `linux` | exactly one kernel, `linux-runink` |
+
+## From power-on to the desktop
+
+1. <a name="firmware-and-grub"></a>**Firmware and GRUB**
+
+   UEFI firmware loads GRUB from the EFI system partition's removable path
+   (`EFI/BOOT/BOOTX64.EFI`, installed with `grub-install --removable`), so the machine boots
+   even without a firmware boot entry. The EFI partition is mounted at `/boot` and holds the
+   kernel, the initramfs and `grub.cfg`: GRUB cannot read a natively encrypted ZFS pool, so
+   nothing it needs lives on the pool.
+
+2. <a name="the-initramfs"></a>**The initramfs**
+
+   The kernel command line names the root dataset, `root=ZFS=<pool>/ROOT/<be>`
+   (`/etc/default/grub.d/10-runink-zfs.cfg`, written by `40-boot-grub-zfs`). The initramfs
+   is built by mkinitcpio with these hooks
+   ([`iso-profiles/river/root-overlay/etc/mkinitcpio.conf.d/zfs.conf`](https://github.com/org-runink/river/blob/main/iso-profiles/river/root-overlay/etc/mkinitcpio.conf.d/zfs.conf)):
+
+   ```text
+   HOOKS=(base udev autodetect microcode modconf kms plymouth keyboard keymap block zfs filesystems)
+   ```
+
+   The `zfs` hook imports the pool (matching the hostid baked into the image), runs any key
+   provider in `/etc/zfs/initramfs-tools-load-key.d/`, and otherwise asks on the console for
+   the pool's passphrase. It then mounts the boot environment at `/`. The Plymouth splash
+   covers the import.
+
+3. <a name="s6-linux-init-and-s6-rc"></a>**s6-linux-init and s6-rc**
+
+   `s6-linux-init` becomes PID 1 and starts the supervision tree; `s6-rc` brings up the default
+   bundle compiled into `/etc/s6/rc/compiled` at install time (step `80-enable-s6`). The
+   services the project adds, and the order they impose:
+
+   | Service | Type | Depends on | Job |
+   |---|---|---|---|
+   | `runink-fw` | oneshot | `modules` | loads the default-deny firewall |
+   | `zfs-mount` | oneshot | `modules`, `mount-tmpfs`, `udevadm` | `zfs mount -a`: mounts `/home` and the pool's other datasets |
+   | `mount-filesystems` | oneshot (s6 base) | `zfs-mount` (added) | the rest of `/etc/fstab`, including the EFI partition at `/boot` |
+   | `river-perms` | oneshot | `mount-filesystems` | re-asserts 0600/0700 modes on secret files |
+   | `NetworkManager-srv` | longrun | `runink-fw` (added) | the network |
+   | `sshd-srv` | longrun | `runink-fw` (added) | SSH, still closed by the firewall until you open port 22 |
+   | `plymouth-quit` | oneshot | | ends the boot splash |
+   | `greetd` | longrun (`runink-greetd-s6`) | `plymouth-quit`, `zfs-mount`, `elogind` | the login screen |
+   | `rc-local` | oneshot | `mount-filesystems`, `runink-fw` | runs `/etc/s6/rc.local` |
+
+   Bluetooth (`bluetoothd`) and printing (`cupsd`) come from the `bluez-s6` and `cups-s6`
+   packages, and dbus and elogind are pulled in as dependencies. "(added)" marks a dependency
+   Runink River adds to a packaged service, as a file in its `dependencies.d/` directory.
+
+4. <a name="rclocal"></a>**rc.local**
+
+   `/etc/s6/rc.local` runs last, in init context rather than in a login session, so elogind
+   never reaps what it starts. On the live medium (`overlay=livefs` on the kernel command line)
+   it exits at once. On an installed machine it runs `sysctl --system`, sets up zram swap
+   (`runink-zram.sh`), and runs any first-boot hooks a downstream image carries (none on Runink
+   River).
+
+5. <a name="login"></a>**Login**
+
+   greetd shows the login screen (gtkgreet in cage); `pam_gnome_keyring` in its PAM stack
+   unlocks the keyring with the login password. The session is DEsk on Wayland, with PipeWire
+   and WirePlumber as user services; at login it starts `river-desk automount` and
+   `river-desk battery` from `/etc/xdg/autostart`
+   ([Using the desktop](../getting-started/desktop/README.md)).
+
+## Packages Runink River builds
+
+The `[runink]` repository is built from the PKGBUILDs under [`build/pkgbuilds/`](https://github.com/org-runink/river/blob/main/build/pkgbuilds/)
+and placed ahead of the distribution repositories, so its packages win. On the workstation
+image:
+
+| Package | Contents |
+|---|---|
+| `linux-runink`, `linux-runink-headers` | the kernel, built from the signed kernel.org tarball and the signed zen patch |
+| `runink-zfs` | OpenZFS kernel modules prebuilt for exactly that kernel release |
+| `runink-zfs-utils` | the matching OpenZFS userland and the mkinitcpio `zfs` hook, from the same PKGBUILD, so module and userland cannot drift apart |
+| `runink-installer` | `river-installer`, `river-hwprobe`, `river-plan`, `river-netsetup`, `river-netcheck` and the desktop helper `river-desk` (removable media, battery letters, Bluetooth and printers), from [`installer/`](https://github.com/org-runink/river/blob/main/installer/) (Go standard library only) |
+| `runink-bluetuith` | bluetuith, the terminal Bluetooth manager that `river-bluetooth` opens |
+| `runink-desk` | DEsk, the desktop: upstream's release plus the Runink fork's patches (no Python in its build, elogind instead of systemd, the weather off until you turn it on) |
+| `runink-wlroots0.18` | wlroots 0.18.3, the compositor library DEsk and cage are built on |
+| `runink-cage`, `runink-gtkgreet` | the login screen: gtkgreet, full screen in the cage kiosk compositor |
+| `runink-greetd-s6` | the s6 service for greetd, which Artix ships without one |
+
+The tree builds further packages for downstream distributions; they are not on the Runink
+River image. An installed system gets updates of these packages from the public, signed
+`[runink]` repository: [The [runink] package repository](../configuration/package-repository/README.md).
+
+## The transitional builder and the own base
+
+Today `make iso` runs Artix's `buildiso` with the profile under `iso-profiles/river/`, and
+`scripts/patch-artools.go` adjusts it (the kernel swap, the image name and volume label,
+the live menu). That tooling is transitional. The plan in [`docs/OWN-BASE.md`](https://github.com/org-runink/river/blob/main/docs/OWN-BASE.md)
+replaces it with Runink River's own base, built from source:
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 | plan and scaffold: the recipe format, `base/river-build`, `base/river-sign`, recipes for s6, skalibs and execline | done: the three recipes build bit-for-bit reproducibly in a pinned, network-less container |
+| 1 | a reproducible toolchain | planned |
+| 2 | the base built from recipes, its own image assembly (`river-compose`) and `river-update` | planned |
+| 3 | migration of existing installs, removal of the Artix tooling | planned |
+| 5 | the DEsk workstation built from recipes | planned |
+
+Planned changes that users will notice: the kernel booted as a signed unified kernel image
+instead of through GRUB, TPM 2.0 unlock of the pool, and updates installed as a new boot
+environment per release. None of these exists yet.
+
+## Where to read more
+
+- [`docs/ARCHITECTURE.md`](https://github.com/org-runink/river/blob/main/docs/ARCHITECTURE.md): the architecture document. Parts of it still describe
+  the server image that left this repository and say so.
+- [`docs/ENCRYPTION.md`](https://github.com/org-runink/river/blob/main/docs/ENCRYPTION.md): the pool, the key and the ESP layout.
+- [`docs/INSTALL.md`](https://github.com/org-runink/river/blob/main/docs/INSTALL.md): every install step.
+- [`docs/OWN-BASE.md`](https://github.com/org-runink/river/blob/main/docs/OWN-BASE.md): the own-base plan.
