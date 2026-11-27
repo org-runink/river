@@ -40,24 +40,20 @@ concurrency:
 jobs:
   tier1:
     name: tier1 (lint, rootless podman)
-    # The CONTAINER mode (as Tier 1 ran until 2026-09-28, and again now): a `public-ci-vm`
-    # machine has rootless podman, so every same-repository event runs the
-    # checks with --network=none, the source read-only and every capability dropped.
-    # RIVER_TIER1_NO_CONTAINER=1 (host mode) stays for laptops without podman.
+    # HOST mode (owner, 2026-11-27: "Move tier-1 to public-ci"): no `public-ci-vm` runner is
+    # registered for this repository, so a job asking for one waits for ever. The `public-ci`
+    # container is already fresh and capability-free per job, and the checks need no network,
+    # so they run directly there (RIVER_TIER1_NO_CONTAINER=1, as on a laptop without podman).
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository  # owner-only: fork code never runs on our runners
-    runs-on: [self-hosted, public-ci-vm]  # rootless podman inside: a whole machine (rnk public-ci-vm)
+    runs-on: [self-hosted, public-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: podman must be present and rootless
-        run: |
-          set -eu
-          command -v podman >/dev/null || { echo "::error::podman is not installed on this runner"; exit 1; }
-          [ "$(id -u)" != 0 ] || { echo "::error::Tier 1 must run rootless; this runner runs jobs as root"; exit 1; }
-          podman --version
       - name: Tier 1 checks
+        env:
+          RIVER_TIER1_NO_CONTAINER: "1"
         run: sh scripts/ci-tier1.sh
 
   installer-go:
