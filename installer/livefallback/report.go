@@ -249,6 +249,59 @@ func (r rpt) display() []string {
 	return l
 }
 
+// pidsByComm returns the pids under root's /proc whose process name is exactly name.
+func (r rpt) pidsByComm(name string) []string {
+	var out []string
+	for _, d := range r.glob("/proc/[0-9]*") {
+		if r.read(strings.TrimPrefix(d, r.root)+"/comm") == name {
+			out = append(out, filepath.Base(d))
+		}
+	}
+	return out
+}
+
+// session says what the graphical session is doing, so the next failure names itself: whether a
+// seat provider answers, whether the compositor is alive and has made its socket, and, for a
+// compositor that is alive but silent, what the kernel says it is waiting in. The owner's photographs of
+// 2026-11-27 ended at "Backend 'seatd' failed to open seat, skipping" and then nothing; with
+// these lines the report says which of seatd, logind and the compositor stopped answering.
+func (r rpt) session() []string {
+	var l []string
+	if r.exists("/run/seatd.sock") {
+		l = append(l, "seatd        socket /run/seatd.sock present")
+	} else {
+		l = append(l, "seatd        NO SOCKET at /run/seatd.sock: the seat service is not running, so a compositor has only logind")
+	}
+	if p := r.pidsByComm("seatd"); len(p) > 0 {
+		l = append(l, "seatd        running, pid "+strings.Join(p, ","))
+	} else {
+		l = append(l, "seatd        NOT RUNNING")
+	}
+	if p := r.pidsByComm("elogind"); len(p) > 0 {
+		l = append(l, "elogind      running, pid "+strings.Join(p, ","))
+	} else {
+		l = append(l, "elogind      NOT RUNNING")
+	}
+	if socks := r.glob("/run/user/*/wayland-[0-9]"); len(socks) > 0 {
+		l = append(l, "wayland      socket "+strings.Join(socks, " "))
+	} else {
+		l = append(l, "wayland      NO SOCKET under /run/user: no compositor is serving a display")
+	}
+	for _, name := range []string{"weston", "cage", "greetd"} {
+		for _, pid := range r.pidsByComm(name) {
+			line := fmt.Sprintf("%-12s running, pid %s", name, pid)
+			if w := r.read("/proc/" + pid + "/wchan"); w != "" && w != "0" {
+				line += ", waiting in " + w
+			}
+			if sc := r.read("/proc/" + pid + "/syscall"); sc != "" {
+				line += ", syscall " + cut(sc, 40)
+			}
+			l = append(l, line)
+		}
+	}
+	return l
+}
+
 func contains(s []string, x string) bool {
 	for _, v := range s {
 		if v == x {
@@ -467,6 +520,10 @@ func hardwareReport(root string, kmsg []string, full bool) string {
 	}
 	section("display")
 	for _, l := range r.display() {
+		w(l)
+	}
+	section("graphical session")
+	for _, l := range r.session() {
 		w(l)
 	}
 	section("network")

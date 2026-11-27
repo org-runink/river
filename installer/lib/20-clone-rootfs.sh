@@ -80,6 +80,13 @@ fi
 # artools makes the display manager depend on artix-live when that service is installed.
 # Neither profile installs it; should a future one, its dependency must not outlive it here.
 rm -f "$TARGET"/etc/s6/sv/*-srv/dependencies.d/artix-live "$TARGET"/etc/s6/sv/greetd/dependencies.d/artix-live
+# seatd is the live session's seat service (runink-greetd-s6 defines it; the live set enables it,
+# and the live overlay makes greetd depend on it). Its service directory belongs to the package and
+# stays, disabled by 80-enable-s6; greetd's dependency on it is the live overlay's and must not
+# follow the install, or the installed machine's s6 database refuses the set (an enabled greetd
+# depending on a disabled seatd). An installed machine has DEsk and elogind and needs no second
+# seat provider.
+rm -f "$TARGET"/etc/s6/sv/greetd/dependencies.d/seatd
 # river-guide (the install guide agent) is live-medium only: its files were excluded above,
 # its guide model never leaves the medium, and the audit log of the install session stays
 # in the live RAM overlay. Drop its package record and give every tty its ordinary getty back

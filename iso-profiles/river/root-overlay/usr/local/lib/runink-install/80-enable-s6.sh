@@ -53,7 +53,7 @@ done
 # directories, so `s6 repository sync` usually drops them already; disable any that remain.
 # artix-live (Artix's live-session setup) is on no Runink River medium; listing it makes the
 # boot-database check below fail should it ever arrive with one.
-LIVE_ONLY_SERVICES="river-guide-model river-installer artix-live"
+LIVE_ONLY_SERVICES="river-guide-model river-installer seatd artix-live"
 
 # The getty on the VT the display manager takes. SDDM puts its greeter on VT 1 and ignores
 # MinimumVT in Wayland mode; Artix's default bundle also runs an agetty there. Both claim the

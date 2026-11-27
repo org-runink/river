@@ -8,14 +8,21 @@
 # /etc/greetd/config.toml (the login screen: gtkgreet in cage, then DEsk), or with
 # /etc/greetd/live.toml where that exists: the live medium's, which runs the installer first
 # (iso-profiles/river/live-overlay; 20-clone-rootfs deletes it on install).
+#
+# It does NOT run when the kernel command line has river.text: the live medium's "Text installer
+# (no graphics)" GRUB entry. That path must need no seat service, no logind, no DRM and no
+# compositor, so greetd, whose first session is a compositor, is simply not started; the service
+# marks itself "do not restart" (s6-svc -O) and river-live-fallback opens the text installer.
+#
+# It also ships the `seatd` service (the live session's seat provider; see package()).
 pkgname=runink-greetd-s6
 pkgver=2026.10
-pkgrel=2
+pkgrel=3
 pkgdesc="s6 service for greetd, the Runink River login screen"
 arch=('any')
 url="https://github.com/org-runink/river"
 license=('MIT')
-depends=('greetd' 's6' 'execline' 'elogind-s6')
+depends=('greetd' 's6' 'execline' 'elogind-s6' 'seatd')
 provides=('greetd-s6')
 conflicts=('greetd-s6')
 
@@ -35,8 +42,35 @@ package() {
 	cat > "$sv/run" <<'RUN'
 #!/bin/execlineb -P
 fdmove -c 2 1
+ifelse { /usr/bin/grep -Eq -- "(^| )river[.]text(=(1|yes|on|true))?( |$)" /proc/cmdline } { /usr/bin/s6-svc -O . }
 ifelse { /usr/bin/test -f /etc/greetd/live.toml } { /usr/bin/greetd --config /etc/greetd/live.toml }
 /usr/bin/greetd --config /etc/greetd/config.toml
 RUN
 	chmod 0755 "$sv/run"
+
+	# seatd, the seat service of the LIVE medium. The live session is greetd's first session
+	# running weston (iso-profiles/river/live-overlay/etc/greetd/live.toml), and weston 15 opens
+	# the display, the keyboard and the mouse only through libseat, which asks seatd and then
+	# logind. On real hardware logind is not dependable for this: elogind reports seat0
+	# CanGraphical=no when udev never tagged a late-loading DRM card master-of-seat (measured
+	# 2026-10-19, iso-profiles/river/root-overlay/etc/s6/rc.local section 0a), or has no session for
+	# the process ("Could not get primary session for user"), and the compositor then waits for
+	# ever on a dead screen. seatd needs neither udev tags nor a login session: it IS the seat.
+	#
+	# The service is DEFINED here, beside greetd's, and ENABLED only by the live medium
+	# (profile.yaml live-session.services; greetd's dependency on it is the live overlay's
+	# etc/s6/sv/greetd/dependencies.d/seatd). An installed machine has DEsk and elogind: the
+	# service is in its store, disabled (80-enable-s6), and greetd does not depend on it there.
+	# It runs as root, because it opens the DRM and input devices and hands them to the
+	# compositor; the socket /run/seatd.sock is group `video`, which the live user and the
+	# greeter are in.
+	local ss="$pkgdir/etc/s6/sv/seatd"
+	install -d "$ss"
+	printf 'longrun\n' > "$ss/type"
+	cat > "$ss/run" <<'RUN'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/bin/seatd -g video
+RUN
+	chmod 0755 "$ss/run"
 }
