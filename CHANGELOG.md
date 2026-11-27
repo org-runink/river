@@ -109,6 +109,13 @@ None.
 
 ### Changed
 
+- **CI runs on the maintainers' own isolated runners, never on GitHub-hosted ones.** Every
+  job asks for `[self-hosted, public-ci]` (a fresh capability-free container per job) or
+  `[self-hosted, public-ci-vm]` (a fresh VM per job), both registered for this repository
+  alone and reaching the internet only. Jobs a fork's pull request would trigger are skipped,
+  so fork code never runs on them. Scorecard no longer publishes to the Scorecard API, which
+  accepts only GitHub-hosted runs; its SARIF still goes to code scanning. This replaces the
+  entry below that says CI runs only on GitHub-hosted runners.
 - **The Runink mascot is the Runink River community mark.** The brown, white and tan puppy with
   a glowing cyan cube in its mouth replaces the puppy on a raft on every surface: the GRUB
   background, the Plymouth logo, both wallpapers, the lockups, the `runink-river` hicolor icons

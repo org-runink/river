@@ -43,6 +43,6 @@ ssh -p 2222 runink@localhost 'sh -s' < tests/smoke-k0s.sh
 ```
 
 None of these run in CI on every pull request: they need KVM and a built ISO.
-`tier2-vm.yml` builds and boots an ISO, on manual dispatch only; it does not fit a standard
-GitHub-hosted runner, so maintainers run these locally ([docs/governance/CI.md](../docs/governance/CI.md)).
-This repository never uses a self-hosted runner.
+`tier2-vm.yml` builds and boots an ISO, on manual dispatch only; it does not yet fit a CI
+machine (time and RAM), so maintainers run these locally ([docs/governance/CI.md](../docs/governance/CI.md)).
+CI runs on the project's own isolated runners, never on GitHub-hosted ones.

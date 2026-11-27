@@ -159,8 +159,8 @@ follow.
    make lint                # adds the closure lint (needs Arch tooling)
    ```
    CI runs Tier 1, the Go tests, `gosec` and `govulncheck`, the REUSE lint and the DCO check
-   on every PR, on GitHub-hosted runners only (a fork's PR runs once a maintainer approves
-   it; see `.github/workflows/ci.yml` and
+   on every PR, on the project's own isolated runners (a fork's PR does not run there: a
+   maintainer re-pushes a reviewed change to a branch of this repository; see `.github/workflows/ci.yml` and
    [docs/governance/CI.md](docs/governance/CI.md)). The closure lint is **not** run in
    CI, so run it yourself.
 4. Shell: POSIX `#!/bin/sh` where possible, `set -eu`, and it must pass `shellcheck`.
