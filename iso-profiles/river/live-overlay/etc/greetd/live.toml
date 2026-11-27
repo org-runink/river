@@ -9,12 +9,21 @@
 # (etc/xdg/weston/weston.ini) runs the installer full screen and ends when it is closed. Then
 # the ordinary login screen, from which the live user (password "runink") can open DEsk.
 # river-live-fallback still takes over (river-kiosk, then the text installer) when no
-# compositor ever appears.
+# compositor ever appears, or one appears and never draws (it is killed after 60 s).
+#
+# LIBSEAT_BACKEND=seatd: weston gets its seat from the seatd service of this medium
+# (runink-greetd-s6 defines it, the live set enables it), and ONLY from it. Without the variable libseat tries seatd, then logind, and
+# logind can block for ever on real hardware (measured 2026-10-19, etc/s6/rc.local section 0a;
+# photographed 2026-11-27). With it, a missing seat provider is an immediate error and the
+# fallback chain starts, not a dead screen.
+#
+# The greetd service does not run at all when the kernel command line has river.text (the "Text
+# installer (no graphics)" GRUB entry); river-live-fallback then opens the text installer.
 [terminal]
 vt = 1
 
 [initial_session]
-command = "weston --continue-without-input"
+command = "env LIBSEAT_BACKEND=seatd weston --continue-without-input"
 user = "runink"
 
 [default_session]

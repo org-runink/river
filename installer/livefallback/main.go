@@ -97,11 +97,17 @@ func waitForSession(timeout, every time.Duration, tick func(time.Duration)) stri
 	start := time.Now()
 	deadline := start.Add(timeout)
 	lastTick := time.Duration(-1)
+	var watch compositorWatch
 	for {
 		for _, p := range probes() {
 			if p.find() {
 				return p.name
 			}
+		}
+		// A compositor that is alive but has made no socket for compositorBudget is hung, and
+		// waiting out the rest of the ceiling only keeps a dead screen in front of a person.
+		if watch.observe(time.Now(), compositorAlive(), socketPresent()) {
+			return hungProbe
 		}
 		if !time.Now().Before(deadline) {
 			return ""
@@ -151,6 +157,10 @@ func main() {
 	// console, available on demand, so a machine that DID reach a desktop can still be asked
 	// what its display hardware looks like without reproducing a failure first.
 	report := flag.Bool("report", false, "print the full hardware report and exit")
+	// --text: no graphical session, no wait: the text installer on the console, now. The
+	// "Text installer (no graphics)" GRUB entry gets the same behaviour through river.text on the
+	// kernel command line (textRequested), because a boot entry cannot pass a flag.
+	text := flag.Bool("text", false, "go straight to the text installer (no graphical session, no wait)")
 	pause := flag.Duration("report-pause", 30*time.Second,
 		"how long to hold the hardware summary on screen before the installer starts (0: do not hold)")
 	flag.Parse()
@@ -181,6 +191,13 @@ func main() {
 		return
 	}
 
+	// The text installer, by request: nothing below is started, and nothing it needs (seatd,
+	// logind, DRM, a compositor) is consulted. greetd was never started either: its service
+	// declines to run when river.text is on the command line (runink-greetd-s6).
+	if *text || textRequested(readCmdline()) {
+		os.Exit(runTextMode(*ttyPath, *pause))
+	}
+
 	// Open the console FIRST, so the wait can report progress on it. Opening it changes
 	// nothing for a desktop that does come up: tty1 is a text console sitting behind the
 	// graphical session, and writing to it is harmless.
@@ -190,6 +207,7 @@ func main() {
 		defer progress.Close()
 	}
 	early := false
+	hung := false
 	if p := waitForSession(*timeout, *every, func(el time.Duration) {
 		if progress != nil {
 			fmt.Fprintf(progress, "  Runink River: waiting for the desktop (%s of %s)...\n",
@@ -204,12 +222,19 @@ func main() {
 			saveEarly(func() []string { return readKmsg("/dev/kmsg", 200) },
 				func(name, content string) { saveReport(name, content) })
 		}
-	}); p != "" {
+	}); p != "" && p != hungProbe {
 		fmt.Printf("river-live-fallback: a graphical session appeared (%s); nothing to do\n", p)
 		return
+	} else if p == hungProbe {
+		hung = true
 	}
-	fmt.Fprintf(os.Stderr, "river-live-fallback: no graphical session after %s; falling back on %s\n",
-		*timeout, *ttyPath)
+	if hung {
+		fmt.Fprintf(os.Stderr, "river-live-fallback: the compositor was alive for %s with no socket (hung); "+
+			"taking the console back and falling back on %s\n", compositorBudget, *ttyPath)
+	} else {
+		fmt.Fprintf(os.Stderr, "river-live-fallback: no graphical session after %s; falling back on %s\n",
+			*timeout, *ttyPath)
+	}
 
 	tty, err := os.OpenFile(*ttyPath, os.O_RDWR, 0)
 	if err != nil {
@@ -219,7 +244,20 @@ func main() {
 		os.Exit(1)
 	}
 	defer tty.Close()
-	say(tty, notice)
+	if hung {
+		// Stop the display manager FIRST, or it starts a greeter the moment the compositor dies,
+		// then take the compositor and the greeter's processes, then give the console back:
+		// the session left the VT in graphics mode with the keyboard off, which is why nothing
+		// printed and Ctrl+Alt+F2 did nothing (resetConsole).
+		releaseDisplay(tty)
+		n := killCompositors(sessionProcs)
+		releaseSeat()
+		resetConsole(*ttyPath)
+		fmt.Fprintf(os.Stderr, "river-live-fallback: stopped %d session process(es); console reset\n", n)
+		say(tty, hungNotice)
+	} else {
+		say(tty, notice)
+	}
 	// WHAT this computer is and WHY the desktop did not start, now, on one screen, and the same
 	// facts in full on the stick. The owner's machine has no serial port, no network (it reports
 	// no interface besides loopback) and no desktop, so every previous failure was diagnosed
@@ -229,10 +267,12 @@ func main() {
 	//
 	// Bounded: the report is a convenience and the installer is the product, so a step that gets
 	// stuck (the kernel-log read once did, as root) costs reportBudget at most and never the kiosk.
+	var note savedNote
 	if !bounded(reportBudget, func() {
 		kmsg := readKmsg("/dev/kmsg", 200)
 		say(tty, hardwareReport("/", kmsg, false))
-		say(tty, "  "+saveReport("river-report.txt", hardwareReport("/", kmsg, true))+"\n")
+		saveFullReport(&note)
+		say(tty, "  "+note.get()+"\n")
 	}) {
 		say(tty, fmt.Sprintf("\n  The hardware report did not finish within %s and was skipped. The installer starts anyway.\n", reportBudget))
 	}
@@ -253,10 +293,12 @@ func main() {
 		say(tty, "\n  The graphical installer could not start either. Using the text installer.\n\n")
 	}
 
-	if err := run(textBin, tty); err != nil {
-		fmt.Fprintf(os.Stderr, "river-live-fallback: %s failed: %v\n", textBin, err)
-		os.Exit(1)
-	}
+	// The end of every road is the same text console the "Text installer (no graphics)" menu
+	// entry reaches directly: reset in case a session left it in graphics mode, one screen saying
+	// how to get the graphical installer and where the report went, then the installer.
+	resetConsole(*ttyPath)
+	say(tty, textBanner(note.get()))
+	os.Exit(textLoop(tty))
 }
 
 const (

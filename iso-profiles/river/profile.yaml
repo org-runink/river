@@ -119,6 +119,13 @@ live-session:
     # held the terminal the fallback writes to, while starving SDDM into a crash loop (see
     # live-overlay/etc/s6/config/tty1.conf).
     - river-installer
+    # seatd: the seat service the live session's compositor runs on. The service is defined by
+    # runink-greetd-s6 (see its package()), and the live overlay makes greetd depend on it
+    # (live-overlay/etc/s6/sv/greetd/dependencies.d/seatd). weston 15 opens its display through
+    # libseat, and logind does not give it a seat on every real machine (the package says why).
+    # Live medium only: 20-clone-rootfs leaves greetd's dependency out of the installed machine,
+    # and 80-enable-s6 disables the service there. `river lint profile-manifest` checks all of it.
+    - seatd
   user-services:
     - dbus
     - pipewire
