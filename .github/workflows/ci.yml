@@ -56,6 +56,25 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache: false
+      # Host mode also needs shellcheck (the Tier 1 container carries it; this runner does not,
+      # and its job user has no sudo). Pinned version and sha256, no sudo, as the Hugo install
+      # in docs-deploy.yml. GitHub publishes no checksum for this asset: the pin is the hash of
+      # the release tarball as downloaded over TLS on 2026-11-27.
+      - name: Install shellcheck (pinned version and sha256, no sudo)
+        env:
+          SHELLCHECK_VERSION: "v0.10.0"
+          SHELLCHECK_TARBALL: shellcheck-v0.10.0.linux.x86_64.tar.xz
+          SHELLCHECK_SHA256: 6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -fsSLo "$SHELLCHECK_TARBALL" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${SHELLCHECK_TARBALL}"
+          echo "${SHELLCHECK_SHA256}  ${SHELLCHECK_TARBALL}" | sha256sum -c -
+          mkdir -p shellcheck-bin
+          tar -xJf "$SHELLCHECK_TARBALL" -C shellcheck-bin --strip-components=1 "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
+          ./shellcheck-bin/shellcheck --version
       - name: Tier 1 checks
         env:
           RIVER_TIER1_NO_CONTAINER: "1"
