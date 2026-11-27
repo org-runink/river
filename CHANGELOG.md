@@ -32,6 +32,8 @@ their packages, the installer and (once it has code) the RIVER runtime.
 None.
 
 ### Added
+- Live medium: a **Text installer (no graphics)** entry in the GRUB menu. It passes `river.text=1`: the greetd service does not start, so there is no compositor, no seat service and no DRM client, and `river-live-fallback` opens the text installer on the console, after one screen that says how to reach the graphical installer and where the hardware report was saved (`/run/river-report.txt`, and on the stick). The hardware report gains a *graphical session* section: whether seatd and elogind run, whether a Wayland socket exists, and what a silent compositor is waiting in.
+- Live medium: `seatd` runs as an s6 service (defined by `runink-greetd-s6`, group `video`, enabled in the live set only), greetd depends on it, and the live session starts weston with `LIBSEAT_BACKEND=seatd`. `river lint profile-manifest` fails a profile whose live session starts a compositor without that wiring.
 - Networking: an IPv4 fallback for external names on dual-stack networks. `/etc/resolv.conf` keeps the network's first resolver first, then its other IPv4 resolvers, then the IPv4 fallbacks of `/etc/river/dns-fallback.conf` (default Quad9; empty disables), then its IPv6 resolvers (`river-netcheck dns-compose`, a NetworkManager dispatcher hook linked by runink-installer); `conf.d/12-river-dns-order.conf` orders IPv4 resolvers before IPv6; `/etc/gai.conf` prefers unique-local IPv6, then IPv4, then global IPv6. Nothing is added on an IPv6-only network. Downstream profiles with their own overlay copy `etc/gai.conf`, `etc/river/dns-fallback.conf` and `etc/NetworkManager/conf.d/12-river-dns-order.conf` to get the same.
 - Installer: the memory picture is always shown before the install (plan text and graphical screen): system memory (what Linux can use), graphics memory reserved by the firmware, installed total (SMBIOS memory devices) and what the graphics chip can borrow from system memory (`mem_info_gtt_total`); a part no source can tell reads "unknown". When Linux sees much less than is installed, the plan also says why and what to change in the firmware setup; it never blocks the install. New probe fields `memory.installed_bytes`, `gpus[].gtt_bytes`; new plan fields `memory_breakdown`, `memory_firmware`, `hardware.mem_installed_mib`; new step environment `RUNINK_MEM_INSTALLED_MIB`, `RUNINK_MEM_GPU_RESERVED_MIB`. Steps and downstream profiles: the new Go binary `river-steprun` (package runink-installer) runs every step of the text installer.
 - Installer: no step fails silently. Both installers keep an install log (`/var/log/runink-install.log`, 0600, copied onto the new system once it exists) and, when a step fails, show the step, its exit code, its own last lines, the log path, the state the computer is left in (not installed, or partly installed) and what to do next. A line a step prints that starts with `install-notice: ` is repeated at the end of the install (and on the finished screen). `72-models-payload` reports not enough free space (with the numbers), a wrong passphrase (with attempts left), a payload read error or sha256 mismatch (naming the file), a missing `river-modelpack`, and every deferral. Downstream drivers (`runink-install`, `runink-autoinstall`) should call `river-steprun init`, `river-steprun run --step NAME --file F` and `river-steprun summary` (see `installer/steprun/main.go`).
@@ -168,6 +170,18 @@ None.
 
 ### Fixed
 
+- **A blank, dead screen with a dead keyboard (Ctrl+Alt+F2 did nothing) on the live medium when the compositor started but never drew.**
+  The live session is greetd's first session running weston, and weston 15 opens its display only
+  through libseat, which asks seatd and then logind. No seatd ran, and logind is not dependable on
+  real hardware: elogind reported `seat0 CanGraphical=no` when udev never tagged a late-loading
+  DRM card, or had no session for the process (measured 2026-10-19, `etc/s6/rc.local` section 0a;
+  photographed 2026-11-27 ending at "Backend 'seatd' failed to open seat, skipping"). weston then
+  waited for ever and left the console in graphics mode with the keyboard off. Now the live medium
+  runs seatd and the session forces it (see Added); a compositor alive for 60 s with no Wayland
+  socket is stopped, the console is given back (text mode, keyboard, VT switching) and the
+  fallback chain runs: the console kiosk on a private seatd, then the text installer. The 6-minute
+  ceiling for a desktop that is merely slow is unchanged. `rc.local`'s GPU seat watcher no longer
+  restarts the display manager under a healthy weston session (it did not know weston).
 - **The live medium reached no installer when the compositor started but could not drive a display.**
   `river-live-fallback` took the mere presence of a compositor (its socket or its process) as
   "a desktop appeared; nothing to do", so a compositor that opened no graphics device left the

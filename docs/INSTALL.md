@@ -100,7 +100,11 @@ image offers. The text installer (`sudo runink-install`, [Install](#install)) is
 on the same console. Reach for it when:
 
 - the live desktop or the installer window does not come up at all, including after the
-  **safe graphics** GRUB entry — on that console the installer's own errors are visible;
+  **safe graphics** GRUB entry — on that console the installer's own errors are visible. The
+  **Text installer (no graphics)** GRUB entry goes straight to it: no graphics, no seat service,
+  no desktop are started, and the first screen says how to reach the graphical installer and
+  where the hardware report was saved. A session that starts but never draws is stopped after 60
+  seconds and ends at the same text console;
 - the machine has no usable screen or you are installing over a serial console or a BMC in
   relative-pointer mode;
 - you need a choice the graphical screens do not offer: an explicit ZFS **pool name**, a

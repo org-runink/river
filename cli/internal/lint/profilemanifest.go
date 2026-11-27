@@ -253,6 +253,12 @@ func ProfileManifest(_ context.Context, repo string, dirs []string, errw, outw i
 				r.fail("%s: etc/pam.d/greetd: %s", p, why)
 			}
 		}
+		// A live session that starts a compositor needs a seat provider that does not depend on
+		// logind (liveseat.go).
+		greetdPKG, _ := os.ReadFile(filepath.Join(d, "..", "..", "build", "pkgbuilds", "runink-greetd-s6", "PKGBUILD"))
+		for _, why := range pmLiveSeat(d, pmListOf(prof, "live-session/services"), string(greetdPKG)) {
+			r.fail("%s: live session: %s", p, why)
+		}
 		livefs := pmListOf(prof, "livefs/packages")
 		if lb, err := os.ReadFile(filepath.Join(d, "Packages-Live")); err == nil {
 			compare(p+" livefs", pmManifest(lb), livefs)

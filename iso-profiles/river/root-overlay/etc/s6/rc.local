@@ -92,7 +92,9 @@ gpu_seat_watch() {
 	dm=""
 	for d in sddm greetd; do [ -d "/run/service/$d-srv" ] && { dm=$d; break; }; done
 	[ -n "$dm" ] || return 0
-	for c in kwin_wayland Xorg cage desk; do
+	# weston is the LIVE medium's compositor (etc/greetd/live.toml): without it here a healthy
+	# live session would be taken for "no compositor" and greetd restarted under it.
+	for c in kwin_wayland Xorg cage desk weston; do
 		pgrep -x "$c" >/dev/null 2>&1 && { echo "a compositor ($c) is up: $dm did not need a restart" >>"$log_f"; return 0; }
 	done
 	echo "no compositor 15s after the seat turned graphical: restarting $dm-srv" >>"$log_f"
