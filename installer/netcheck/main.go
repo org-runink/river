@@ -15,6 +15,10 @@
 //	    empty when river.net= is absent)
 //	river-netcheck spec SPEC       parse one river.net value, print NET_* assignments
 //	river-netcheck config FILE     parse a keyfile-style config, print NET_* assignments
+//	river-netcheck dns-compose [--src F] [--out F] [--conf F] [--print]
+//	    rewrite resolv.conf from NetworkManager's with the IPv4 fallback resolvers of
+//	    /etc/river/dns-fallback.conf (dnsfallback.go); also runs as a NetworkManager
+//	    dispatcher through a dispatcher.d link whose name ends in "dns-fallback"
 //
 // Exit codes: 0 ok; 1 error (a parse error names the problem); 2 usage.
 // Standard library only; nothing here needs root, and check writes only its state files.
@@ -35,11 +39,16 @@ import (
 	"github.com/org-runink/river/installer/internal/netstate"
 )
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+func main() {
+	if rc, ok := asDispatcher(os.Args[0], os.Args[1:], os.Stdout, os.Stderr); ok {
+		os.Exit(rc)
+	}
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: river-netcheck check|cmdline|spec|config ... (see --help of each)")
+		fmt.Fprintln(stderr, "usage: river-netcheck check|cmdline|spec|config|dns-compose ... (see --help of each)")
 		return 2
 	}
 	switch args[0] {
@@ -82,8 +91,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			err = fmt.Errorf("%s: %w", args[1], err)
 		}
 		return emit(c, err, stdout, stderr)
+	case "dns-compose":
+		return cmdDNSCompose(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
-		fmt.Fprintln(stdout, "river-netcheck check|cmdline|spec|config — see the header of installer/netcheck/main.go")
+		fmt.Fprintln(stdout, "river-netcheck check|cmdline|spec|config|dns-compose — see the header of installer/netcheck/main.go")
 		return 0
 	}
 	fmt.Fprintf(stderr, "river-netcheck: unknown command %q\n", args[0])

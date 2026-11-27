@@ -43,6 +43,10 @@ package() {
   # (runink-desk's patch 0005), which DEsk runs with no arguments.
   [ -f "$pkgdir/usr/local/bin/river-desk" ] && ln -sf river-desk "$pkgdir/usr/local/bin/river-bluetooth" \
     && ln -sf river-desk "$pkgdir/usr/local/bin/river-printers"
+  # river-netcheck is also NetworkManager's dispatcher hook for the IPv4 fallback resolvers
+  # (installer/netcheck/dnsfallback.go; it answers to a name ending in "dns-fallback").
+  [ -f "$pkgdir/usr/local/bin/river-netcheck" ] && install -d -m 0755 "$pkgdir/etc/NetworkManager/dispatcher.d" \
+    && ln -sf /usr/local/bin/river-netcheck "$pkgdir/etc/NetworkManager/dispatcher.d/40-river-dns-fallback"
   if [ -n "$missing" ]; then
     if [ "${RUNINK_ALLOW_PARTIAL:-0}" = 1 ]; then
       echo "runink-installer: WARNING: missing:$missing (RUNINK_ALLOW_PARTIAL=1)" >&2
