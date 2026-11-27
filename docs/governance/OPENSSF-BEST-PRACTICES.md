@@ -246,9 +246,9 @@ Owner items: `achieve_passing`, `access_continuity`, `bus_factor`, `signed_relea
 
 | Control | Where | State |
 | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | Tier 1: every PR and push to `main`, in rootless podman, on GitHub-hosted runners (never self-hosted; fork PRs after a maintainer's approval); no secrets. |
-| Tier 2 | `.github/workflows/tier2-vm.yml` | ISO build + QEMU/KVM boot smoke; `workflow_dispatch` only, never on a pull request. Does not fit a standard GitHub-hosted runner (disk, time, RAM), so maintainers run it locally. |
-| OpenSSF Scorecard | `.github/workflows/scorecard.yml` | Weekly, on push to `main` and on branch-protection changes once public; uploads SARIF and publishes results to the Scorecard API (GitHub-hosted runner, as the API requires). |
+| CI | `.github/workflows/ci.yml` | Tier 1: every PR and push to `main`, in rootless podman, on the project's own isolated runners (a fresh VM per job, internet only; fork PRs skipped); no secrets. |
+| Tier 2 | `.github/workflows/tier2-vm.yml` | ISO build + QEMU/KVM boot smoke; `workflow_dispatch` only, never on a pull request. Does not yet fit a `public-ci-vm` machine (time, RAM), so maintainers run it locally. |
+| OpenSSF Scorecard | `.github/workflows/scorecard.yml` | Weekly, on push to `main` and on branch-protection changes once public; uploads SARIF to code scanning on a `public-ci-vm` machine; results are not published to the Scorecard API, which accepts only GitHub-hosted runs. |
 | DCO check | `.github/workflows/dco.yml` | Runs on every PR; a required status check on `main` (verified 2026-10-04). |
 | Go security analysis | `.github/workflows/ci.yml` (job `go-security`) | gosec and govulncheck, pinned by version, on every PR and push. |
 | Branch protection | repository settings | On `main` (verified 2026-10-04): the six CI checks above are required, admins included; no force pushes or deletions; linear history; conversations resolved. Not yet: a required approving review (impossible with one maintainer) and required signed commits. |

@@ -17,7 +17,7 @@ one from a fork, cannot reach a machine that holds anything of value.
 | Isolation | A fresh **rootless** podman container per run, built from `ci/tier1.Containerfile` (Alpine pinned by digest): `--network=none`, source mounted **read-only**, tmpfs `/tmp`, all capabilities dropped, `no-new-privileges`, removed on exit. The same for every event, fork pull requests included. `RIVER_TIER1_NO_CONTAINER=1` runs the same checks on the host (for a machine without podman; it needs shellcheck and Go) |
 | Checks | shellcheck (warning and up) on every script; installer/overlay sync; branding sync and size budget; no-python guard; k0s pin cross-check |
 | Triggers | every pull request, every push to `main` |
-| Runners | GitHub-hosted `ubuntu-latest`, always. See "Runners" below |
+| Runners | The maintainers' own `public-ci-vm` machines (nested podman). See "Runners" below |
 | Secrets | none |
 
 The closure lint (`river lint closure`) is not in Tier 1: it needs the pinned
@@ -28,7 +28,7 @@ The installer's Go code (`installer/`: `river-hwprobe`, `river-plan`) is checked
 Tier 1 job, `installer-go` in the same workflow: gofmt, `go vet`, the planner's table-driven
 tests on fixture probes, and a `GOAMD64=v1` build that runs the probe and a plan on the
 runner. It needs the network to install the Go toolchain, so it does not run inside the
-`--network=none` container. It runs on the same GitHub-hosted runners as `tier1`, with no
+`--network=none` container. It runs on a `public-ci` container (the project's own runners), with no
 secrets and `persist-credentials: false`. `make test` runs the same checks locally.
 `install.sh` is covered by the shellcheck step above.
 
@@ -43,7 +43,7 @@ operator CLIs that read the paths the operator names; every other finding is fix
 The org-wide `gatekeeper` workflow adds a secret scan (gitleaks), workflow linting (actionlint,
 zizmor), SHA-pinning and self-hosted-runner checks, credential checks and dependency review, as one
 status check. The REUSE lint (`river lint reuse`, also run by Tier 1) runs in its own workflow,
-`reuse.yml` (a plain Go process with no container, GitHub-hosted), so the README badge
+`reuse.yml` (a plain Go process with no container, on a `public-ci` runner), so the README badge
 reflects compliance on `main`.
 
 ## Tier 2 — boot, ZFS and appfs tests in short-lived microVMs
@@ -52,21 +52,31 @@ reflects compliance on `main`.
 | --- | --- |
 | Workflow | `.github/workflows/tier2-vm.yml` |
 | What | Build the ISO in the ephemeral builder container (`make iso-in-builder`), then boot it in a throwaway QEMU/KVM microVM with no network (`tests/tier2-boot-smoke.sh`). Planned next: unattended install to a virtual ZFS disk, reboot, `tests/assert-golden.sh`, pool/encryption and appfs mount tests |
-| Runners | GitHub-hosted `ubuntu-latest` (it has `/dev/kvm`; the workflow's udev rule makes it usable). **It does not fit there:** one job compiles every component from source and builds the ISO, which needs ~40 GB of disk, more than 6 h and more than 16 GB of RAM. See the workflow header |
+| Runners | A `public-ci-vm` machine (nested `/dev/kvm`; the workflow's udev rule makes it usable). It has the disk (120 GB) but not yet the time or memory: one job compiles every component from source and builds the ISO, which needs more than 6 h and more than 12 GB of RAM. Dispatch only; see the workflow header |
 | Triggers | `workflow_dispatch` only; never a pull request |
 | Status | Not run in CI. The maintainers run Tier 2 locally: `build/local-iso.sh` ([BUILD.md](../BUILD.md)), then `tests/tier2-boot-smoke.sh <iso>` or `build/qemu-gui-test.sh` |
 
 ## Runners
 
-**This public repository runs only on GitHub-hosted runners.** No job here ever runs on a
-self-hosted runner, and no workflow may name a self-hosted label (`runs-on` is
-`ubuntu-latest`, or `ubuntu-24.04` where a job depends on that release's packages). No
-runner registered anywhere else is ever used for this one.
+**This public repository runs on the maintainers' own isolated runners, never on
+GitHub-hosted ones.** Two labels, both registered for this repository alone:
 
-A GitHub-hosted runner is a fresh VM per job, destroyed afterwards, with no route to
-anything of the project's. That makes every job equally safe for pull requests from forks,
-so there are no fork-only twin jobs and no same-repository guards: each check is one job
-that runs for every event.
+- `[self-hosted, public-ci]`: a fresh, capability-free container per job (no host mount,
+  no cache, no credential), destroyed afterwards. For the light jobs: CI, DCO, docs, REUSE.
+- `[self-hosted, public-ci-vm]`: a fresh KVM virtual machine per job (Ubuntu 24.04 with
+  docker, podman, qemu/OVMF and passwordless sudo, like a hosted image), destroyed
+  afterwards. For jobs that need a whole machine: Tier 1's nested podman, the kernel, ZFS,
+  image and release builds, VM boot tests, Scorecard.
+
+Both run as an unprivileged account that can reach the internet and nothing else: no
+private, loopback or link-local address and no IPv6, checked before every job. No runner
+that serves anything else ever takes a job from this repository.
+
+**Pull requests from forks do not run on these runners.** Every job that a pull request
+can trigger carries `if: github.event_name != 'pull_request' ||
+github.event.pull_request.head.repo.full_name == github.repository`, so a fork's run is
+skipped. A maintainer who has read the change pushes it to a branch of this repository to
+run CI on it.
 
 What still protects the project from a malicious pull request:
 
@@ -85,11 +95,13 @@ What still protects the project from a malicious pull request:
   rootless container, so pull-request code it executes cannot reach the network or change
   the checkout.
 
-### Fitting the heavy jobs on a standard runner
+### Fitting the heavy jobs on a `public-ci-vm` machine
 
-A standard hosted runner (public repository) has 4 vCPU, 16 GB of RAM, ~14 GB free on `/`,
-`/dev/kvm`, passwordless sudo, docker and podman, and a 6 h job limit. `/mnt` is on the same
-root disk. The heavy jobs make room by removing the preinstalled toolchains they never use
+A `public-ci-vm` machine has 6 vCPU, 12 GB of RAM, a 120 GB thin root disk, nested
+`/dev/kvm`, passwordless sudo, docker and podman, and a 6 h job limit. `/mnt` is on the
+same root disk. The figures below were measured on GitHub's standard hosted runner
+(4 vCPU, 16 GB of RAM, ~14 GB free on `/`) before the move; the reclaim steps are harmless
+there now. The heavy jobs make room by removing the preinstalled toolchains they never use
 (.NET, the Android SDK, GHC, Swift, PowerShell, Boost, the hosted tool cache, browsers,
 preinstalled docker images); on 2026-09-05 that took a runner from 14 GB to 38 GB free.
 Each job then checks it has the room it needs and stops at once if not.
@@ -106,12 +118,12 @@ Each job then checks it has the room it needs and stops at once if not.
 
 | Workflow | Runs on | Purpose |
 | --- | --- | --- |
-| `dco.yml` | `ubuntu-latest` | DCO sign-off check on every PR |
-| `reuse.yml` | `ubuntu-latest` | `river lint reuse` (REUSE 3.3, the Go port of `reuse lint`) on every PR and push to `main`, a plain process with no container |
-| `docs.yml`, `docs-deploy.yml` | `ubuntu-latest` | Build the website on every PR that touches it; deploy it to GitHub Pages on `main` (the deploy job alone holds `pages: write`). `docs-deploy.yml` is off unless `RIVER_DOCS_COMMIT` is `true` |
+| `dco.yml` | `public-ci` | DCO sign-off check on every PR |
+| `reuse.yml` | `public-ci` | `river lint reuse` (REUSE 3.3, the Go port of `reuse lint`) on every PR and push to `main`, a plain process with no container |
+| `docs.yml`, `docs-deploy.yml` | `public-ci` | Build the website on every PR that touches it; deploy it to GitHub Pages on `main` (the deploy job alone holds `pages: write`). `docs-deploy.yml` is off unless `RIVER_DOCS_COMMIT` is `true` |
 | `gatekeeper.yml` | reusable org workflow | Secret scan, workflow security lint, credential checks, dependency review |
-| `scorecard.yml` | `ubuntu-latest` | OpenSSF Scorecard, weekly and on push once public; SARIF to code scanning, results published to the Scorecard API (which accepts only GitHub-hosted runs) |
-| `kernel-build.yml`, `zfs-build.yml` | `ubuntu-latest`, manual dispatch | Build `linux-runink` and `runink-zfs` in a throwaway Artix container |
-| `release-attest.yml`, `release-gate.yml` | `ubuntu-latest`, manual dispatch | SBOMs, checksums and provenance for a release; the gate verifies, scans, attests and publishes; never signs |
-| `images.yml` | `ubuntu-24.04`, manual dispatch or a `runink-os-*` tag | The public, payload-free ISO; never a downstream payload; publishing disabled ([CLOUD-IMAGES.md](../CLOUD-IMAGES.md#building-in-github-actions)) |
-| `tier2-vm.yml` | `ubuntu-latest`, manual dispatch | Does not fit a standard runner; see Tier 2 |
+| `scorecard.yml` | `public-ci-vm` | OpenSSF Scorecard, weekly and on push once public; SARIF to code scanning. Results are no longer published to the Scorecard API, which accepts only GitHub-hosted runs |
+| `kernel-build.yml`, `zfs-build.yml` | `public-ci-vm`, manual dispatch | Build `linux-runink` and `runink-zfs` in a throwaway Artix container |
+| `release-attest.yml`, `release-gate.yml` | `public-ci-vm`, manual dispatch | SBOMs, checksums and provenance for a release; the gate verifies, scans, attests and publishes; never signs |
+| `images.yml` | `public-ci-vm`, manual dispatch or a `runink-os-*` tag | The public, payload-free ISO; never a downstream payload; publishing disabled ([CLOUD-IMAGES.md](../CLOUD-IMAGES.md#building-in-github-actions)) |
+| `tier2-vm.yml` | `public-ci-vm`, manual dispatch | Boots the image under nested KVM; see Tier 2 |
