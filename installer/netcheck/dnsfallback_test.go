@@ -48,10 +48,10 @@ func TestComposeKeepsLANFirstThenFallbacksThenIPv6(t *testing.T) {
 	}
 }
 
-// An IPv6-only LAN resolver stays first: it is the one that answers the local names.
+// An IPv6 LAN resolver that comes first stays first: it is the one that answers the local names.
 func TestComposeIPv6FirstResolverStaysFirst(t *testing.T) {
-	got := nameservers(composeResolv("nameserver fd00:db8::1\nnameserver 2001:db8::53\n", fb, true))
-	want := []string{"fd00:db8::1", "203.0.113.9", "203.0.113.10", "2001:db8::53"}
+	got := nameservers(composeResolv("nameserver 2001:db8:1::1\nnameserver 2001:db8::53\n", fb, true))
+	want := []string{"2001:db8:1::1", "203.0.113.9", "203.0.113.10", "2001:db8::53"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("nameservers %v, want %v", got, want)
 	}
