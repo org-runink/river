@@ -58,6 +58,27 @@ network, turn IPv4 off for the connection so the machine does not wait for a DHC
 nmcli connection modify "Wired connection 1" ipv4.method disabled
 ```
 
+### IPv4 fallback for external names
+
+Internal traffic may be IPv6 only; external names must still resolve when a network's IPv6
+resolvers stop answering. On a dual-stack network the machine therefore keeps an IPv4 path to
+DNS and to external services:
+
+- **Resolvers.** After every network change, `/etc/resolv.conf` lists the network's first
+  resolver (it answers the local names: a public resolver's "no such name" would not fall
+  through), then its other IPv4 resolvers, then the IPv4 fallbacks, then its IPv6 resolvers,
+  with `options timeout:2 attempts:2`. The fallbacks and options are set in
+  `/etc/river/dns-fallback.conf` (`FALLBACK_DNS`, default Quad9 `9.9.9.9 149.112.112.112`;
+  empty turns the fallback off). `river-netcheck dns-compose --print` shows the result without
+  writing it. NetworkManager runs it through `dispatcher.d/40-river-dns-fallback`;
+  `conf.d/12-river-dns-order.conf` puts a network's IPv4 resolvers before its IPv6 ones.
+- **Connections.** `/etc/gai.conf` tries unique-local IPv6 (`fc00::/7`, internal) first, then
+  IPv4, then global IPv6, so an external service is reached over IPv4 when both families are
+  offered.
+- **IPv6-only networks** have no IPv4 path: with no IPv4 default route, no fallback is added
+  and `/etc/resolv.conf` stays as NetworkManager wrote it.
+- If `/etc/resolv.conf` is a link to a file of your own, it is left alone.
+
 ## Firewall
 
 The host firewall and how to open a port are described in
