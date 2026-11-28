@@ -25,7 +25,7 @@ links to read the code.
 
 Everything else on the image (Firefox, the desktop's programs, the libraries and tools) is a distribution
 package from pinned mirrors. Today those come from Artix Linux, through Artix's ISO tooling:
-that is the **transitional** builder, which Runink River is replacing with its own
+that is the **transitional** builder. Runink River is migrating from Artix to official Arch Linux packages plus Runink River's own s6 layer (in progress, `docs/ARCH-BASE.md`), and then replacing it with its own
 from-source base ([below](#the-transitional-builder-and-the-own-base)).
 
 ## The image: two layers, one golden system
@@ -151,7 +151,7 @@ River image. An installed system gets updates of these packages from the public,
 
 ## The transitional builder and the own base
 
-Today `make iso` runs Artix's `buildiso` with the profile under `iso-profiles/river/`, and
+Today `make iso` runs Artix's `buildiso` with the profile under `iso-profiles/river/` (until the Arch-based builder in `docs/ARCH-BASE.md` replaces it; in progress), and
 `scripts/patch-artools.go` adjusts it (the kernel swap, the image name and volume label,
 the live menu). That tooling is transitional. The plan in {{< repo "docs/OWN-BASE.md" >}}
 replaces it with Runink River's own base, built from source:
@@ -161,7 +161,7 @@ replaces it with Runink River's own base, built from source:
 | 0 | plan and scaffold: the recipe format, `base/river-build`, `base/river-sign`, recipes for s6, skalibs and execline | done: the three recipes build bit-for-bit reproducibly in a pinned, network-less container |
 | 1 | a reproducible toolchain | planned |
 | 2 | the base built from recipes, its own image assembly (`river-compose`) and `river-update` | planned |
-| 3 | migration of existing installs, removal of the Artix tooling | planned |
+| 3 | migration of existing installs, removal of the Artix tooling | planned; the Artix tooling itself goes earlier, with the move to Arch Linux packages (`docs/ARCH-BASE.md`, in progress) |
 | 5 | the DEsk workstation built from recipes | planned |
 
 Planned changes that users will notice: the kernel booted as a signed unified kernel image

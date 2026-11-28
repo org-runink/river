@@ -14,7 +14,7 @@ Two kinds of repository feed `pacman -Syu`:
 
 - **The distribution's repositories.** Today the image is assembled from Artix Linux
   packages, so everyday packages (Firefox, the desktop's programs, libraries, tools) update from those
-  repositories.
+  repositories. Runink River is migrating from Artix to official Arch Linux packages plus Runink River's own s6 layer (in progress, `docs/ARCH-BASE.md`); installed machines are not moved by an ordinary update, and how they move is part of that plan.
 - **`[runink]`**, Runink River's own signed repository, for the packages it builds
   (`linux-runink`, `runink-zfs`, `runink-zfs-utils`, `runink-installer`, ...). The image
   configures it, ahead of the distribution's repositories, and trusts only the release key for

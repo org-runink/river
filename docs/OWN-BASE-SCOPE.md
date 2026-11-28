@@ -7,7 +7,8 @@ SPDX-License-Identifier: MIT
 
 > **Status: adopted scope for the planned own base** ([OWN-BASE.md](OWN-BASE.md) has the
 > build plan and phases). Today's images are still assembled with the transitional Artix
-> tooling.
+> tooling, while the move to official Arch Linux packages plus our own s6 layer is in
+> progress ([ARCH-BASE.md](ARCH-BASE.md)).
 
 Runink River's base is a small, **immutable** system image. It contains only what every node
 needs, and it is versioned and released on its own. Everything else is a workload.

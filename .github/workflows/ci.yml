@@ -120,7 +120,7 @@ jobs:
   river-guide:
     name: river-guide (vet + test)
     # Outside the Tier 1 container, for the same reason as installer-go (network, gcc).
-    # guide/ is a standard-library Go module with no network, no Artix tooling and no
+    # guide/ is a standard-library Go module with no network, no distribution packaging tooling and no
     # secrets. Its tests run against a fake GitHub and a fake model server.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository  # owner-only: fork code never runs on our runners
     runs-on: [self-hosted, public-ci]

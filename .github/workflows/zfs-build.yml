@@ -1,9 +1,9 @@
-name: build runink-zfs — OpenZFS from source vs linux-runink (Artix container)
+name: build runink-zfs — OpenZFS from source vs linux-runink (Arch container)
 
 # The v2 companion to kernel-build.yml: compile runink-zfs (OpenZFS from source) AGAINST the
 # linux-runink kernel we already built, rather than scraping the module off a running box.
 # It reuses the kernel-build artifact (no 4h kernel rebuild): install linux-runink-headers into
-# the Artix container, then makepkg the SPLIT runink-zfs PKGBUILD. Output → TWO packages from
+# the Arch Linux container, then makepkg the SPLIT runink-zfs PKGBUILD. Output → TWO packages from
 # one signed OpenZFS tarball, uploaded together as the runink-zfs-pkgs artifact (the name
 # the ISO build fetches), ready to repo-add into localrepo alongside the kernel:
 #   runink-zfs        spl.ko/zfs.ko for linux-runink
@@ -39,6 +39,9 @@ jobs:
       # Inputs reach scripts through env, never spliced into them (template injection).
       PKGDIR: ${{ inputs.pkgdir }}
       KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
+      # The same pinned image and archive date as kernel-build.yml; bump both files together.
+      ARCH_IMAGE: docker.io/library/archlinux:base-devel-20261122.0.629543@sha256:949ecb1661609ab7e8f6854ba03efd62792e7a796313738e94b040c095c20d91
+      ARCH_ARCHIVE_DATE: '2026/11/22'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -58,16 +61,23 @@ jobs:
           gh run download "$RID" --repo "$GITHUB_REPOSITORY" -n linux-runink-pkgs -D kernelpkgs
           ls -lh kernelpkgs
 
-      - name: makepkg runink-zfs inside an Artix container
+      - name: makepkg runink-zfs inside the Arch Linux container
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD:/os" -e PKGDIR -w "/os/build/pkgbuilds/${PKGDIR}" \
-            docker.io/artixlinux/artixlinux:latest bash -euo pipefail -c '
+          case "$ARCH_ARCHIVE_DATE" in [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]) ;; *) echo "::error::bad ARCH_ARCHIVE_DATE"; exit 1 ;; esac
+          docker run --rm -v "$PWD:/os" -e PKGDIR -e ARCH_ARCHIVE_DATE -w "/os/build/pkgbuilds/${PKGDIR}" \
+            "$ARCH_IMAGE" bash -euo pipefail -c '
               echo "== toolchain + OpenZFS build deps =="
-              pacman-key --init >/dev/null 2>&1 || true
-              pacman -Sy --noconfirm --needed \
+              # Every package from ONE dated Arch Linux Archive snapshot (invariant 9), and -Syu
+              # so the image and the snapshot never mix (no partial upgrade).
+              printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$ARCH_ARCHIVE_DATE" > /etc/pacman.d/mirrorlist
+              pacman-key --init >/dev/null 2>&1
+              pacman-key --populate archlinux >/dev/null
+              # libudev.so: Arch ships it in systemd-libs (a library; no systemd daemon, the
+              # policy in docs/ARCH-BASE.md §4). Artix called the package libudev.
+              pacman -Syu --noconfirm --needed \
                 base-devel bc perl libaio libtirpc ncurses openssl util-linux \
-                util-linux-libs libudev pam zlib tar xz zstd kmod
+                util-linux-libs systemd-libs pam zlib tar xz zstd kmod
               echo "== no Python: base-devel pulls it in (debugedit -> gdb); remove it (build/kernel-builder.Containerfile) =="
               py="$(pacman -Qq | grep -E "^python(-|$)" || true)"
               if [ -n "$py" ]; then

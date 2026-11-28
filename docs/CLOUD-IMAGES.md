@@ -506,7 +506,7 @@ by default).
 
 | Google expects | Runink River Server image | Equivalent capability |
 |---|---|---|
-| A Google-supported base public image | Its own OS: zen kernel `linux-runink`, OpenZFS, s6, MIT userland (Artix packages today, the own base next) | Built reproducibly from pinned, signature-checked sources in public CI (`images.yml`); per-release rebuilds |
+| A Google-supported base public image | Its own OS: zen kernel `linux-runink`, OpenZFS, s6, MIT userland (Artix packages today, migrating to official Arch Linux packages (in progress), the own base after) | Built reproducibly from pinned, signature-checked sources in public CI (`images.yml`); per-release rebuilds |
 | Python 2.6+ | none | Nothing on the image needs Python; the first-boot agent is a static Go binary |
 | gcloud | none | Administration is from the operator's machine; on the node, `river-cloud-init` reads metadata and Secret Manager with the instance's service account |
 | curl | none (the binary is removed; libcurl stays for NetworkManager) | `river-cloud-init` is the only HTTP client, limited to the metadata server and Secret Manager |

@@ -123,7 +123,7 @@ Each job then checks it has the room it needs and stops at once if not.
 | `docs.yml`, `docs-deploy.yml` | `public-ci` | Build the website on every PR that touches it; deploy it to GitHub Pages on `main` (the deploy job alone holds `pages: write`). `docs-deploy.yml` is off unless `RIVER_DOCS_COMMIT` is `true` |
 | `gatekeeper.yml` | reusable org workflow | Secret scan, workflow security lint, credential checks, dependency review |
 | `scorecard.yml` | `public-ci-vm` | OpenSSF Scorecard, weekly and on push once public; SARIF to code scanning. Results are no longer published to the Scorecard API, which accepts only GitHub-hosted runs |
-| `kernel-build.yml`, `zfs-build.yml` | `public-ci-vm`, manual dispatch | Build `linux-runink` and `runink-zfs` in a throwaway Artix container |
+| `kernel-build.yml`, `zfs-build.yml` | `public-ci-vm`, manual dispatch | Build `linux-runink` and `runink-zfs` in a throwaway official Arch Linux container (pinned by digest, packages from one dated Arch Linux Archive snapshot) |
 | `release-attest.yml`, `release-gate.yml` | `public-ci-vm`, manual dispatch | SBOMs, checksums and provenance for a release; the gate verifies, scans, attests and publishes; never signs |
 | `images.yml` | `public-ci-vm`, manual dispatch or a `runink-os-*` tag | The public, payload-free ISO; never a downstream payload; publishing disabled ([CLOUD-IMAGES.md](../CLOUD-IMAGES.md#building-in-github-actions)) |
 | `tier2-vm.yml` | `public-ci-vm`, manual dispatch | Boots the image under nested KVM; see Tier 2 |

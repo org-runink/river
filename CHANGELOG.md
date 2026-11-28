@@ -113,6 +113,8 @@ None.
 
 ### Changed
 
+- CI: `kernel-build.yml` and `zfs-build.yml` build `linux-runink` and `runink-zfs` in the official Arch Linux `base-devel` container, pinned by digest, with every package from one dated Arch Linux Archive snapshot (`-Syu`, no partial upgrade), instead of the unpinned `artixlinux/artixlinux:latest`. The OpenZFS build installs `systemd-libs` for `libudev.so` (Artix called that package `libudev`; no systemd daemon is installed). First step of the move off Artix to official Arch Linux packages plus Runink River's own s6 layer (`docs/ARCH-BASE.md`, in progress); the shipped ISO is still Artix-built, and the docs now say so where they describe the base.
+
 - **CI runs on the maintainers' own isolated runners, never on GitHub-hosted ones.** Every
   job asks for `[self-hosted, public-ci]` (a fresh capability-free container per job) or
   `[self-hosted, public-ci-vm]` (a fresh VM per job), both registered for this repository

@@ -18,8 +18,9 @@ deploy entrypoint); Runink River packages it, and first-boot enrollment runs it.
 depends on any particular payload.
 
 The ISO is currently assembled with Artix Linux's `artools`/`buildiso`, which is the
-transitional builder. Runink River is replacing that userland with its own from-source base; the
-plan is in [OWN-BASE.md](OWN-BASE.md).
+transitional builder. Runink River is migrating from Artix to official Arch Linux packages plus its own s6 layer
+(in progress, [ARCH-BASE.md](ARCH-BASE.md)), and then to its own from-source base
+([OWN-BASE.md](OWN-BASE.md)).
 
 ## Layers
 

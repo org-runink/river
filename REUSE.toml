@@ -114,7 +114,8 @@ SPDX-License-Identifier = "MIT"
 
 # ── Third-party derived files ───────────────────────────────────────────────────────────
 # Adapted from Artix iso-profiles (BSD-2-Clause). Upstream notice kept to be safe; drops when
-# these are rewritten for River's own base (docs/LICENSING.md).
+# these are rewritten for the Arch-based builder (docs/ARCH-BASE.md, in progress) or the own base
+# (docs/LICENSING.md).
 [[annotations]]
 path = [
   "iso-profiles/*/profile.yaml",

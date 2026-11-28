@@ -16,7 +16,7 @@
 # streams).
 #
 # Fonts: only "Unifont Regular 16" is referenced. grub-install ships unicode.pf2 and both
-# the installed grub.cfg (gfxterm) and the Artix live cfg load it, so no .pf2 has to be
+# the installed grub.cfg (gfxterm) and the live medium's cfg load it, so no .pf2 has to be
 # generated at build time.
 
 title-text: ""

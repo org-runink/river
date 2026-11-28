@@ -65,7 +65,7 @@ always drawn straight onto the surface's ground.
 
 ## Boot animation
 
-**Plymouth.** It is in Artix `[world]`. Its mkinitcpio hook works without systemd:
+**Plymouth.** It is in Artix `[world]` and Arch Linux `[extra]` (checked against the 2026-11-22 archive snapshot). Its mkinitcpio hook works without systemd:
 `install/plymouth` calls `add_systemd_unit` only when the systemd hook is present and
 otherwise `add_runscript`, the busybox `run_hook` starts `plymouthd`, and `run_latehook`
 hands it the new root. The one other file it needs, `71-seat.rules`, comes from `elogind`.

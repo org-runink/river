@@ -30,7 +30,7 @@ unrelated Wayland compositor. Package, path and binary names (`runink-*`, `river
 is published, but no release has been cut with it. The first release ships only after it
 installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that
 gate is still open. The ISO is still assembled with a fork of Artix Linux's ISO tooling
-while Runink River moves to its own from-source base. See
+and Artix packages. Runink River is migrating from Artix to official Arch Linux packages plus Runink River's own s6 layer (in progress, `docs/ARCH-BASE.md`); its own from-source base comes after that. See
 [the roadmap]({{< relref "/docs/roadmap" >}}).
 {{< /callout >}}
 
