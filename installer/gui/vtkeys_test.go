@@ -10,7 +10,7 @@ import "testing"
 func TestVTKeys(t *testing.T) {
 	type ev struct {
 		code  uint16
-		value int32
+		value uint32
 	}
 	cases := []struct {
 		name string

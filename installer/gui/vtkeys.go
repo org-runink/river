@@ -61,7 +61,7 @@ func newVTKeys() *vtKeys { return &vtKeys{ctrl: map[uint16]bool{}, alt: map[uint
 
 // key takes one key event (code, value: 1 press, 0 release, 2 repeat) and returns the VT to
 // switch to, or 0.
-func (k *vtKeys) key(code uint16, value int32) int {
+func (k *vtKeys) key(code uint16, value uint32) int {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	switch code {
@@ -84,7 +84,7 @@ func (k *vtKeys) key(code uint16, value int32) int {
 // isKeyboard reports whether an evdev device has Ctrl, Alt and F2 keys.
 func isKeyboard(f *os.File) bool {
 	bits := make([]byte, keyMax/8+1)
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), evioCGBitKey(len(bits)), uintptr(unsafe.Pointer(&bits[0]))); e != 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), evioCGBitKey(len(bits)), uintptr(unsafe.Pointer(&bits[0]))); e != 0 { // #nosec G103 -- EVIOCGBIT fills this buffer; its length is in the request
 		return false
 	}
 	has := func(c int) bool { return bits[c/8]&(1<<(c%8)) != 0 }
@@ -94,7 +94,7 @@ func isKeyboard(f *os.File) bool {
 // activeVT returns the VT the kernel shows, or 0.
 func activeVT(tty0 *os.File) int {
 	var st struct{ active, signal, state uint16 }
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, tty0.Fd(), vtGetState, uintptr(unsafe.Pointer(&st))); e != 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, tty0.Fd(), vtGetState, uintptr(unsafe.Pointer(&st))); e != 0 { // #nosec G103 -- VT_GETSTATE fills struct vt_stat
 		return 0
 	}
 	return int(st.active)
@@ -129,7 +129,7 @@ func vtKeysMain(args []string) int {
 				if binary.LittleEndian.Uint16(ev[0:2]) != evKey {
 					continue
 				}
-				vt := keys.key(binary.LittleEndian.Uint16(ev[2:4]), int32(binary.LittleEndian.Uint32(ev[4:8])))
+				vt := keys.key(binary.LittleEndian.Uint16(ev[2:4]), binary.LittleEndian.Uint32(ev[4:8]))
 				if vt == 0 || vt == activeVT(tty0) {
 					continue
 				}
