@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river_live — mkinitcpio install hook: what the live initramfs needs to find the Runink River
+# medium by its label and boot the squashfs layers on it (hooks/river_live does the work).
+
+build() {
+	# The medium: an optical drive, or a USB stick holding the hybrid ISO (the `block` hook
+	# adds the USB and SATA/NVMe drivers).
+	add_module cdrom
+	add_module sr_mod
+	add_module isofs
+	# The two layers and the writable tmpfs on top of them.
+	add_module loop
+	add_module squashfs
+	add_module overlay
+	add_runscript
+}
+
+help() {
+	cat <<HELPEOF
+Boots a Runink River live medium: finds the medium by its volume label (label=), mounts
+LiveOS/rootfs.img (and LiveOS/livefs.img above it with overlay=livefs) read-only, and puts a
+tmpfs-backed overlay on top as the root file system. The medium stays mounted at
+/run/river/bootmnt. copytoram=y copies the layers into RAM and releases the medium.
+Parameters: label=<LABEL> overlay=livefs copytoram=y cow_spacesize=<size> river_timeout=<s>
+HELPEOF
+}

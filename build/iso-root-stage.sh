@@ -11,7 +11,8 @@
 #
 #   1. load the Artix builder image (saved by local-iso.sh) into root's podman and check its
 #      image ID against the one recorded;
-#   2. run scripts/build-iso-box.sh (buildiso -i s6) in a PRIVILEGED container, with the
+#   2. run scripts/build-iso-box.sh (buildiso -i s6), or with BASE=arch `river iso build`
+#      (cli/internal/isocmd, the Arch builder image), in a PRIVILEGED container, with the
 #      checkout at /os, a staged profile (PROFILE_DIR, an external or branded one) at
 #      /profile/<profile>, the prepared [runink] repository at /os/localrepo (read-only) and
 #      artools' work directory on disk under the state directory (overlayfs cannot use a
@@ -57,7 +58,7 @@ case "$(stat -c %a "$ENVF")" in *[2367]?|*[2367]) die "$ENVF is writable by grou
 command -v podman >/dev/null 2>&1 || die "podman is required"
 
 PROFILE="" REPO="" LOCALREPO="" OUT_DIR="" WORK_DIR="" BUILDER_ARCHIVE="" BUILDER_ID="" MODEL_PAYLOAD_DIR=""
-PAYLOADS_DIR="" PUBLIC="" ISO_VARIANT="" KIND="" ISO_NAME="" PROFILE_DIR=""
+PAYLOADS_DIR="" PUBLIC="" ISO_VARIANT="" KIND="" ISO_NAME="" PROFILE_DIR="" BASE="" ISO_LABEL="" RIVER_BIN=""
 while IFS= read -r line; do
 	case "$line" in ''|\#*) continue ;; esac
 	key="${line%%=*}" val="${line#*=}"
@@ -69,7 +70,9 @@ while IFS= read -r line; do
 		ISO_VARIANT) case "$val" in *[!a-z0-9-]*|-*) die "bad ISO_VARIANT" ;; esac; ISO_VARIANT="$val" ;;
 		KIND) case "$val" in server|workstation) KIND="$val" ;; *) die "bad KIND" ;; esac ;;
 		ISO_NAME) case "$val" in *[!a-z0-9-]*|-*|'') die "bad ISO_NAME" ;; esac; ISO_NAME="$val" ;;
-		REPO|LOCALREPO|OUT_DIR|WORK_DIR|BUILDER_ARCHIVE|MODEL_PAYLOAD_DIR|PAYLOADS_DIR|PROFILE_DIR)
+		BASE) case "$val" in artix|arch) BASE="$val" ;; *) die "bad BASE (artix or arch)" ;; esac ;;
+		ISO_LABEL) case "$val" in *[!A-Z0-9_]*|'') die "bad ISO_LABEL" ;; esac; ISO_LABEL="$val" ;;
+		REPO|LOCALREPO|OUT_DIR|WORK_DIR|BUILDER_ARCHIVE|MODEL_PAYLOAD_DIR|PAYLOADS_DIR|PROFILE_DIR|RIVER_BIN)
 			case "$val" in /*|'') ;; *) die "$key must be an absolute path" ;; esac
 			case "$val" in *..*) die "$key must not contain '..'" ;; esac
 			eval "$key=\$val" ;;
@@ -80,6 +83,15 @@ for k in PROFILE REPO LOCALREPO OUT_DIR WORK_DIR BUILDER_ARCHIVE BUILDER_ID; do
 	eval "[ -n \"\$$k\" ]" || die "$k missing from $ENVF"
 done
 [ -f "$REPO/scripts/build-iso-box.sh" ] || die "$REPO is not a Runink River checkout"
+# BASE (build/local-iso.sh RIVER_BASE): artix builds with artools' buildiso (the shipping
+# path); arch with `river iso build` (docs/ARCH-BASE.md), the static river binary local-iso.sh
+# built (RIVER_BIN) mounted into the Arch builder. An .env without BASE predates the switch.
+BASE="${BASE:-artix}"
+if [ "$BASE" = arch ]; then
+	[ -n "$RIVER_BIN" ] && [ -f "$RIVER_BIN" ] || die "BASE=arch needs RIVER_BIN, the river binary (re-run build/local-iso.sh)"
+	[ "$(stat -c %u "$RIVER_BIN")" = "$OWNER_UID" ] || die "$RIVER_BIN is not owned by the invoking user"
+	[ -n "$ISO_LABEL" ] && [ -n "$ISO_NAME" ] || die "BASE=arch needs ISO_LABEL and ISO_NAME in $ENVF (re-run build/local-iso.sh)"
+fi
 # PROFILE_DIR: a staged profile (an external one, or one with edition branding; build/local-iso.sh
 # step 4b), mounted into the build container in place of iso-profiles/<profile>. An .env
 # written before external profiles has no KIND/ISO_NAME; the in-tree profile names imply them.
@@ -174,19 +186,38 @@ mkdir -p "$STAGE" "$WORK_DIR"
 # loop device that losetup creates later (make_grub mounts efi.img over one) never appears
 # inside it and the mount fails with "failed to set up loop device". Sharing the host /dev
 # fixes that; the container is already --privileged, so it grants nothing new.
-log "2/4 buildiso -p $PROFILE -i s6 (work dir $WORK_DIR; about 20-40 minutes)"
 start=$(date +%s)
 # A staged profile is mounted at /profile/<name> (writable: a LEAN build moves files inside it)
 # and named to build-iso-box.sh by RIVER_PROFILE_DIR; without one it reads /os/iso-profiles/.
 set --
 [ -n "$PROFILE_DIR" ] && set -- -v "$PROFILE_DIR:/profile/$PROFILE" -e RIVER_PROFILE_DIR="/profile/$PROFILE"
-podman run --rm --privileged --network=host -v /dev:/dev \
-	-v "$REPO:/os" -v "$LOCALREPO:/os/localrepo:ro" -v "$WORK_DIR:/var/lib/artools" \
-	-v "$STAGE:/os/iso-out" -e PROFILE="$PROFILE" "$@" --user root -w /os \
-	"$IMG" bash /os/scripts/build-iso-box.sh
+if [ "$BASE" = arch ]; then
+	# The Arch path: `river iso build` (cli/internal/isocmd). Its work dir holds the overlay
+	# upper directories, so it is on disk under the state directory, not on ZFS or in RAM.
+	PDIR_IN="/os/iso-profiles/$PROFILE"
+	[ -n "$PROFILE_DIR" ] && PDIR_IN="/profile/$PROFILE"
+	log "2/4 river iso build -p $PROFILE (Arch base; work dir $WORK_DIR)"
+	podman run --rm --privileged --network=host -v /dev:/dev \
+		-v "$REPO:/os" -v "$LOCALREPO:/os/localrepo:ro" -v "$WORK_DIR:/work" \
+		-v "$RIVER_BIN:/usr/local/bin/river:ro" \
+		-v "$STAGE:/os/iso-out" "$@" --user root -w /os \
+		"$IMG" river iso build --profile-dir "$PDIR_IN" --repo /os --localrepo /os/localrepo \
+			--work /work --out /os/iso-out --label "$ISO_LABEL" --iso-name "$ISO_NAME"
+else
+	log "2/4 buildiso -p $PROFILE -i s6 (work dir $WORK_DIR; about 20-40 minutes)"
+	podman run --rm --privileged --network=host -v /dev:/dev \
+		-v "$REPO:/os" -v "$LOCALREPO:/os/localrepo:ro" -v "$WORK_DIR:/var/lib/artools" \
+		-v "$STAGE:/os/iso-out" -e PROFILE="$PROFILE" "$@" --user root -w /os \
+		"$IMG" bash /os/scripts/build-iso-box.sh
+fi
 ISO="$(find "$STAGE" -name '*.iso' -type f | head -1)"
-[ -n "$ISO" ] || die "buildiso produced no ISO under $STAGE"
-echo "iso-root-stage: buildiso took $(( ($(date +%s) - start) / 60 )) min: $(basename "$ISO")"
+[ -n "$ISO" ] || die "the $BASE build produced no ISO under $STAGE"
+echo "iso-root-stage: the $BASE build took $(( ($(date +%s) - start) / 60 )) min: $(basename "$ISO")"
+# The Arch builder names the label it was asked for; read it back off the image.
+if [ "$BASE" = arch ]; then
+	got="$(blkid -s LABEL -o value "$ISO" 2>/dev/null || true)"
+	[ "$got" = "$ISO_LABEL" ] || die "$(basename "$ISO") has label '$got', expected '$ISO_LABEL'"
+fi
 
 # --- 3. payloads ---------------------------------------------------------------------------
 LABEL="$(blkid -s LABEL -o value "$ISO" 2>/dev/null || true)"

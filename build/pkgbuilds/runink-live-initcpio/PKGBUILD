@@ -1,0 +1,47 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-live-initcpio — the mkinitcpio hooks that boot a Runink River live medium.
+#
+# They replace Artix's artix, artix_loop_mnt, artix_kms and artix_shutdown hooks on the Arch
+# build path (docs/ARCH-BASE.md §3 row 14; `river iso build` writes the live initramfs with
+# them). Nothing here comes from Artix:
+#
+#   river_live      finds the medium by its volume label (label=RIVER), mounts the squashfs
+#                   layers LiveOS/rootfs.img and, with overlay=livefs, LiveOS/livefs.img above
+#                   it, and a tmpfs-backed overlay on top as the root. copytoram=y copies the
+#                   layers into RAM and releases the medium. The medium stays mounted at
+#                   /run/river/bootmnt.
+#   river_loop_mnt  the same medium as an ISO FILE on another disk (img_dev= img_loop=, which
+#                   the live menu passes when a multi-image stick boots it through loopback.cfg).
+#
+# The rest of the live HOOKS line is upstream mkinitcpio: base, udev, kms (Artix's artix_kms
+# did the same job), plymouth, modconf, block, filesystems, keyboard, keymap and shutdown
+# (copies the initramfs to /run/initramfs for a clean unmount at power-off, as artix_shutdown
+# did; the init has to exec /run/initramfs/shutdown for it to take effect).
+#
+# Live medium only: it is in the livefs layer (profile.yaml arch.live), where `river iso build`
+# runs mkinitcpio. Installed machines boot the ZFS initramfs and never use these hooks.
+pkgname=runink-live-initcpio
+pkgver=2026.11
+pkgrel=1
+pkgdesc="Runink River live-medium mkinitcpio hooks: find the medium by label, mount its squashfs layers under a tmpfs overlay"
+arch=('any')
+url="https://github.com/org-runink/river"
+license=('MIT')
+# The hooks run inside the initramfs (busybox ash); mkinitcpio itself is in the rootfs.
+depends=('mkinitcpio')
+source=(river_live.initcpio.install
+        river_live.initcpio.hook
+        river_loop_mnt.initcpio.install
+        river_loop_mnt.initcpio.hook)
+sha256sums=('2f3eae54857ee90546992a6d2fe765f6a83d9d6efc56be3a9fc834cbb7169746'
+            '16cfd70542f3b4f112fea2973700bc13078e133d8aca139c07f7a9bf40afd5f0'
+            'dad1f8766ebc1ad9bc7826578686fb36b347e20bac83f157dab839bd91e14845'
+            '4a2111a178623d2462ae102960b1a6824bc89d1f4a8cfb8c88c6a40bf012f28b')
+
+package() {
+  local h
+  for h in river_live river_loop_mnt; do
+    install -Dm644 "$srcdir/$h.initcpio.install" "$pkgdir/usr/lib/initcpio/install/$h"
+    install -Dm644 "$srcdir/$h.initcpio.hook" "$pkgdir/usr/lib/initcpio/hooks/$h"
+  done
+}

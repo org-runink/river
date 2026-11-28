@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river_loop_mnt — mkinitcpio runtime hook (busybox ash): the live medium is an ISO FILE.
+#
+#   img_dev=<device>   the disk that holds the ISO file (GRUB passes /dev/disk/by-uuid/<uuid>)
+#   img_loop=<path>    the ISO file's path on it
+#
+# The disk is mounted read-only at /run/river/img_dev, the file attached to a loop device, and
+# river_live's mount handler then mounts that loop device as the medium.
+
+river_loop_mount_handler() {
+	_rlm_base=/run/river
+	mkdir -p "$_rlm_base/img_dev"
+	msg ":: waiting for $img_dev (the disk holding $img_loop)"
+	river_live_wait "$img_dev" "${river_timeout:-30}" || river_live_fail "$img_dev did not appear"
+	mount -r "$img_dev" "$_rlm_base/img_dev" || river_live_fail "cannot mount $img_dev"
+	[ -f "$_rlm_base/img_dev/$img_loop" ] || river_live_fail "$img_dev has no file $img_loop"
+	river_live_dev="$(losetup -f)" || river_live_fail "no free loop device"
+	losetup -r "$river_live_dev" "$_rlm_base/img_dev/$img_loop" || river_live_fail "cannot attach $img_loop"
+	export river_live_dev
+	"$river_loop_next_handler" "$1"
+}
+
+run_hook() {
+	[ -n "$img_dev" ] && [ -n "$img_loop" ] || return 0
+	[ "$mount_handler" = river_live_mount_handler ] \
+		|| { err "river_loop_mnt: river_live must come before river_loop_mnt in HOOKS (or label= is missing)"; return 0; }
+	modprobe -a -q loop 2>/dev/null
+	river_loop_next_handler="$mount_handler"
+	export mount_handler=river_loop_mount_handler
+}
+
+# vim: set ft=sh ts=4 sw=4 noet:

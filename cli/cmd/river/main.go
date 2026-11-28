@@ -15,6 +15,7 @@ import (
 	"github.com/org-runink/river/cli/internal/rootcmd"
 
 	// Command groups register themselves with the root.
+	_ "github.com/org-runink/river/cli/internal/isocmd"
 	_ "github.com/org-runink/river/cli/internal/lint"
 	_ "github.com/org-runink/river/cli/internal/repocmd"
 	_ "github.com/org-runink/river/cli/internal/testcmd"
