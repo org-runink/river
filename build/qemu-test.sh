@@ -71,7 +71,13 @@
 #   grub-entry  as above
 #   greetd      greetd runs; autologin  greetd's initial_session (live.toml) logged the live
 #               user in: no login screen (gtkgreet) is waiting
-#   kiosk       the live session runs: weston as the live user, the installer full screen
+#   try-desktop the default entry starts the live DEsk desktop as the live user (try, then
+#               install), not the installer kiosk
+#   session-log the live session logs what it did (/run/user/<uid>/river-live/session.log);
+#               report-logs  river-live-fallback --report names it
+#   installer-window  the installer is open for the live user (Firefox on [::1]:47660)
+#   installer-log  the installer backend keeps its log (/api/activity, /run/river-installer/installer.log)
+#   live-splash `splash` on the kernel command line and the plymouth hook in the live initramfs
 #   screen      the screendump desktop.png shows something drawn (`river test screen`: its PNG
 #               size and luma entropy; QEMU's 752-byte "Guest has not initialized the display"
 #               placeholder passed the old grey-mean check)
@@ -554,17 +560,35 @@ if [ -d /run/rt/overlay/root ]; then
 fi
 [ -f /run/rt/overlay/pre.sh ] && { echo "RIVERTEST NOTE overlay pre.sh"; sh /run/rt/overlay/pre.sh; }
 grep -q "label=$EXPECT_LABEL" /proc/cmdline && ok grub-entry || ko grub-entry "$(cat /proc/cmdline)"
-# greetd's initial_session (live.toml) starts weston as the live user, and weston.ini opens the
-# installer full screen. On software rendering give it 4 minutes.
+# greetd's initial_session (live.toml) runs river-live-fallback --session as the live user: the
+# live DEsk desktop (try, then install), or weston with the installer full screen when DEsk does
+# not start or the "Install only" entry was booted. On software rendering give it 4 minutes.
 i=0
-until pgrep -u runink -x weston >/dev/null 2>&1 || [ "$i" -ge 240 ]; do sleep 5; i=$((i + 5)); done
+until pgrep -u runink -x 'desk|weston' >/dev/null 2>&1 || [ "$i" -ge 240 ]; do sleep 5; i=$((i + 5)); done
 pgrep -x greetd >/dev/null && ok greetd || ko greetd
 # Autologin: live.toml names the user, no login screen is waiting, and the session is up.
-if grep -qs '^user = "runink"' /etc/greetd/live.toml && ! pgrep -x gtkgreet >/dev/null && pgrep -u runink -x weston >/dev/null; then
+if grep -qs '^user = "runink"' /etc/greetd/live.toml && ! pgrep -x gtkgreet >/dev/null && pgrep -u runink -x 'desk|weston' >/dev/null; then
 	ok autologin
 else ko autologin "gtkgreet=$(pgrep -x gtkgreet | head -1) live.toml=$(grep -s '^user' /etc/greetd/live.toml | tr '\n' ' ')"; fi
-if pgrep -u runink -x weston >/dev/null && pgrep -u runink -f 'firefox.*47660' >/dev/null; then ok kiosk
-else ko kiosk "weston=$(pgrep -u runink -x weston | head -1) firefox=$(pgrep -u runink -f 'firefox.*47660' | head -1)"; fi
+# Try mode: the default entry starts the live DEsk desktop, not the installer kiosk.
+slog="$(ls /run/user/*/river-live/session.log 2>/dev/null | head -1)"
+if grep -qw 'river.installer' /proc/cmdline; then
+	echo "RIVERTEST NOTE try-desktop: the Install only entry was booted"; ok try-desktop
+elif pgrep -u runink -x desk >/dev/null; then ok try-desktop
+else ko try-desktop "desk=$(pgrep -u runink -x desk | head -1) weston=$(pgrep -u runink -x weston | head -1); session log: $(tail -3 "${slog:-/dev/null}" 2>/dev/null | tr '\n' ' ')"; fi
+# The session says what it did, in a log the hardware report names.
+if [ -n "$slog" ] && grep -q 'river-live-session: ' "$slog"; then ok session-log
+else ko session-log "no /run/user/*/river-live/session.log"; fi
+river-live-fallback --report 2>/dev/null | grep -q 'river-live/session.log' && ok report-logs || ko report-logs "the hardware report does not name the session log"
+# The installer window: open for the live user, beside the desktop or full screen in the kiosk.
+if pgrep -u runink -f 'firefox.*47660' >/dev/null; then ok installer-window
+else ko installer-window "firefox=$(pgrep -u runink -f 'firefox' | head -1); session log: $(tail -3 "${slog:-/dev/null}" 2>/dev/null | tr '\n' ' ')"; fi
+# The installer's log pane has something to show, and the backend keeps its own log on /run.
+if curl -s -g 'http://[::1]:47660/api/activity' | grep -q '"activity"' && [ -s /run/river-installer/installer.log ]; then ok installer-log
+else ko installer-log "no /api/activity or /run/river-installer/installer.log"; fi
+# The boot splash: `splash` on the command line and the plymouth hook in the live initramfs.
+if grep -qw splash /proc/cmdline && lsinitcpio /run/artix/bootmnt/boot/initramfs-x86_64.img 2>/dev/null | grep -q 'plymouthd'; then ok live-splash
+else ko live-splash "cmdline: $(cat /proc/cmdline); plymouth in initramfs: $(lsinitcpio /run/artix/bootmnt/boot/initramfs-x86_64.img 2>/dev/null | grep -c plymouth)"; fi
 [ -f /usr/share/wayland-sessions/desk.desktop ] && command -v desk-session >/dev/null && ok desk-session \
 	|| ko desk-session "desk.desktop or desk-session missing"
 active="$(s6-rc -a list 2>&1)"
@@ -581,7 +605,7 @@ else ko net-autostart "no installer page open for the live user"; fi
 . /run/rt/net.sh
 echo "s6-rc active: $(printf '%s\n' "$active" | tr '\n' ' ')"
 # Back to the live session's virtual terminal (greetd's, VT 1) for the harness's screenshot.
-pid="$(pgrep -u runink -x weston | head -1)"
+pid="$(pgrep -u runink -x 'desk|weston' | head -1)"
 vt="$( [ -n "$pid" ] && tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^XDG_VTNR=//p' | head -1)"
 chvt "${vt:-1}"; sleep 8; echo "RIVERTEST SHOT desktop"; sleep 15
 echo "RIVERTEST END live"
@@ -877,7 +901,7 @@ if [ "$PROFILE" = workstation ]; then
 	else echo "RIVERTEST FAIL screen ($(grep -m1 FAIL "$WORK/screen.txt" 2>/dev/null || echo 'river did not build'))" >> "$WORK/results.txt"; fi
 fi
 if [ "$PROFILE" = workstation ]; then
-	want="grub-entry greetd autologin kiosk desk-session screen s6-NetworkManager s6-greetd s6-bluetoothd s6-cupsd no-artix-live net-autostart"
+	want="grub-entry greetd autologin try-desktop session-log report-logs installer-window installer-log live-splash desk-session screen s6-NetworkManager s6-greetd s6-bluetoothd s6-cupsd no-artix-live net-autostart"
 else
 	want="grub-entry guide-tty1 hwprobe plan plan-target fw-base fw-forward-drop fw-pair-live"
 fi

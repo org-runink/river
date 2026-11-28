@@ -40,11 +40,19 @@ detail is behind a **Details** link.
 
 1. Write the ISO to a USB drive, plug it in, and start the computer from it. On most
    computers a key pressed at power-on opens the boot menu (F12, F11, F8 or Esc).
-2. GRUB offers **Runink River — Install / Live** and **Runink River — Install / Live (safe
-   graphics)**, and boots the first after a short timeout. Pick the safe-graphics entry if
-   the screen stays blank on the first one.
-3. The installer opens by itself, full screen, when the live desktop appears. An **Install
-   Runink River** icon on the desktop opens it again if you close it. (A downstream server
+2. GRUB offers **Runink River — Try or Install** (the default, after a short timeout),
+   **Install only** (the installer full screen, no desktop), **Try or Install (safe graphics)**
+   (pick it if the screen stays blank on the first one), **Try or Install (show boot messages)**
+   (every kernel and service line on the screen, no splash) and **Text installer (no graphics)**.
+   The graphical entries show the Runink River splash with a progress bar while the system
+   starts; **Esc** on the splash shows the boot messages behind it.
+3. The live DEsk desktop starts straight from the USB drive: you can try Runink River without
+   installing anything: its disks are not touched until the installer runs. The installer opens once, in a
+   window beside the desktop (a Runink River "starting" page shows until it answers); close it
+   to keep trying, and **Install Runink River** (among the programs and on the desktop) opens
+   it again. If the desktop cannot start on the computer, the installer opens full screen
+   instead, as it does with the **Install only** entry. **Show installer log**, under every
+   installer screen, shows what the installer has done so far and the install log. (A downstream server
    medium shows it straight after start-up, on the computer's own screen.)
 4. Work through the screens. The bar at the top of the window shows eight steps; the one
    safety question is a confirmation dialog on the **Your computer** step, so there is no

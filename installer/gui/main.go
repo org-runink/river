@@ -95,12 +95,18 @@ func serve(args []string, firstboot bool) int {
 		return 2
 	}
 	logger := log.New(os.Stderr, "river-installer: ", 0)
-	logf := func(f string, a ...any) { logger.Printf(f, a...) }
 	if err := os.MkdirAll(*stateDir, 0o700); err != nil {
-		logf("state dir: %v", err)
+		logger.Printf("state dir: %v", err)
 		return 1
 	}
 	_ = os.Chmod(*stateDir, 0o700) // #nosec G302 -- a directory: 0700, owner only
+	// Every line goes to stderr (the service log), to installer.log in the state directory (named
+	// in the hardware report) and to the UI's "Show details" pane (/api/activity).
+	activity := wizard.NewActivity(*stateDir + "/installer.log")
+	logf := func(f string, a ...any) {
+		logger.Printf(f, a...)
+		activity.Add(fmt.Sprintf(f, a...))
+	}
 	guard := wizard.Guard{Port: port, ProcRoot: "/proc", AllowUsers: []string{*kiosk}}
 	if *desktop != "" {
 		guard.AllowUsers = append(guard.AllowUsers, *desktop)
@@ -147,7 +153,7 @@ func serve(args []string, firstboot bool) int {
 				KioskUser: *kiosk, DesktopUser: *desktop, Logf: logf}
 		}
 		version := strings.TrimSpace(readFile("/etc/runink-os-version"))
-		wz := wizard.New(wizard.Config{Version: version, StateFile: *stateDir + "/state.json", RunDir: *stateDir, Logf: logf}, sys)
+		wz := wizard.New(wizard.Config{Version: version, StateFile: *stateDir + "/state.json", RunDir: *stateDir, Logf: logf, Activity: activity}, sys)
 		h = wz.Handler(guard)
 	}
 	srv := &http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 10 * time.Second}

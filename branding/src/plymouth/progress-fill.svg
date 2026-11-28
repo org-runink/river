@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Plymouth progress fill: 480x6, the sage accent. river.script scales its width to the boot
+     progress plymouthd reports. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="6" viewBox="0 0 480 6">
+  <rect width="480" height="6" fill="#C0CC7C"/>
+</svg>

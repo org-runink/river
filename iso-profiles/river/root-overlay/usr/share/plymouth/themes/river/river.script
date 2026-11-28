@@ -35,6 +35,53 @@ for (i = 0; i < 3; i++) {
 	stream[i].offset = i * 60 * s;
 }
 
+# ── progress ───────────────────────────────────────────────────────────────────────────
+# A thin bar under the lockup. plymouthd reports the boot's progress (0..1, estimated from the
+# previous boot's duration, or from time alone on a live medium) and the sage fill follows it.
+# The fill never goes backwards, so a re-estimate does not make the bar jump left.
+bar.w = Math.Int(Math.Min(W * 0.30, 480));
+bar.h = Math.Int(Math.Max(4, 6 * W / 1920));
+bar.x = Math.Int(W / 2 - bar.w / 2);
+bar.y = Math.Int(H * 0.40 + logo.image.GetHeight() / 2 + Math.Max(24, H * 0.04));
+bar.track = Sprite(Image("progress-track.png").Scale(bar.w, bar.h));
+bar.track.SetX(bar.x);
+bar.track.SetY(bar.y);
+bar.track.SetZ(10);
+bar.fillraw = Image("progress-fill.png");
+bar.fill = Sprite();
+bar.fill.SetX(bar.x);
+bar.fill.SetY(bar.y);
+bar.fill.SetZ(11);
+bar.done = 0;
+fun progress_callback(duration, progress) {
+	px = Math.Int(bar.w * Math.Clamp(progress, 0, 1));
+	if (px > bar.done) {
+		global.bar.done = px;
+		bar.fill.SetImage(bar.fillraw.Scale(px, bar.h));
+	}
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# ── status and the key for the boot messages ───────────────────────────────────────────
+# The status line says what is starting (plymouth update --status=...); the hint under it says
+# how to see everything: Esc switches the splash to the boot messages and back.
+status.sprite = Sprite();
+status.sprite.SetZ(20);
+status.sprite.SetY(bar.y + bar.h + Math.Int(Math.Max(12, H * 0.02)));
+fun status_callback(text) {
+	global.status.image = Image.Text(text, 0.776, 0.780, 0.710);  # #C6C7B5  ink-2
+	status.sprite.SetImage(status.image);
+	status.sprite.SetX(Math.Int(W / 2 - status.image.GetWidth() / 2));
+}
+Plymouth.SetUpdateStatusFunction(status_callback);
+status_callback("Starting Runink River");
+
+hint.image = Image.Text("Esc: show boot messages", 0.698, 0.702, 0.643);  # #B2B3A4  line
+hint.sprite = Sprite(hint.image);
+hint.sprite.SetX(Math.Int(W / 2 - hint.image.GetWidth() / 2));
+hint.sprite.SetY(Math.Int(H - hint.image.GetHeight() - Math.Max(16, H * 0.03)));
+hint.sprite.SetZ(20);
+
 fun refresh_callback() {
 	for (i = 0; i < 3; i++) {
 		global.stream[i].offset = stream[i].offset + stream[i].speed;

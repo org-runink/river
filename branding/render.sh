@@ -268,6 +268,10 @@ svg2png "$TMP/splash-logo.svg" "$P/logo.png" 1260 280
 for i in 0 1 2; do
 	svg2png "$B/src/plymouth/stream$i.svg" "$P/stream$i.png" 1600 80
 done
+# The progress bar under the lockup: a card-coloured track and a sage fill, scaled by river.script.
+for n in progress-track progress-fill; do
+	svg2png "$B/src/plymouth/$n.svg" "$P/$n.png" 480 6
+done
 ship "$P" "$WS/usr/share/plymouth/themes/river"
 
 # ── wallpaper ──────────────────────────────────────────────────────────────────────────────

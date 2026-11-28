@@ -33,6 +33,7 @@ rsync -aHAXS --numeric-ids --info=progress2 \
   --exclude='/usr/share/river/installer' --exclude='/etc/s6/sv/river-installer' \
   --exclude='/usr/local/bin/river-installer-tty' --exclude='/etc/xdg/autostart/river-installer.desktop' \
   --exclude='/usr/local/bin/river-installer-desktop' --exclude='/var/log/river-installer' \
+  --exclude='/usr/share/applications/install-runink-river.desktop' \
   --exclude='/etc/greetd/live.toml' \
   --exclude='/etc/xdg/weston' \
   / "$TARGET/"
