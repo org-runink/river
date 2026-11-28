@@ -86,6 +86,7 @@ lint: ## shellcheck scripts + closure-lint the manifest + installer/branding syn
 	@cd cli && go run ./cmd/river lint python-purge --repo ..
 	@cd cli && go run ./cmd/river lint aur-sync --repo ..
 	@cd cli && go run ./cmd/river lint profile-manifest --repo ..
+	@cd cli && go run ./cmd/river lint blackarch --repo ..
 	@cd cli && go run ./cmd/river lint docs-vendor --repo ..
 	@cd cli && go run ./cmd/river lint one-engine --repo ..
 	@cd cli && go run ./cmd/river lint shell-ratchet --repo ..

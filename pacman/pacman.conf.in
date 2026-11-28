@@ -37,3 +37,16 @@ Include = /etc/pacman.d/mirrorlist-arch
 [runink]
 SigLevel = Optional TrustAll
 Server = file://@LOCALREPO@
+
+# --- BlackArch: configured, NOTHING installed from it (docs/BLACKARCH.md) ---
+# LAST on purpose: pacman takes a package from the first repository that has it, so no
+# BlackArch build can shadow a distribution or [runink] package of the same name.
+# SigLevel = Required: package AND database signatures, checked against the vendored keyring
+# (root-overlay/usr/share/pacman/keyrings/blackarch*, pinned in pacman/blackarch-keyring.pin).
+# Usage = Sync Search: at build time the database is readable but pacman refuses to install
+# from it, so the image cannot carry a BlackArch tool even if a package list named one.
+# Installed systems get their own stanza without the Usage line (installer 35-pacman-keyring).
+[blackarch]
+SigLevel = Required
+Usage = Sync Search
+Include = /etc/pacman.d/blackarch-mirrorlist
