@@ -121,6 +121,8 @@ path = [
   "iso-profiles/*/profile.conf",
   "iso-profiles/*/Packages-Root",
   "iso-profiles/*/Packages-Live",
+  "iso-profiles/*/Packages-Root.arch",
+  "iso-profiles/*/Packages-Live.arch",
 ]
 SPDX-FileCopyrightText = ["2026 The RIVER Authors", "2017 Cromnix GNU/Linux"]
 SPDX-License-Identifier = "MIT AND BSD-2-Clause"
