@@ -39,9 +39,9 @@ jobs:
       # Inputs reach scripts through env, never spliced into them (template injection).
       PKGDIR: ${{ inputs.pkgdir }}
       KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
-      # The same pinned image and archive date as kernel-build.yml; bump both files together.
+      # The same pinned image and archive date (pacman/mirrorlist.pin ARCH_PIN_DATE) as kernel-build.yml.
       ARCH_IMAGE: docker.io/library/archlinux:base-devel-20261122.0.629543@sha256:949ecb1661609ab7e8f6854ba03efd62792e7a796313738e94b040c095c20d91
-      ARCH_ARCHIVE_DATE: '2026/11/22'
+      ARCH_ARCHIVE_DATE: '2026/11/25'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

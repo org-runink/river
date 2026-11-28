@@ -29,12 +29,12 @@ jobs:
     env:
       # Through env, never spliced into a script (template injection).
       PKGDIR: ${{ inputs.pkgdir }}
-      # The official Arch Linux image, pinned by digest (invariant 9), and the Arch Linux Archive
-      # date the build's packages come from. The date is the image's own build date, so -Syu
-      # only refreshes; bump both together (docs/ARCH-BASE.md §3, row 4). Same pair in
-      # zfs-build.yml.
+      # The official Arch Linux image, pinned by digest (invariant 9; the same image
+      # builder/arch.Containerfile uses), and the Arch Linux Archive date every package comes from:
+      # ARCH_PIN_DATE in pacman/mirrorlist.pin. The image predates the snapshot, so -Syu brings it
+      # up to it. Bump with the pin. Same pair in zfs-build.yml.
       ARCH_IMAGE: docker.io/library/archlinux:base-devel-20261122.0.629543@sha256:949ecb1661609ab7e8f6854ba03efd62792e7a796313738e94b040c095c20d91
-      ARCH_ARCHIVE_DATE: '2026/11/22'
+      ARCH_ARCHIVE_DATE: '2026/11/25'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
