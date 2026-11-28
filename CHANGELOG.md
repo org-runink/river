@@ -180,6 +180,7 @@ None.
   Added, which was a Plasma plugin and never shipped in a release.
 
 ### Fixed
+- Live medium: **Ctrl+Alt+F1..F6 reach a text console whatever the graphical session does.** On a VT a compositor owns the kernel's keyboard handling is off, so the key worked only if the compositor turned it into a VT switch (a kiosk that never got the keyboard, a frozen one, or a desktop without the binding did nothing). `river-installer vtkeys`, started by `rc.local` on the live medium only, reads the keyboards beside the compositor (no grab) and asks the kernel for the VT, which goes through seatd like the compositor's own request; it logs only the switches it makes (`/run/river-vtkeys.log`). `build/qemu-test.sh` now asserts it from the guest over the serial console (`vt-switch`: tty2 active and no DRM master left; `vt-back`: tty1 active with the compositor holding DRM master again) and starts its kit over the serial console; before, it typed on tty2 and photographed after the kit had already switched back to VT 1, so it showed the installer whatever the key had done and asserted nothing.
 
 - **A blank, dead screen with a dead keyboard (Ctrl+Alt+F2 did nothing) on the live medium when the compositor started but never drew.**
   The live session is greetd's first session running weston, and weston 15 opens its display only

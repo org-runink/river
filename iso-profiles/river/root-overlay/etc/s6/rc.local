@@ -116,6 +116,13 @@ if grep -qw 'overlay=livefs' /proc/cmdline 2>/dev/null; then
 	if [ -x /usr/local/bin/river-live-fallback ]; then
 		/usr/local/bin/river-live-fallback &
 	fi
+	# Ctrl+Alt+F1..F6 reach a text console whatever the graphical session does (a compositor
+	# that never got the keyboard, a frozen or white kiosk): river-installer vtkeys reads the
+	# keyboards beside the compositor and asks the kernel for the VT, through the seat service
+	# (installer/gui/vtkeys.go). It logs only the switches it makes.
+	if [ -x /usr/local/bin/river-installer ]; then
+		/usr/local/bin/river-installer vtkeys >/run/river-vtkeys.log 2>&1 &
+	fi
 	exit 0
 fi
 
