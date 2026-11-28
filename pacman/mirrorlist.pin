@@ -1,29 +1,39 @@
-# mirrorlist.pin — pinned mirror snapshots for reproducible builds.
+# mirrorlist.pin — the pinned package sources of the image build (sourced by sh, parsed by Go).
 #
-# artools/buildiso resolves packages from whatever mirrors are configured. To make the
-# golden image reproducible, pin to a dated snapshot rather than "latest". Two mirrorlists
-# are rendered into /etc/pacman.d/ at build time (see pacman.conf.in Includes):
+# Plain VAR='value' assignments only: scripts/build-iso-box.sh sources this file, and
+# cli/internal/repocmd reads it as text. No expansions.
 #
-#   mirrorlist-artix  -> Artix (system/world/galaxy)
-#   mirrorlist-arch   -> Arch (extra; for the few packages Artix mirrors from Arch)
+# ── Arch Linux: the base the image moves to (docs/ARCH-BASE.md) ──────────────────────────────
+# [core] and [extra] come from ONE dated snapshot of the Arch Linux Archive. The archive serves a
+# snapshot unchanged forever, so a date is a complete pin of every Arch package version.
+# Bump ARCH_PIN_DATE deliberately, in its own PR, and re-run the systemd-coupling scan
+# (docs/ARCH-BASE.md §4) against the new date in that PR.
 #
-# Update PIN_DATE deliberately. The kernel (linux-runink) and its ZFS module (runink-zfs)
-# are NOT from these mirrors: they are pinned in their PKGBUILDs and bumped together.
+# Checked 2026-11-28: core.db (300 packages) and extra.db (15 292) exist at this date; every Arch
+# name in iso-profiles/river/Packages-Root and Packages-Live resolves there except the Artix-only
+# and [runink] ones listed in docs/ARCH-BASE.md §3, and libva-mesa-driver (merged into mesa).
+# The archive publishes no database signatures; packages are signed (pacman.conf.in SigLevel).
+#
+# IPv4 failsafe: archive.archlinux.org is the only host that serves dated snapshots (no second
+# archive mirror was found that resolves). It answers on IPv6 and IPv4, and pacman's libcurl
+# tries every address of a host, so a machine whose IPv6 path is broken still reaches it over
+# IPv4. A second host goes here as soon as one is verified to carry the same snapshots.
+#
+# builder/arch.Containerfile repeats ARCH_PIN_DATE as its build-arg default; a Go test
+# (cli/internal/repocmd, TestArchPin) fails Tier 1 when the two differ.
+ARCH_PIN_DATE='2026-11-25'
+ARCH_ARCHIVE='Server = https://archive.archlinux.org/repos/2026/11/25/$repo/os/$arch'
 
-PIN_DATE="2026-07-01"
-
-# --- Artix (use an archive/snapshot mirror if the mirror supports it) ---
-# Example canonical mirrors; swap for a snapshot mirror when one is available.
+# ── Artix: TRANSITIONAL, read only by the shipping Artix ISO path ────────────────────────────
+# scripts/build-iso-box.sh and build/kernel-builder.Containerfile (on the Artix builder image)
+# write these two mirrors as the container's whole mirrorlist, and `river repo install-test`
+# reads them. Artix has no dated snapshots, so this pins mirrors, not versions. Deleted with
+# the Artix path once the Arch-based ISO boots (docs/ARCH-BASE.md step D4). Do not add to it.
 ARTIX_MIRRORS='
 Server = https://mirror1.artixlinux.org/repos/$repo/os/$arch
 Server = https://mirror.pascalpuffke.de/artix-linux/$repo/os/$arch
 '
 
-# --- Arch snapshot (archive.archlinux.org exposes dated snapshots) ---
-ARCH_SNAPSHOT="https://archive.archlinux.org/repos/${PIN_DATE//-//}/\$repo/os/\$arch"
-
-# --- archzfs: no longer used (2026-09-22) ---
-# ZFS userland + the initcpio hook are runink-zfs-utils, split from build/pkgbuilds/runink-zfs
-# and pinned to the same signed OpenZFS release as the modules. The hook files are vendored
-# from archzfs at a pinned commit (see that PKGBUILD); the archzfs REPO is not configured.
-ARCHZFS_NOTE="archzfs repo not used; ZFS userland is runink-zfs-utils (same tarball as runink-zfs)"
+# ── archzfs: not used (since 2026-09-22) ─────────────────────────────────────────────────────
+# ZFS userland and the initcpio hook are runink-zfs-utils, built from the same signed OpenZFS
+# tarball as runink-zfs. The kernel (linux-runink) and runink-zfs are pinned in their PKGBUILDs.
