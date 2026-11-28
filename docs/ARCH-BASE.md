@@ -101,7 +101,7 @@ Each PR is reviewable and mergeable on its own and leaves the Artix build workin
 
 | Step | PR | What it changes | Can CI show it works? |
 |---|---|---|---|
-| A | this plan | this document | n/a |
+| A | this plan (#103) | this document | n/a |
 | B | `[blackarch]` repository | the BlackArch repository and its keyring configured on installed machines, **no BlackArch package installed** (`docs/BLACKARCH.md`) | Tier 1 and Go tests: the keyring is the pinned one, the stanza is written, no package list names a BlackArch package. Not an install. |
 | C1 | skarnet stack | one coherent skarnet release set in `base/`: skalibs, execline, s6 bumped; s6-rc, s6-linux-init, s6-portable-utils, s6-frontend added | `river-build lint`. Building needs the seed container (a CI job is part of this step). |
 | C2 | Arch package configuration | `pacman/arch/` (pacman.conf, the archive pin), `builder/Containerfile.arch` on a digest-pinned `archlinux:base-devel`, `Packages-Root` names for Arch behind a base switch, the systemd policy in `forbidden.closure`, `35-pacman-keyring` populating `archlinux` | Container build and the closure lint against the pinned Arch databases. |
@@ -117,6 +117,54 @@ The live medium keeps everything it has today on the Arch path: the River GRUB e
 theme, the volume label `RIVER` and `RIVER_EFI`, the live overlay, the graphical-session →
 kiosk → text-installer fallback chain, the try-or-install session, and the text installer.
 D2 and D4 each list these in their PR as checks.
+
+### 5.1 Work streams, file ownership and dependency order
+
+The steps above run as five parallel streams with disjoint files, so their PRs do not
+conflict. A file not listed is unowned: whoever needs it says so in their PR first.
+
+| Stream | Steps | Owns | Depends on |
+|---|---|---|---|
+| **Base** (package source) | A, C2 (package source part), C5 (builder images) | `docs/ARCH-BASE.md`; `pacman/pacman.conf.in` (except the `[blackarch]` block), `pacman/mirrorlist.pin` and the Arch archive pin; `builder/` (the Arch builder image); `build/kernel-builder.Containerfile` | nothing |
+| **BlackArch** | B | the `[blackarch]` block at the marked spot at the **end** of `pacman/pacman.conf.in`; `pacman/blackarch-*`; its docs | nothing (the block is last, so `[core]`/`[extra]` win any name clash) |
+| **s6 layer** | C1, C3, the elogind/udev/sysusers parts of C4 | `base/`; `build/pkgbuilds/*-s6`, `runink-greetd-s6`, seatd, elogind, `dbus`; the package lists in `build/build-all.sh` | Base (the Arch builder image and pin) for package builds; C1 recipes need nothing |
+| **ISO builder** | D1, D2 | the new ISO builder replacing artools/buildiso; our initcpio hooks; `iso-profiles/river/profile.yaml`, `iso-profiles/river/grub/`; `build/local-iso.sh` | Base and s6 layer (it installs their packages); it can be written against them before they land |
+| **Cleanup** | D4 (wording and CI part) | `.github/workflows/`; Artix wording in `README.md`, `book/`, `website/`, `docs/` (not this file), `NOTICE`, `branding/`; Artix names in `iso-profiles/river/Packages-*` | each rename lands only once its replacement exists, or it breaks the shipping build |
+
+Order: **Base → s6 layer → ISO builder → boot evidence → Cleanup**, with BlackArch independent.
+Base lands first because everything else resolves packages against its pin. No stream removes
+anything the Artix path still reads until D4.
+
+Not yet owned, and needed before D4: the installer steps (`35-pacman-keyring`,
+`80-enable-s6`, `/run/artix` in `installer/`, the Go medium search) and their profile copies;
+the rebuilt hard `systemd` dependents (`mkinitcpio`, `pacman`, `polkit`, `cups`,
+`xdg-desktop-portal`); the lints in `cli/internal/lint/` and `cli/internal/repocmd/installtest.go`;
+`forbidden.closure`; `scripts/build-iso*.sh` and `scripts/patch-artools.go` (deleted at D4).
+
+Two constraints every stream inherits:
+
+- **No new shell scripts.** `river lint shell-ratchet` fails on any new one
+  ([GO-CLI.md](GO-CLI.md)). The ISO builder and the initramfs glue that is not a mkinitcpio
+  hook (hooks are shell by mkinitcpio's design) are `river` subcommands in Go.
+- **The shipping path stays intact.** `build/local-iso.sh` → `build/iso-root-stage.sh` →
+  `scripts/build-iso-box.sh` reads `builder/Containerfile` (Artix, with artools) and
+  `ARTIX_MIRRORS` from `pacman/mirrorlist.pin`. Those stay until D4; the Arch path uses new
+  files beside them.
+
+**For the BlackArch stream, checked 2026-11-28** (re-check before pinning): keyring tag
+`20251011` of `github.com/BlackArch/blackarch-keyring`; its `blackarch.gpg`,
+`blackarch-trusted` and `blackarch-revoked` are byte-identical in that tag, in the release
+tarball on `blackarch.org/keyring/` (detached signature valid, primary key
+`CBA3C7D4798912702DCF568E67D8BDF42AD93F4E`) and in the repository's signed
+`blackarch-keyring-20251011-2` package. Trusted primary keys:
+`8F9A9793CB8591147C2EC70566E0CDBD1E01F333`, `A0917C4147A37007CB54C1CFD295AA940EFDDF62`,
+`4345771566D76038C7FEB43863EC0ADBEA87E4E3`, `F9A6E68A711354D84A9B91637533BAFE69A25079` (the same
+four as `KEYRING_SIGNERS` in BlackArch's `strap.sh`); revoked:
+`5E210889BBB5C48500E0C4F9C75E985FF8B993B4`. The live `blackarch.db` was signed by
+`F9A6E68A711354D84A9B91637533BAFE69A25079` on 2026-11-27. The keyring package ships
+`/etc/pacman.d/hooks/blackarch-key.hook` and a `pacman-key --populate blackarch` scriptlet, so
+an image that ships the keyring as plain files must tell users to install the package with
+`--overwrite '/usr/share/pacman/keyrings/blackarch*'`, as `strap.sh` does.
 
 ## 6. Estimate
 
