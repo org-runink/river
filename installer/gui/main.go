@@ -16,6 +16,9 @@
 //	    exit 0 once the UI answers (the kiosk launcher waits for it)
 //	river-installer vt N
 //	    switch to virtual terminal N (what chvt does, without kbd on the image)
+//	river-installer vtkeys
+//	    the live medium: Ctrl+Alt+F1..F6 switch to that console whatever the compositor does
+//	    (vtkeys.go; started by rc.local)
 //
 // Standard library only, like the rest of installer/. It binds loopback only and answers only
 // root and the named kiosk/desktop users (docs/INSTALL.md, "Security").
@@ -53,6 +56,8 @@ func main() {
 		os.Exit(waitUp(os.Args[2:]))
 	case "vt":
 		os.Exit(switchVT(os.Args[2:]))
+	case "vtkeys":
+		os.Exit(vtKeysMain(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 	default:

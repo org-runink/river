@@ -76,6 +76,9 @@
 #               size and luma entropy; QEMU's 752-byte "Guest has not initialized the display"
 #               placeholder passed the old grey-mean check)
 #   desk-session  DEsk is on the medium for after the install (desk-session, desk.desktop)
+#   vt-switch   Ctrl+Alt+F2 from the live session makes tty2 the active VT with no DRM master left
+#               (the text console has the screen); vt-back  Ctrl+Alt+F1 returns to the session
+#               (judged by the guest over the serial console, kit/vt.sh)
 #   s6-*        s6-rc has NetworkManager-srv, greetd, bluetoothd-srv and cupsd up
 #   no-artix-live  no artix-live service or dependency on the medium
 #   net-*       network first, as for the server; net-autostart  the live session opened
@@ -587,6 +590,33 @@ poweroff -f 2>/dev/null || poweroff
 EOF
 fi
 
+# vt.sh N CHECK: run over the serial console right after the harness pressed Ctrl+Alt+F<N> on the
+# guest keyboard. It judges the switch from the guest's own state, never from a picture: VT N must
+# be the active VT, and for a text console (N > 1) no process may hold DRM master (the kernel
+# console has the screen, not a compositor that kept drawing over it); for VT 1, the live
+# session's, a compositor must hold it again. The DRM state comes from debugfs; a guest where it
+# cannot be read FAILS, because then nothing was examined.
+cat > "$WORK/kit/vt.sh" <<'EOF'
+#!/bin/sh
+exec >/dev/ttyS0 2>&1
+n="$1"; c="$2"; r=RIVERTEST
+a="$(cat /sys/class/tty/tty0/active 2>/dev/null)"
+mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
+m="" known=0
+for f in /sys/kernel/debug/dri/*/clients; do
+	[ -r "$f" ] || continue
+	known=1
+	m="$m $(awk 'NR > 1 && $4 == "y" { print $1 }' "$f" | tr '\n' ' ')"
+done
+m="$(echo $m)"
+echo "$r NOTE $c: active=$a drm-master=[${m}] vtkeys: $(tail -3 /run/river-vtkeys.log 2>/dev/null | tr '\n' ' ')"
+if [ "$known" -eq 0 ]; then echo "$r FAIL $c (cannot read the DRM clients from debugfs)"
+elif [ "$a" != "tty$n" ]; then echo "$r FAIL $c (active VT is ${a:-unknown}, not tty$n)"
+elif [ "$n" -gt 1 ] && [ -n "$m" ]; then echo "$r FAIL $c (tty$n is active but $m still holds DRM master: the screen is not the text console)"
+elif [ "$n" -eq 1 ] && [ -z "$m" ]; then echo "$r FAIL $c (back on tty1 but no compositor holds DRM master)"
+else echo "$r OK $c"; fi
+EOF
+
 cat > "$WORK/kit/installed.sh" <<'EOF'
 #!/bin/sh
 # Runs as root on the INSTALLED system (from the rc.local hook); results go to the serial port.
@@ -777,9 +807,28 @@ sleep 6; shot grub-menu
 sleep 20; shot live-boot
 # The workstation medium logs the live user into the installer kiosk (greetd): capture what it reaches.
 [ "$PROFILE" = workstation ] && { sleep 90; shot desktop-early; }
+# The serial console logs the live user in by itself (live-overlay/etc/s6/config/ttyS.conf).
+ser() { [ -n "$QPID" ] && kill -0 "$QPID" 2>/dev/null || return 0; timeout 5 sh -c 'printf "%s\n" "$1" > "$2"' _ "$*" "$WORK/ser.in" || true; }
+KITMOUNT="mkdir -p /run/rt; mountpoint -q /run/rt || mount -r -L RIVERTEST /run/rt"
+# Ctrl+Alt+F2 from the live graphical session must reach a text console, and Ctrl+Alt+F1 must
+# bring the session back. Judged by the guest (kit/vt.sh, over the serial console: the active VT
+# and who holds DRM master), never by a picture; the screenshots are for people. The earlier test
+# typed the kit's command on tty2 after the key and photographed 20 s later, by which time the kit
+# had already switched back to VT 1: the picture showed the installer whatever the key had done,
+# and nothing asserted the switch.
+if [ "$PROFILE" = workstation ]; then
+	ser ""; sleep 2
+	mon "sendkey ctrl-alt-f2"; sleep 4; shot tty2
+	ser "sudo sh -c \"$KITMOUNT; sh /run/rt/vt.sh 2 vt-switch\""; sleep 8
+	mon "sendkey ctrl-alt-f1"; sleep 6; shot vt1-back
+	ser "sudo sh -c \"$KITMOUNT; sh /run/rt/vt.sh 1 vt-back\""; sleep 8
+	# The kit over the serial console too, so nothing below depends on typing into a VT.
+	ser "sudo sh -c \"$KITMOUNT; sh /run/rt/live.sh\""
+	wait_for "RIVERTEST BEGIN live" live 60 || echo "qemu-test: the kit did not start over the serial console; typing it on tty2" >&2
+fi
 # Ctrl+Alt+F2 from a graphical session; plain Alt+F2 on a text console.
 if [ "$PROFILE" = workstation ]; then VTKEY=ctrl-alt-f2; else VTKEY=alt-f2; fi
-BOOT="sudo sh -c \"mkdir -p /run/rt; mount -r -L RIVERTEST /run/rt; sh /run/rt/live.sh\""
+BOOT="sudo sh -c \"$KITMOUNT; sh /run/rt/live.sh\""
 tries=0
 until seen "RIVERTEST BEGIN live" live; do
 	tries=$((tries + 1))
@@ -832,6 +881,8 @@ if [ "$PROFILE" = workstation ]; then
 else
 	want="grub-entry guide-tty1 hwprobe plan plan-target fw-base fw-forward-drop fw-pair-live"
 fi
+# Ctrl+Alt+F2 to a text console and Ctrl+Alt+F1 back, judged by the guest (kit/vt.sh).
+[ "$PROFILE" = workstation ] && want="$want vt-switch vt-back"
 # Network first, on every profile.
 if [ "$NET" = none ]; then want="$want net-setup net-offline net-check-user"
 elif [ "$NET" = restricted ]; then want="$want net-setup net-check-user"
