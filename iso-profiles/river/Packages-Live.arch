@@ -47,3 +47,8 @@
 ## of river-kiosk and its own live package list, because an image with no desktop should not
 ## grow one just to show an installer.
 weston
+
+## runink-live-initcpio: our live-medium mkinitcpio hooks (river_live, river_loop_mnt,
+## river_shutdown; docs/ARCH-BASE.md §3 row 14), which replace the artix_* hooks. Built in [runink]
+## by the Arch ISO builder (#108).
+runink-live-initcpio

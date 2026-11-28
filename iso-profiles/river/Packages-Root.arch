@@ -86,6 +86,10 @@ linux-firmware-atheros
 linux-firmware-mediatek
 linux-firmware-qcom
 linux-firmware-marvell
+# CPU microcode, loaded early by GRUB on the installed machine and the live medium (Arch [core],
+# checked against the 2026-11-25 snapshot). Requested by the Arch ISO builder (#108).
+intel-ucode
+amd-ucode
 
 # ── ZFS root ───────────────────────────────────────────────────────────────────────────
 # Encrypted ZFS root (invariant 3); the datasets are created with compression=zstd by the
