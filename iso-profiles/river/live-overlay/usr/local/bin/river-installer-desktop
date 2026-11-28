@@ -72,5 +72,20 @@ user_pref("browser.warnOnQuitShortcut", false);
 user_pref("signon.rememberSignons", false);
 user_pref("browser.formfill.enable", false);
 user_pref("layout.css.devPixelsPerPx", "-1.0");
+// Draw with the CPU, never the GPU driver. On a real graphics chip the hardware renderer can
+// fail without an error and leave the window an empty white page for good; QEMU's virtual
+// display uses a software driver and never shows it. The installer is a few static pages, so
+// software rendering costs nothing a person would notice, and it is the same on every machine.
+user_pref("gfx.webrender.software", true);
+user_pref("layers.acceleration.disabled", true);
+user_pref("media.hardware-video-decoding.enabled", false);
+user_pref("widget.dmabuf.force-enabled", false);
+// Before the first page paints, show the installer's dark background instead of white, so a
+// slow start reads as loading rather than as a broken screen.
+user_pref("browser.display.background_color", "#212121");
+user_pref("browser.display.use_system_colors", false);
+user_pref("ui.systemUsesDarkTheme", 1);
 PREFS
+# The same reason as the prefs above, for any GL the browser still opens on its own.
+LIBGL_ALWAYS_SOFTWARE=1; export LIBGL_ALWAYS_SOFTWARE
 exec firefox --kiosk --no-remote --new-instance --profile "$PROFILE" "$URL"
