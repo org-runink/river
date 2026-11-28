@@ -351,7 +351,7 @@ instead; several of the existing linters assert their own inputs for exactly tha
 | [docs/INSTALL.md](docs/INSTALL.md), [docs/INSTALLER-HARDWARE.md](docs/INSTALLER-HARDWARE.md) | installing; the probe/planner contract | current |
 | [docs/ENCRYPTION.md](docs/ENCRYPTION.md), [docs/SECURE-BOOT.md](docs/SECURE-BOOT.md) | ZFS encryption, Secure Boot | current |
 | [docs/KERNEL.md](docs/KERNEL.md), `build/pkgbuilds/runink-kernel/README.md` | the kernel pin and config policy | current |
-| [docs/OWN-BASE.md](docs/OWN-BASE.md), [docs/OWN-BASE-SCOPE.md](docs/OWN-BASE-SCOPE.md), [docs/ARCH-BASE.md](docs/ARCH-BASE.md) | the from-source base plan | plan; their `iso-profiles/runink-workstation` is today's `iso-profiles/river` |
+| [docs/OWN-BASE.md](docs/OWN-BASE.md), [docs/OWN-BASE-SCOPE.md](docs/OWN-BASE-SCOPE.md), [docs/ARCH-BASE.md](docs/ARCH-BASE.md) | the from-source base plan | plan; ARCH-BASE.md is the move off Artix, in progress since 2026-11-28; their `iso-profiles/runink-workstation` is today's `iso-profiles/river` |
 | [docs/INSTALL-GUIDE-AGENT.md](docs/INSTALL-GUIDE-AGENT.md) | river-guide design and threat model | current |
 | [RELEASE.md](RELEASE.md), [docs/RELEASE-SIGNING.md](docs/RELEASE-SIGNING.md), [docs/VERIFY.md](docs/VERIFY.md) | cutting, signing, verifying a release | current |
 | [docs/REPOSITORY.md](docs/REPOSITORY.md) | the public signed `[runink]` repository: mirrors, `river repo assemble/verify/publish`, what is never published | current |

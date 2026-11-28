@@ -6,7 +6,8 @@ and that stays the builder until Phase 3 below exits. The only code that exists 
 scaffold in [`base/`](../base/README.md).
 
 An Arch Linux interim base (Arch packages plus `[runink]`, s6 kept) was measured on
-2026-09-25 and deferred; see [ARCH-BASE.md](ARCH-BASE.md).
+2026-09-25 and deferred; since 2026-11-28 the move off Artix to Arch packages plus our own
+s6 layer is in progress as the transitional step, see [ARCH-BASE.md](ARCH-BASE.md).
 
 ## Contents
 
