@@ -60,6 +60,8 @@ type Config struct {
 	LogFile    string // the install log on the live system (default DefaultLogFile)
 	TargetRoot string // where the new system is mounted (default /mnt); the log is copied there
 	Logf       func(format string, args ...any)
+	// Activity is the backend's own log for the UI's details pane (/api/activity); nil: none.
+	Activity *Activity
 }
 
 // Wizard is the install flow.

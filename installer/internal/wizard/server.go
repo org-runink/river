@@ -215,6 +215,14 @@ func (wz *Wizard) Handler(g Guard) http.Handler {
 	mux.HandleFunc("/api/install/log", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"lines": wz.Log()})
 	})
+	// The details pane: what the backend has done so far, then the install log's last lines.
+	mux.HandleFunc("/api/activity", func(w http.ResponseWriter, r *http.Request) {
+		inst := wz.Log()
+		if len(inst) > 300 {
+			inst = inst[len(inst)-300:]
+		}
+		writeJSON(w, 200, map[string]any{"activity": wz.cfg.Activity.Lines(), "install": inst})
+	})
 	post(mux, "/api/locale", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Lang, Keyboard string }
 		if readJSON(r, &in) != nil {

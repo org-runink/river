@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Plymouth progress track: 480x6, the card colour. river.script scales it to the bar width. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="6" viewBox="0 0 480 6">
+  <rect width="480" height="6" fill="#36383A"/>
+</svg>

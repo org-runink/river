@@ -30,9 +30,20 @@ if [ "$(id -u)" = 0 ] && id "$U" >/dev/null 2>&1; then
 		env -i HOME="/home/$U" USER="$U" PATH=/usr/local/bin:/usr/bin:/bin \
 		XDG_RUNTIME_DIR="$RT" WAYLAND_DISPLAY="$WD" LANG=C.UTF-8 \
 		XDG_SESSION_TYPE=wayland MOZ_ENABLE_WAYLAND=1 \
-		"$0"
+		"$0" "$@"
 fi
+# --window: a normal browser window (the live desktop: autostart and the "Install Runink River"
+# launcher), so the desktop stays usable beside it. Without it: full screen, kiosk (weston's
+# kiosk shell: the "Install only" session and the fallback).
+MODE=--kiosk
+[ "${1:-}" = --window ] && MODE=
+# The browser opens a page from disk first (logo, progress, what is happening), which opens the
+# installer as soon as its backend answers: the screen is never white or empty while it starts.
 URL="http://[::1]:47660/"
+# The address rides in the fragment, so the command line still names the installer (tests and
+# pgrep look for 47660) and the page needs no copy of it.
+FIRST="file:///usr/share/river/installer/loading.html#$URL"
+[ -r /usr/share/river/installer/loading.html ] || FIRST="$URL"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 PROFILE="$RUNTIME/river-installer-firefox"
 
@@ -49,8 +60,8 @@ Name[es]=Instalar Runink River
 Name[fr]=Installer Runink River
 Name[pt]=Instalar Runink River
 Comment=Install Runink River on this computer
-Exec=/usr/local/bin/river-installer-desktop
-Icon=system-software-install
+Exec=/usr/local/bin/river-installer-desktop --window
+Icon=runink-river
 Terminal=false
 DESKTOP
 	chmod 0755 "$DESK/install-runink-river.desktop"
@@ -58,7 +69,6 @@ fi
 
 # One window: if it is already open, leave it.
 pgrep -u "$(id -u)" -f -- "--profile $PROFILE" >/dev/null 2>&1 && exit 0
-river-installer wait --timeout 90s || true
 mkdir -p "$PROFILE"
 cat > "$PROFILE/user.js" <<'PREFS'
 user_pref("browser.shell.checkDefaultBrowser", false);
@@ -88,4 +98,5 @@ user_pref("ui.systemUsesDarkTheme", 1);
 PREFS
 # The same reason as the prefs above, for any GL the browser still opens on its own.
 LIBGL_ALWAYS_SOFTWARE=1; export LIBGL_ALWAYS_SOFTWARE
-exec firefox --kiosk --no-remote --new-instance --profile "$PROFILE" "$URL"
+# shellcheck disable=SC2086 # MODE is one flag or nothing
+exec firefox $MODE --no-remote --new-instance --profile "$PROFILE" "$FIRST"

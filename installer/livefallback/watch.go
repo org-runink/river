@@ -261,7 +261,7 @@ func textBanner(saved string) string {
   desktop, so it works on any computer that can boot this stick.
 
   To use the graphical installer instead:
-    * restart and choose "Runink River — Install / Live" (or "safe graphics"
+    * restart and choose "Runink River — Try or Install" (or "safe graphics"
       if that blanks the screen); or
     * press Alt+F2 for a shell and run:  sudo river-kiosk
 

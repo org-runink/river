@@ -18,6 +18,7 @@
 //	river-live-fallback [--timeout 150s] [--tty /dev/tty1] [--check]
 //
 //	--check   report what it would do and exit; starts nothing (tests, and a live shell)
+//	--session the live session itself, as the live user (greetd's initial_session; session.go)
 //
 // It exits 0 when a desktop appeared (it did nothing) and when a fallback finished. It is
 // started in the background by /etc/s6/rc.local on the live medium only, and must never hold
@@ -161,9 +162,16 @@ func main() {
 	// "Text installer (no graphics)" GRUB entry gets the same behaviour through river.text on the
 	// kernel command line (textRequested), because a boot entry cannot pass a flag.
 	text := flag.Bool("text", false, "go straight to the text installer (no graphical session, no wait)")
+	// --session: the live medium's first session (greetd's initial_session, as the live user): the live
+	// DEsk desktop, or the installer full screen when DEsk does not start (session.go).
+	session := flag.Bool("session", false, "run the live session: the desktop, else the installer full screen")
 	pause := flag.Duration("report-pause", 30*time.Second,
 		"how long to hold the hardware summary on screen before the installer starts (0: do not hold)")
 	flag.Parse()
+
+	if *session {
+		os.Exit(runSession())
+	}
 
 	if *report {
 		fmt.Print(hardwareReport("/", readKmsg("/dev/kmsg", 200), true))

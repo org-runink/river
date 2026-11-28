@@ -5,17 +5,23 @@
 # installed machine uses /etc/greetd/config.toml). The greetd service (runink-greetd-s6) picks this file when it
 # exists.
 #
-# The first session needs no login: weston, as the live user, whose weston.ini
-# (etc/xdg/weston/weston.ini) runs the installer full screen and ends when it is closed. Then
-# the ordinary login screen, from which the live user (password "runink") can open DEsk.
-# river-live-fallback still takes over (river-kiosk, then the text installer) when no
-# compositor ever appears, or one appears and never draws (it is killed after 60 s).
+# TRY, THEN INSTALL. The first session needs no login: river-live-fallback --session, as the live
+# user, starts the live DEsk desktop straight from the stick. The computer's disks are not touched until the installer runs;
+# "Install Runink River" (in the drawer, on the desktop, and opened once at start as a window)
+# runs the installer. When DEsk does not start, the same session opens the installer full screen
+# in weston's kiosk shell instead (etc/xdg/weston/weston.ini); the "Install only" GRUB entry
+# (river.installer=1) goes straight there. Every step and everything DEsk and weston print is in
+# /run/user/<uid>/river-live/session.log, which the hardware report names and copies to the stick.
+# When the session ends, the ordinary login screen follows, from which the live user (password
+# "runink") can open DEsk again. river-live-fallback still takes over (river-kiosk, then the text
+# installer) when no compositor ever appears, or one appears and never draws (it is killed after
+# 60 s).
 #
-# LIBSEAT_BACKEND=seatd: weston gets its seat from the seatd service of this medium
-# (runink-greetd-s6 defines it, the live set enables it), and ONLY from it. Without the variable libseat tries seatd, then logind, and
-# logind can block for ever on real hardware (measured 2026-10-19, etc/s6/rc.local section 0a;
-# photographed 2026-11-27). With it, a missing seat provider is an immediate error and the
-# fallback chain starts, not a dead screen.
+# LIBSEAT_BACKEND=seatd: the compositor (DEsk's wlroots, or weston) gets its seat from the seatd
+# service of this medium (runink-greetd-s6 defines it, the live set enables it), and ONLY from it.
+# Without the variable libseat tries seatd, then logind, and logind can block for ever on real
+# hardware (measured 2026-10-19, etc/s6/rc.local section 0a; photographed 2026-11-27). With it, a
+# missing seat provider is an immediate error and the fallback chain starts, not a dead screen.
 #
 # The greetd service does not run at all when the kernel command line has river.text (the "Text
 # installer (no graphics)" GRUB entry); river-live-fallback then opens the text installer.
@@ -23,7 +29,7 @@
 vt = 1
 
 [initial_session]
-command = "env LIBSEAT_BACKEND=seatd weston --continue-without-input"
+command = "env LIBSEAT_BACKEND=seatd /usr/local/bin/river-live-fallback --session"
 user = "runink"
 
 [default_session]

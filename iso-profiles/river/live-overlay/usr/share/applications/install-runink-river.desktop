@@ -1,0 +1,13 @@
+# Runink River live medium: "Install Runink River" among the programs, so the installer is one
+# click away while the live system is being tried. Live overlay only: 20-clone-rootfs excludes it.
+[Desktop Entry]
+Type=Application
+Name=Install Runink River
+Name[es]=Instalar Runink River
+Name[fr]=Installer Runink River
+Name[pt]=Instalar Runink River
+Comment=Install Runink River on this computer
+Exec=/usr/local/bin/river-installer-desktop --window
+Icon=runink-river
+Terminal=false
+Categories=System;

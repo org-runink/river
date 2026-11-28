@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 The RIVER Authors -->
+<!-- SPDX-License-Identifier: MIT -->
+<!--
+  The page the browser shows first on the live medium (river-installer-desktop opens it from
+  disk, file://), so the screen is never white or blank while the installer's backend starts.
+  It needs nothing from the network or the backend: the logo is the boot splash's own
+  (/usr/share/plymouth/themes/river/logo.png) and the colours are branding/palette.md's. It
+  asks the backend every half second and opens the installer the moment it answers. A
+  no-cors request is enough to tell "answers" from "not listening": the reply is opaque to a
+  file:// page, but it arrives, and a refused connection rejects.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starting the installer</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #212121; color: #C6C7B5; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 1.6rem; font-family: "Figtree", "Noto Sans", "DejaVu Sans", sans-serif;
+  }
+  img { width: min(42vw, 630px); height: auto; }
+  .track { width: min(30vw, 480px); height: 6px; background: #36383A; overflow: hidden; }
+  .run { width: 30%; height: 100%; background: #C0CC7C; animation: run 1.6s ease-in-out infinite; }
+  @keyframes run { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  p { margin: 0; text-align: center; max-width: 46rem; padding: 0 1rem; line-height: 1.45; }
+  #what { color: #E4E2D8; font-size: 1.15rem; }
+  #slow { color: #B2B3A4; font-size: .95rem; }
+  code { color: #E4E2D8; }
+  @media (prefers-reduced-motion: reduce) { .run { animation: none; width: 100%; } }
+</style>
+</head>
+<body>
+<img src="file:///usr/share/plymouth/themes/river/logo.png" alt="Runink River">
+<div class="track" aria-hidden="true"><div class="run"></div></div>
+<p id="what" role="status">Starting the installer…</p>
+<p id="slow" hidden></p>
+<script>
+"use strict";
+// The installer's address comes in the fragment (river-installer-desktop); this is the default.
+const target = /^#http:\/\/\[::1\]:\d+\/$/.test(location.hash) ? location.hash.slice(1) : "http://[::1]:47660/";
+const started = Date.now();
+const what = document.getElementById("what");
+const slow = document.getElementById("slow");
+async function poll() {
+  try {
+    await fetch(target + "api/state", { mode: "no-cors", cache: "no-store" });
+    what.textContent = "Opening the installer…";
+    location.replace(target);
+    return;
+  } catch (e) { /* not listening yet */ }
+  const s = Math.round((Date.now() - started) / 1000);
+  what.textContent = "Starting the installer… " + s + " s";
+  if (s >= 45) {
+    slow.hidden = false;
+    slow.innerHTML = "This is taking longer than usual; it keeps trying. The installer service's log is " +
+      "<code>/run/river-installer/installer.log</code> and the session's is " +
+      "<code>/run/user/&lt;uid&gt;/river-live/session.log</code>. " +
+      "Ctrl+Alt+F2 opens a text console, where <code>sudo river-live-fallback --report</code> " +
+      "shows what this computer reports.";
+  }
+  setTimeout(poll, 500);
+}
+poll();
+</script>
+</body>
+</html>

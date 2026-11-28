@@ -117,10 +117,19 @@ on Windows use Hyper-V (**Generation 2**) or VirtualBox with **EFI enabled**.
 
 1. Plug in the stick and open the firmware's boot menu (often F12, F11, F8 or Esc at
    power-on). Pick the stick's **UEFI** entry.
-2. The GRUB menu of the stick starts the live system after a short timeout.
-3. The live system logs in by itself (user `runink`) and opens the installer
-   full-screen in Firefox. If you close it, the login screen follows: sign in as `runink`
-   (password `runink`) to a DEsk session, which opens the installer again.
+2. The GRUB menu of the stick starts the live system after a short timeout (**Try or
+   Install**). The other entries: **Install only** (the installer full screen, no desktop),
+   **safe graphics** (for a screen that stays blank), **show boot messages** (no splash, every
+   start-up line on screen) and **Text installer (no graphics)**. While the system starts, the
+   Runink River splash shows a progress bar; **Esc** shows the boot messages behind it.
+3. The live system logs in by itself (user `runink`) to the DEsk desktop, straight from the
+   stick, and opens the installer in a window beside it. Close the window to keep trying the
+   system; **Install Runink River** (among the programs and on the desktop) opens it again.
+   When the desktop cannot start on the computer, the installer opens full screen instead.
+   **Show installer log**, under every installer screen, shows what the installer is doing. The
+   live session logs to `/run/user/<uid>/river-live/session.log`, the installer to
+   `/run/river-installer/installer.log`; `sudo river-live-fallback --report` names them and,
+   when the desktop fails, the report is saved on the stick.
 
 The DEsk session is a normal desktop: you can open a terminal, browse the web or check the
 hardware before you install. A text console, also logged in automatically, is on
