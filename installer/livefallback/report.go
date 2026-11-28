@@ -595,6 +595,11 @@ func hardwareReport(root string, kmsg []string, full bool) string {
 	if full {
 		n = 30
 	}
+	section("live logs (the files stay on the medium until it is switched off)")
+	for _, l := range r.liveLogs(full) {
+		w(l)
+	}
+
 	if p, lines := r.sddmTail(n); p != "" {
 		section("display manager log, last " + fmt.Sprint(len(lines)) + " (" + p + ")")
 		for _, ln := range lines {
@@ -607,3 +612,50 @@ func hardwareReport(root string, kmsg []string, full bool) string {
 	b.WriteString("\n")
 	return b.String()
 }
+
+// liveLogPaths are the logs of the live medium, in the order a failure usually runs through
+// them: the seat watcher, the live session (DEsk or the installer kiosk; one per user runtime
+// directory), the installer's backend, and the install itself.
+var liveLogPaths = []string{
+	"/run/river-gpu-seat.log",
+	"/run/user/*/" + sessionLogName,
+	"/run/river-kiosk/session.log",
+	"/run/river-installer/installer.log",
+	"/var/log/runink-install.log",
+}
+
+// liveLogs names every live log that exists and, in the full report, adds its last lines, so
+// the copy on the stick carries them to another computer.
+func (r rpt) liveLogs(full bool) []string {
+	var l []string
+	for _, pat := range liveLogPaths {
+		paths := r.glob(pat)
+		if len(paths) == 0 {
+			l = append(l, pat+"  (not written)")
+			continue
+		}
+		for _, p := range paths {
+			rel := strings.TrimPrefix(p, r.root)
+			if !strings.HasPrefix(rel, "/") {
+				rel = "/" + rel
+			}
+			v := r.read(rel)
+			lines := strings.Split(v, "\n")
+			l = append(l, fmt.Sprintf("%s  (%d lines)", rel, len(lines)))
+			if !full || v == "" {
+				continue
+			}
+			if len(lines) > liveLogTail {
+				lines = lines[len(lines)-liveLogTail:]
+			}
+			for _, ln := range lines {
+				l = append(l, "  | "+cut(ln, 300))
+			}
+		}
+	}
+	return l
+}
+
+// liveLogTail is how many lines of each live log the full report keeps (it must fit the stick's
+// report budget, maxReportBytes, beside everything else).
+const liveLogTail = 25

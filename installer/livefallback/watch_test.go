@@ -192,7 +192,7 @@ func TestTextBannerCarriesTheFacts(t *testing.T) {
 	b := textBanner(saved)
 	for _, want := range []string{
 		"text installer",             // what this is
-		"Install / Live",             // the menu entry for graphics
+		"Try or Install",             // the menu entry for graphics
 		"river-kiosk",                // the command to try graphics from a shell
 		"Alt+F2",                     // how to get a shell
 		saved,                        // where the report went, verbatim

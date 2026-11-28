@@ -39,9 +39,10 @@ import (
 // No existing check could see it: the GUI harness started the wizard itself, and CI never
 // boots a medium.
 //
-// SINCE DESK (2026-10-31). The live medium no longer starts a desktop: greetd's initial_session
-// runs weston, as the live user, with the installer full screen (live-overlay/etc/greetd/
-// live.toml); river-live-fallback takes over only when no compositor appears. So the questions
+// TRY, THEN INSTALL (2026-11-28). greetd's initial_session (live-overlay/etc/greetd/live.toml)
+// runs river-live-fallback --session as the live user: the live DEsk desktop with the installer
+// open in a window, or, when DEsk does not start, weston with the installer full screen;
+// river-live-fallback takes over only when no compositor appears. So the questions
 // are greetd's and that kiosk's, and the screen itself is judged by size and entropy
 // (`river test screen`), because a grey-mean check passed QEMU's "Guest has not initialized the
 // display" placeholder on 2026-10-30.
@@ -66,7 +67,7 @@ system these questions (and the connectivity ones below):
 
   medium-dm-started   greetd is running within 3m
   medium-dm-stable    its s6 supervisor PID is unchanged AND positive across 12s
-  medium-kiosk        the live session (weston, as the live user) is up in BOTH of two samples
+  medium-kiosk        the live session (DEsk, or the weston installer kiosk, as the live user) is up in BOTH of two samples
   medium-autologin    no login screen (gtkgreet) is waiting: the initial session took effect
   medium-installer    river-installer is running, and its page is open in the kiosk's browser
   medium-desk-session DEsk's session (desk-session, wayland-sessions/desk.desktop) is on the medium
@@ -109,10 +110,10 @@ done
 if pgrep -x greetd >/dev/null; then L=1; else L=0; fi
 sleep 30
 A=$(sudo s6-svstat -p /run/service/greetd 2>/dev/null)
-KA=$(pgrep -u runink -x weston | grep -c .)
+KA=$(pgrep -u runink -x "desk|weston" | grep -c .)
 sleep 12
 B=$(sudo s6-svstat -p /run/service/greetd 2>/dev/null)
-KB=$(pgrep -u runink -x weston | grep -c .)
+KB=$(pgrep -u runink -x "desk|weston" | grep -c .)
 echo "RV_DMUP=${L:-}"
 echo "RV_PIDA=${A:-}"
 echo "RV_PIDB=${B:-}"
@@ -327,7 +328,7 @@ func report(vals map[string]string, screenErr error, outw, errw io.Writer) error
 		fmt.Sprintf("greetd pid %d -> %d across 12s: not a stable supervisor", pidA, pidB))
 	// Two samples: a respawning compositor is in ps often enough for one sample to catch it.
 	say("medium-kiosk", kioskA >= 1 && kioskB >= 1,
-		fmt.Sprintf("no sustained live session: weston as the live user in %d, %d of two samples", kioskA, kioskB))
+		fmt.Sprintf("no sustained live session: DEsk or weston as the live user in %d, %d of two samples", kioskA, kioskB))
 	say("medium-autologin", greeter == 0, "a login screen (gtkgreet) is waiting: greetd's initial_session did not take effect")
 	say("medium-installer", inst >= 1 && browser >= 1,
 		fmt.Sprintf("the installer is not up: river-installer %d, its page in the browser %d", inst, browser))

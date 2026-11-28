@@ -621,3 +621,39 @@ async function loadPage(name) {
   const show = () => { img.hidden = false; document.getElementById("mark").hidden = true; };
   if (img.complete && img.naturalWidth > 0) show(); else img.addEventListener("load", show);
 })();
+
+// ---- the installer log pane -------------------------------------------------------------------
+// "Show installer log" under every install screen: what the backend has done so far (probing,
+// network, plan, every step) and the install log's last lines, refreshed every two seconds while
+// open. Nothing is needed from a terminal to see why a screen is waiting.
+(function activityPane() {
+  const box = document.getElementById("activity");
+  const btn = document.getElementById("activity-toggle");
+  const pre = document.getElementById("activity-log");
+  let open = false;
+  let timer = 0;
+  const label = () => { btn.textContent = t(open ? "activity.hide" : "activity.show"); btn.setAttribute("aria-expanded", String(open)); };
+  async function pull() {
+    try {
+      const a = await api("/api/activity");
+      const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+      let txt = (a.activity || []).join("\n");
+      if ((a.install || []).length) txt += (txt ? "\n\n" : "") + "— " + t("activity.install") + " —\n" + a.install.join("\n");
+      pre.textContent = txt || t("activity.empty");
+      if (atEnd) pre.scrollTop = pre.scrollHeight;
+    } catch (e) { /* the backend is restarting; the next pull retries */ }
+  }
+  btn.addEventListener("click", () => {
+    open = !open;
+    pre.hidden = !open;
+    label();
+    clearInterval(timer);
+    if (open) { pull(); timer = setInterval(pull, 2000); }
+  });
+  // Shown on the install flow only (first boot has its own pages); the label follows the language.
+  const show = () => {
+    if (S) { box.hidden = S.mode !== "install"; label(); }
+    setTimeout(show, 1000);
+  };
+  show();
+})();

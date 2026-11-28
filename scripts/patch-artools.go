@@ -55,6 +55,24 @@ var (
 	reLinuxHeaders = regexp.MustCompile(`(?m)^(\s*-\s*)linux-headers$`)
 )
 
+// 2b. initcpio.sh: the live initramfs gets the plymouth hook. icSplashMarker is the line that
+// builds the live initramfs; the injection goes in front of it, once (its first line is the
+// guard). Bash, inside prepare_initramfs_mkinitcpio: $mnt is the bootfs chroot and
+// $mkinitcpio_conf the config it builds with.
+const icSplashMarker = `    artix-chroot "$mnt" mkinitcpio -k "$k" \`
+
+const icSplashInject = `    # runink: live boot splash (scripts/patch-artools.go, step 2b)
+    local rk_conf="$mnt/etc/$mkinitcpio_conf"
+    if [[ -e "$mnt/usr/lib/initcpio/install/plymouth" && -f "$rk_conf" ]] && ! grep -Eq '^HOOKS=.*[( ]plymouth[ )]' "$rk_conf"; then
+        if grep -Eq '^HOOKS=.*[( ](artix_kms|kms)[ )]' "$rk_conf"; then
+            sed -E -i '/^HOOKS=/s/([( ])(artix_kms|kms)([ )])/\1\2 plymouth\3/' "$rk_conf"
+        else
+            sed -E -i '/^HOOKS=/s/([( ])udev([ )])/\1udev plymouth\2/' "$rk_conf"
+        fi
+    fi
+    msg2 "live initramfs: %s" "$(grep -E '^HOOKS=' "$rk_conf" 2>/dev/null)"
+`
+
 // 3. grub.sh injection. The Artix live grub.cfg is interactive with NO `set timeout`,
 // so a headless node waits at the menu forever. Worse, the menu is built by shell
 // FUNCTIONS with the tz/keytable/lang *settings submenus* at index 0, and `set default`
@@ -246,6 +264,24 @@ func main() {
 		fmt.Println("patched initcpio.sh: kernel version from modules dir")
 	} else {
 		fmt.Fprintln(os.Stderr, "WARN: initcpio.sh pattern not found (already patched?)")
+	}
+
+	// 2b. initcpio.sh: the boot splash on the LIVE medium. The live initramfs is built from
+	//     iso-initcpio's own mkinitcpio config, which has no `plymouth` hook, so the stick showed
+	//     kernel text (or nothing) from GRUB until the session drew. Add the hook right after the
+	//     KMS hook (the DRM driver must be in the image for the splash to take the display; with
+	//     no KMS hook, after udev), and only when the plymouth hook exists in the image, so a
+	//     profile without plymouth builds exactly as before. The kernel command line decides
+	//     whether it shows (`splash`, iso-profiles/river/grub/kernels.cfg). The HOOKS line is
+	//     printed to the build log so the result can be read there.
+	s, mode = read(ic)
+	if strings.Contains(s, icSplashMarker) {
+		write(ic, strings.Replace(s, icSplashMarker, icSplashInject+icSplashMarker, 1), mode)
+		fmt.Println("patched initcpio.sh: plymouth hook in the live initramfs (when plymouth is installed)")
+	} else if strings.Contains(s, "runink: live boot splash") {
+		fmt.Println("initcpio.sh already adds the live boot splash")
+	} else {
+		fmt.Fprintln(os.Stderr, "WARN: initcpio.sh has no mkinitcpio call to patch; the live medium has no boot splash")
 	}
 
 	// 3. grub.sh — idempotence-guarded so re-running doesn't stack injections.

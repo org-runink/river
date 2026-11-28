@@ -40,7 +40,7 @@
 #     fb-finish      Finish removes the kiosk: no wpewebkit, no kiosk user, no marker
 #     golden         tests/assert-golden.sh passes after the first boot
 #   workstation (the default: Runink River, iso-profiles/river)
-#     gui-desktop    the installer opens full screen in the live kiosk (weston as the live user, Firefox)
+#     gui-desktop    the installer opens in the live session (DEsk with the installer window; weston kiosk when DEsk does not start)
 #     gui-edition    as above
 #     gui-install    as above
 #     harness-wired  as above
@@ -310,10 +310,10 @@ if [ "$PROFILE" = server ]; then
 		-d '{"lang":"en","keyboard":""}' 'http://[::1]:47660/api/locale'
 else
 	u=runink
-	# The live session is weston as the live user (greetd's initial_session), which opens the
-	# installer itself (weston.ini [autolaunch]). Its socket is in the user's runtime directory.
-	i=0; until pgrep -u $u -x weston >/dev/null || [ $i -ge 120 ]; do sleep 1; i=$((i+1)); done
-	pid="$(pgrep -u $u -x weston | head -1)"
+	# The live session is DEsk (or, when DEsk does not start, weston) as the live user (greetd's
+	# initial_session), which opens the installer itself. Its socket is in the user's runtime directory.
+	i=0; until pgrep -u $u -x 'desk|weston' >/dev/null || [ $i -ge 120 ]; do sleep 1; i=$((i+1)); done
+	pid="$(pgrep -u $u -x 'desk|weston' | head -1)"
 	rt=/run/user/"$(id -u $u)"
 	wd="$(cd "$rt" 2>/dev/null && ls wayland-[0-9] 2>/dev/null | head -1)"
 	if ! pgrep -u $u -f 'firefox.*47660' >/dev/null && [ -n "$wd" ]; then
@@ -325,7 +325,7 @@ else
 	river-installer vt "${vt:-1}"
 	i=0; until pgrep -u $u -f 'firefox.*47660' >/dev/null || [ $i -ge 90 ]; do sleep 1; i=$((i+1)); done
 	sleep 25
-	pgrep -u $u -f 'firefox.*47660' >/dev/null && ok gui-desktop || ko gui-desktop "no installer window (weston pid ${pid:-none}, socket ${wd:-none})"
+	pgrep -u $u -f 'firefox.*47660' >/dev/null && ok gui-desktop || ko gui-desktop "no installer window (session pid ${pid:-none}, socket ${wd:-none})"
 	pgrep -u $u -f 'firefox.*47660' >/dev/null || sed 's/^/RIVERTEST NOTE desktop: /' /run/rt-desktop.log 2>/dev/null
 fi
 # The edition: the running image is the descriptor whose medium_label is the label= on the kernel

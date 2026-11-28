@@ -141,3 +141,8 @@ summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: .3re
 
 /* The server kiosk draws its own mouse pointer (kiosk-pointer.js): hide the platform one. */
 html.kiosk, html.kiosk * { cursor: none !important; }
+/* The installer log pane ("Show installer log"): under every install screen, closed by default.
+   It streams the backend's own log (/api/activity) and the install log's last lines. */
+.activity { width: 100%; max-width: 60rem; margin: 0 auto; padding: 0 1.4rem .6rem; }
+.activity .linkish { background: none; border: 0; padding: .2rem 0; color: var(--accent); font: inherit; font-size: .75rem; text-decoration: underline; cursor: pointer; }
+.activity .log { max-height: 30vh; margin: .3rem 0 0; }
