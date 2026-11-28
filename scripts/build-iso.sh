@@ -28,7 +28,7 @@ LOCALREPO_ABS="$REPO_ROOT/localrepo"
 	exit 1; }
 
 RENDERED="$WORKSPACE/pacman-runink.conf"
-sed "s|@LOCALREPO@|$LOCALREPO_ABS|g" pacman/pacman.conf.in > "$RENDERED"
+sed "s|@LOCALREPO@|$LOCALREPO_ABS|g" pacman/artix/pacman.conf.in > "$RENDERED"
 echo "build-iso: rendered pacman conf -> $RENDERED"
 
 # buildiso: -p profile. Pass our pacman conf + pinned mirrorlist via artools iso.conf,
