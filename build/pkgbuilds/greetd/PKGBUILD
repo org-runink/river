@@ -1,0 +1,56 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# greetd — the login daemon of Runink River's desktop, rebuilt WITHOUT the systemd dependency.
+#
+# WHY. Arch's greetd 0.10.3 declares depends=systemd, only for the unit file and sysusers
+# handling it ships; the program itself does not use systemd. The forbidden closure bans the
+# systemd package, so greetd is rebuilt here from the same upstream release with no unit, our
+# own PAM file, sysusers and tmpfiles entries. Its s6 service is runink-greetd-s6.
+#
+# NAMED greetd, IN [runink], like dbus: with [runink] ahead of [core]/[extra] pacman resolves
+# greetd here for every profile, with no profile naming it. pkgrel 2.1 sorts above Arch's 2.
+# agreety (the text greeter) is not packaged: the image's greeter is gtkgreet (runink-gtkgreet),
+# and this package does not depend on a greetd-greeter (the profile writes config.toml).
+#
+# SOURCES. The release tarball from sr.ht, pinned by sha256 (the value Arch's PKGBUILD pins);
+# crates are fetched by cargo against Cargo.lock (--locked) in prepare(), the only networked step.
+pkgname=greetd
+pkgver=0.10.3
+pkgrel=2.1
+pkgdesc="Generic greeter daemon (built without systemd)"
+arch=('x86_64')
+url="https://git.sr.ht/~kennylevinsen/greetd"
+license=('GPL-3.0-only')
+depends=('glibc' 'libgcc' 'pam')
+makedepends=('cargo' 'scdoc')
+backup=('etc/greetd/config.toml' 'etc/pam.d/greetd')
+source=("greetd-${pkgver}.tar.gz::https://git.sr.ht/~kennylevinsen/greetd/archive/${pkgver}.tar.gz"
+	greetd.pam
+	greetd.sysusers
+	greetd.tmpfiles)
+sha256sums=('ee5cb70e0add4ca9c9fe57e47581ab0002d44c07743fb5492469f3b570db640b'
+	'14d7ae35a568352b5661f2594413c1101bd423da19e8b9fb33d1bb9219e3da1d'
+	'bf2558d228b165e446601ae4bfc2bf47566685c021f8343a71102e805dd40ffe'
+	'69c699be457d31494a21e6823a9cbe75a7108592af82ccfcd2661e2704145b49')
+
+prepare() {
+	cd "greetd-${pkgver}"
+	cargo fetch --locked --target "$(rustc --print host-tuple)"
+}
+
+build() {
+	cd "greetd-${pkgver}"
+	cargo build --frozen --release -p greetd
+	make -C man all
+}
+
+package() {
+	cd "greetd-${pkgver}"
+	install -Dm0755 -t "$pkgdir/usr/bin/" target/release/greetd
+	install -Dm0644 -t "$pkgdir/etc/greetd/" config.toml
+	install -Dm0644 ../greetd.pam "$pkgdir/etc/pam.d/greetd"
+	install -Dm0644 ../greetd.sysusers "$pkgdir/usr/lib/sysusers.d/greetd.conf"
+	install -Dm0644 ../greetd.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/greetd.conf"
+	make -C man DESTDIR="$pkgdir" PREFIX=/usr install
+	find "$pkgdir" -type f -name '*agreety*' -delete
+	install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

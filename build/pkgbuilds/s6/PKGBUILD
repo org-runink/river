@@ -1,0 +1,41 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# s6 — skarnet.org process supervision suite
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# Static skarnet libraries only (skalibs --disable-shared, every package's --enable-allstatic
+# default): the programs link libc dynamically and nothing else, so the stack carries no shared
+# library of its own and no ABI coupling between its packages on upgrade.
+
+pkgname=s6
+pkgver=2.15.1.1
+pkgrel=1
+pkgdesc="skarnet.org process supervision suite"
+arch=('x86_64')
+url="https://skarnet.org/software/s6/"
+license=('ISC')
+options=('staticlibs')
+depends=('glibc' 'execline')
+makedepends=('skalibs' 'execline')
+source=("https://skarnet.org/software/s6/s6-${pkgver}.tar.gz")
+sha256sums=('62080839eb5b04d51efd4ef6e7b43e29b5d0576efce9eb319ace32ea90c05931')
+
+build() {
+	cd "s6-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/s6 \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps
+	make
+}
+
+package() {
+	cd "s6-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

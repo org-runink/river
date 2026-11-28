@@ -1,0 +1,42 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# skalibs — skarnet.org's general-purpose C library, the foundation of execline, s6, s6-rc,
+# s6-linux-init, s6-portable-utils and s6-frontend.
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# STATIC ONLY (--disable-shared), as base/recipes/skalibs builds it. Every skarnet package links
+# it statically (their --enable-allstatic default), so this package is a BUILD dependency: no
+# node needs it installed, and no upgrade of it can break a running init.
+pkgname=skalibs
+pkgver=2.16.0.0
+pkgrel=1
+pkgdesc="skarnet.org general-purpose C library (static; build-time dependency of the s6 stack)"
+arch=('x86_64')
+url="https://skarnet.org/software/skalibs/"
+license=('ISC')
+depends=()
+options=('staticlibs')
+source=("https://skarnet.org/software/skalibs/skalibs-${pkgver}.tar.gz")
+sha256sums=('90a3deda94a40d7d6a4495fe6feaf91c0185e0428d59cbd150a1a468741269aa')
+
+build() {
+	cd "skalibs-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysdepdir=/usr/lib/skalibs/sysdeps \
+		--disable-shared \
+		--enable-static \
+		--with-default-path=/usr/bin
+	make
+}
+
+package() {
+	cd "skalibs-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

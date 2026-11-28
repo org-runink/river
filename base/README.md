@@ -99,3 +99,41 @@ It also writes one `SHA256SUMS` over everything in the output directory.
   (`keys/owner/fingerprint`, the same key as [`KEYS`](../KEYS)), using `river-sign` on
   the owner's machine. CI and `river-build` never hold a private key. The full key hierarchy,
   rotation and revocation are in [`docs/OWN-BASE.md` §10.1](../docs/OWN-BASE.md#101-signing-and-the-key-hierarchy-owner-decision).
+
+## The s6 layer of the Arch-based image (2026-11-28)
+
+The transitional image moves from Artix to official Arch Linux plus `[runink]`. Every init and
+service package then comes from this repository, built by `build/build-all.sh` with
+`RIVER_BASE=arch`; nothing is taken from another distribution's binaries or service packages.
+
+| Package(s) | Source | Notes |
+|---|---|---|
+| `skalibs`, `execline`, `s6`, `s6-rc`, `s6-linux-init`, `s6-portable-utils`, `s6-frontend` | skarnet.org release tarballs, sha256-pinned (`build/pkgbuilds/<name>`) | skalibs 2.16.0.0, execline 2.10.0.0, s6 2.15.1.1, s6-rc 0.8.0.2, s6-linux-init 1.2.0.2, s6-portable-utils 2.3.1.2, s6-frontend 0.2.0.0. The recipes in this directory are still at the older skalibs/execline/s6 versions; bumping them is separate. |
+| `runink-s6-base` | ours (`build/pkgbuilds/runink-s6-services`) | `/etc/s6.conf`, the s6-linux-init skeleton, the base services in `/etc/s6/adminsv`, gettys, `/usr/bin/init` and friends, alpm hooks that regenerate `/etc/s6/current` and sync the s6-rc repository |
+| `runink-s6-services` | ours (same PKGBUILD) | s6-rc pipelines for dbus, NetworkManager, sshd, chrony, bluetoothd, cupsd and tailscaled |
+| `runink-greetd-s6` | ours | greetd and seatd services |
+| `runink-udev`, `runink-sysusers-tmpfiles` | repackaged from the pinned Arch `systemd` package | see below |
+| `greetd` | upstream release, rebuilt without Arch's `systemd` dependency | |
+| `dbus` | upstream release (existing PKGBUILD) | with `RIVER_BASE=arch`: no elogind patch, no libelogind link |
+
+**udev.** Arch has udev only inside the `systemd` package, which the closure forbids. eudev is
+not in Arch and its `libudev.so.1` collides with `systemd-libs`'; mdevd writes no udev database,
+which libinput, wlroots and udisks2 need; building udev from systemd's sources needs Python. So
+`runink-udev` repackages `udevadm`/`systemd-udevd`, `systemd-hwdb`, the rules and helpers, and
+`runink-sysusers-tmpfiles` repackages `systemd-sysusers`, `systemd-tmpfiles` and the
+`libsystemd-shared` they link, byte for byte, from the systemd package of the same Arch snapshot
+(262.2-1 in the 2026/11/25 snapshot). This is the library-only policy of
+[`docs/ARCH-BASE.md`](../docs/ARCH-BASE.md) section 4: no systemd daemon, no unit. The build
+refuses a `systemd-libs` of another version.
+
+**Seats and logind.** seatd (in Arch) is the seat provider on the live medium and on installed
+machines. elogind is not in Arch, and its meson build runs Python generators (jinja2 templates,
+gperf, syscall and filesystem lists), so it cannot be built here yet. **Not done:** a
+`runink-elogind` package needs a no-Python build patch, the way `dbus`'s 0003 patch removed
+Python from dbus's build. Until it exists the Arch-based image has no logind: DEsk's logind
+power actions, polkit's session checks (polkit is also one of the packages Arch builds against
+systemd, below) and `pam_elogind`'s `XDG_RUNTIME_DIR` are missing.
+
+**Still to rebuild for the Arch-based image** (they hard-depend on Arch's `systemd`): `cups`,
+`polkit`, `xdg-desktop-portal`, `mkinitcpio` and `pacman`. The `cupsd` service is written; the
+package under it is not.

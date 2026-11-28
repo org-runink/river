@@ -1,0 +1,11 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/bin/s6-linux-init-maker
+Target = etc/s6/skel/*
+
+[Action]
+Description = Generating the s6-linux-init directory (/etc/s6/current)...
+When = PostTransaction
+Exec = /usr/lib/runink-s6/init-maker

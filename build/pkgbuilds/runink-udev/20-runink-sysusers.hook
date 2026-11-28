@@ -1,0 +1,10 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/sysusers.d/*.conf
+
+[Action]
+Description = Creating system users and groups (sysusers.d)...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/runink-udev-hook sysusers

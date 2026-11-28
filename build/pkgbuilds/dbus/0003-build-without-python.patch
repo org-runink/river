@@ -50,25 +50,3 @@ helper's owner and mode in the PKGBUILD's package().
  
  pkgconfig.generate(
      libdbus,
---- a/meson.build.orig
-+++ b/meson.build.orig
-@@ -500,6 +500,11 @@
- use_systemd = systemd.found()
- config.set('HAVE_SYSTEMD', use_systemd)
- 
-+elogind_opt = get_option('elogind').require(not use_systemd)
-+elogind = dependency('libelogind', version: '>=209', required: elogind_opt)
-+use_elogind = elogind.found()
-+config.set('HAVE_ELOGIND', use_elogind)
-+
- if use_systemd
-     # If not found in $PATH, we might still have systemd and systemctl at runtime
-     # (perhaps dbus is being compiled in a minimal chroot with no systemd).
-@@ -1375,6 +1380,7 @@
-     'Building inotify support': use_inotify,
-     'Building kqueue support':  use_kqueue,
-     'Building systemd support': use_systemd,
-+    'Building elogind support': use_elogind,
-     'Traditional activation':   use_traditional_activation,
-     'Building X11 code':        config.get('DBUS_BUILD_X11'),
-     'Building Doxygen docs':    doxygen.found(),

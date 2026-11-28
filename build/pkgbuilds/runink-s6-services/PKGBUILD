@@ -1,0 +1,764 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-s6-base, runink-s6-services — Runink River's own s6 init layer for an Arch-based image:
+# the boot glue and base services (runink-s6-base) and the s6-rc services of the daemons the
+# image runs (runink-s6-services). Written for this project; nothing here is copied from another
+# distribution's service packages. There is no upstream: the service directories and helper
+# scripts are written by the functions at the end of this file, as runink-greetd-s6 writes its
+# own, and the configuration files (s6.conf, config/, hooks/) sit beside it. Moving the helper
+# logic into Go (a `river service run <name>` the s6 run files call, docs/GO-CLI.md) waits for
+# the river CLI to ship on the image.
+#
+# LAYOUT (unchanged from the transitional image, so the profile overlays, the installer's
+# 80-enable-s6 and the QEMU tests keep working):
+#   /etc/s6/adminsv/<svc>   base services (runink-s6-base)
+#   /etc/s6/sv/<svc>        daemon services (runink-s6-services, runink-greetd-s6, overlays)
+#   /etc/s6/repo            the s6-rc repository (s6 repository init|sync; an alpm hook syncs it)
+#   /etc/s6/rc/compiled     the boot database (s6 set commit; s6 live install --init)
+#   /etc/s6/skel, current   s6-linux-init's skeleton and the generated directory /usr/bin/init runs
+#   /etc/s6/config/<tty>.conf  getty settings (SPAWN, GETTY, ARGS, TTY, BAUD_RATE, TERM_TYPE)
+#   /etc/s6/rc.local        the image's local start-up script, run by the rc-local oneshot
+#
+# BOOT ORDER (runink-s6-base). Essential (flag-essential: always up, s6 set cannot disable
+# them): mount-kernfs -> tmpfiles-dev -> udevd -> udevadm; modules, hostname, mount-tmpfs,
+# loopback, hwclock; remount-root. Recommended (flag-recommended: active in every new set, so in
+# the default bundle, and still switchable): mount-filesystems -> sysusers -> tmpfiles-setup,
+# machine-id, sysctl, tty1..tty6, ttyS (down unless its conf says SPAWN="yes") and rc-local.
+# The default bundle s6 set commit generates therefore always holds mount-filesystems and
+# rc-local.
+#
+# DAEMONS (runink-s6-services), each an s6-rc pipeline <name>-srv | <name>-log whose bundle is
+# <name> (the names the profile and the installer enable): dbus, NetworkManager, sshd, chrony,
+# bluetoothd, cupsd, tailscaled. Logs go to /var/log/<name> through s6-log. A service whose
+# program is not installed is harmless: it is defined, and nothing enables it.
+#
+# NOT HERE: elogind (no systemd-free, Python-free build exists yet; see base/README.md), greetd
+# and seatd (runink-greetd-s6).
+pkgbase=runink-s6-services
+pkgname=('runink-s6-base' 'runink-s6-services')
+pkgver=2026.11
+pkgrel=1
+arch=('any')
+url="https://github.com/org-runink/river"
+license=('MIT')
+
+package_runink-s6-base() {
+	pkgdesc="Runink River s6 boot: s6-linux-init skeleton, base s6-rc services, gettys, alpm hooks"
+	depends=('s6' 's6-rc' 's6-linux-init' 's6-frontend' 'execline' 'runink-udev'
+		'runink-sysusers-tmpfiles' 'util-linux' 'kmod' 'iproute2' 'procps-ng' 'coreutils' 'gawk' 'sed')
+	conflicts=('systemd' 'systemd-sysvcompat')
+	backup=('etc/s6.conf' etc/s6/config/tty{1,2,3,4,5,6,S}.conf)
+	local src="$startdir" f
+	install -Dm644 "$src/s6.conf" "$pkgdir/etc/s6.conf"
+	install -d "$pkgdir/etc/s6/adminsv" "$pkgdir/etc/s6/sv" "$pkgdir/etc/s6/rc"
+	_adminsv "$pkgdir/etc/s6/adminsv"
+	_skel "$pkgdir/etc/s6/skel"
+	install -Dm644 -t "$pkgdir/etc/s6/config/" "$src"/config/*.conf
+	_lib "$pkgdir/usr/lib/runink-s6"
+	install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks/" "$src"/hooks/*.hook
+	# sysvinit-style entry points into the generated s6-linux-init directory (the hook makes it).
+	install -d "$pkgdir/usr/bin"
+	for f in init halt poweroff reboot shutdown telinit; do
+		ln -s "/etc/s6/current/bin/$f" "$pkgdir/usr/bin/$f"
+	done
+	_modes "$pkgdir/etc/s6/adminsv"
+}
+
+package_runink-s6-services() {
+	pkgdesc="Runink River s6-rc services: dbus, NetworkManager, sshd, chrony, bluetoothd, cupsd, tailscaled"
+	depends=('runink-s6-base')
+	optdepends=('dbus: dbus service' 'networkmanager: NetworkManager service' 'openssh: sshd service'
+		'chrony: chrony service' 'bluez: bluetoothd service' 'cups: cupsd service'
+		'tailscale: tailscaled service')
+	local n
+	install -d "$pkgdir/etc/s6/sv"
+	_sv "$pkgdir/etc/s6/sv"
+	for n in dbus NetworkManager sshd chrony bluetoothd cupsd tailscaled; do
+		_logger "$pkgdir/etc/s6/sv" "$n"
+	done
+	_modes "$pkgdir/etc/s6/sv"
+}
+
+# _logger <store> <name>: the log half of the <name> pipeline. s6-rc-compile makes the bundle
+# <name> from pipeline-name, holding <name>-srv and <name>-log.
+_logger() {
+	local d="$1/$2-log"
+	printf '%s\n' "$2-log" > "$1/$2-srv/producer-for"
+	install -d "$d/dependencies.d"
+	printf 'longrun\n' > "$d/type"
+	printf '%s\n' "$2-srv" > "$d/consumer-for"
+	printf '%s\n' "$2" > "$d/pipeline-name"
+	: > "$d/dependencies.d/mount-filesystems"
+	cat > "$d/run" <<RUN
+#!/bin/execlineb -P
+foreground { /usr/bin/install -d -m 0750 /var/log/$2 }
+s6-log -b -- n10 s1000000 T /var/log/$2
+RUN
+}
+
+# _modes <store>: run, finish and the helper scripts executable; data files 0644.
+_modes() {
+	find "$1" -type d -exec chmod 0755 {} +
+	find "$1" -type f -exec chmod 0644 {} +
+	find "$1" -type f \( -name run -o -name finish \) -exec chmod 0755 {} +
+}
+
+# _put <mode> <path>: write stdin to path with mode, creating its directory.
+_put() {
+	install -d "${2%/*}"
+	cat > "$2"
+	chmod "$1" "$2"
+}
+
+# _deps <service dir> <dependency>...: one empty file per dependency in dependencies.d.
+_deps() {
+	local d="$1/dependencies.d" n
+	shift
+	install -d "$d"
+	for n in "$@"; do : > "$d/$n"; done
+}
+
+# ---------------------------------------------------------------------------------------------
+# The service definitions and helpers. Oneshot `up`/`down` files are execline command lines
+# read by s6-rc (no shebang); `run`/`finish` files are executables run by s6-supervise.
+# ---------------------------------------------------------------------------------------------
+
+_adminsv() { # $1 unused, $2 = the store
+	set -- "" "$1"
+	# --- hostname
+	install -d "$2/hostname"
+	printf '%s
+' 'oneshot' > "$2/hostname/type"
+	: > "$2/hostname/flag-essential"
+	_deps "$2/hostname" mount-kernfs 
+	_put 0644 "$2/hostname/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/hostname
+__RIVER_EOF__
+	# --- hwclock
+	install -d "$2/hwclock"
+	printf '%s
+' 'oneshot' > "$2/hwclock/type"
+	: > "$2/hwclock/flag-essential"
+	_deps "$2/hwclock" mount-kernfs udevadm 
+	_put 0644 "$2/hwclock/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/hwclock --hctosys }
+exit 0
+__RIVER_EOF__
+	_put 0644 "$2/hwclock/down" <<'__RIVER_EOF__'
+foreground { /usr/bin/hwclock --systohc }
+exit 0
+__RIVER_EOF__
+	# --- loopback
+	install -d "$2/loopback"
+	printf '%s
+' 'oneshot' > "$2/loopback/type"
+	: > "$2/loopback/flag-essential"
+	_deps "$2/loopback" mount-kernfs 
+	_put 0644 "$2/loopback/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/ip link set lo up }
+exit 0
+__RIVER_EOF__
+	# --- machine-id
+	install -d "$2/machine-id"
+	printf '%s
+' 'oneshot' > "$2/machine-id/type"
+	: > "$2/machine-id/flag-recommended"
+	_deps "$2/machine-id" mount-filesystems 
+	_put 0644 "$2/machine-id/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/machine-id
+__RIVER_EOF__
+	# --- modules
+	install -d "$2/modules"
+	printf '%s
+' 'oneshot' > "$2/modules/type"
+	: > "$2/modules/flag-essential"
+	_deps "$2/modules" mount-kernfs 
+	_put 0644 "$2/modules/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/modules-load
+__RIVER_EOF__
+	# --- mount-filesystems
+	install -d "$2/mount-filesystems"
+	printf '%s
+' 'oneshot' > "$2/mount-filesystems/type"
+	: > "$2/mount-filesystems/flag-recommended"
+	_deps "$2/mount-filesystems" modules mount-tmpfs remount-root udevadm 
+	_put 0644 "$2/mount-filesystems/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/mount-filesystems
+__RIVER_EOF__
+	_put 0644 "$2/mount-filesystems/down" <<'__RIVER_EOF__'
+foreground { /usr/bin/swapoff -a }
+exit 0
+__RIVER_EOF__
+	# --- mount-kernfs
+	install -d "$2/mount-kernfs"
+	printf '%s
+' 'oneshot' > "$2/mount-kernfs/type"
+	: > "$2/mount-kernfs/flag-essential"
+	_put 0644 "$2/mount-kernfs/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/mount-kernfs
+__RIVER_EOF__
+	# --- mount-tmpfs
+	install -d "$2/mount-tmpfs"
+	printf '%s
+' 'oneshot' > "$2/mount-tmpfs/type"
+	: > "$2/mount-tmpfs/flag-essential"
+	_deps "$2/mount-tmpfs" mount-kernfs 
+	_put 0644 "$2/mount-tmpfs/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/mount-tmpfs
+__RIVER_EOF__
+	# --- rc-local
+	install -d "$2/rc-local"
+	printf '%s
+' 'oneshot' > "$2/rc-local/type"
+	: > "$2/rc-local/flag-recommended"
+	_deps "$2/rc-local" mount-filesystems tmpfiles-setup 
+	_put 0644 "$2/rc-local/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/rc-local
+__RIVER_EOF__
+	# --- remount-root
+	install -d "$2/remount-root"
+	printf '%s
+' 'oneshot' > "$2/remount-root/type"
+	: > "$2/remount-root/flag-essential"
+	_deps "$2/remount-root" mount-kernfs udevadm 
+	_put 0644 "$2/remount-root/up" <<'__RIVER_EOF__'
+/usr/lib/runink-s6/remount-root
+__RIVER_EOF__
+	# --- sysctl
+	install -d "$2/sysctl"
+	printf '%s
+' 'oneshot' > "$2/sysctl/type"
+	: > "$2/sysctl/flag-recommended"
+	_deps "$2/sysctl" mount-filesystems 
+	_put 0644 "$2/sysctl/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/sysctl -q --system }
+exit 0
+__RIVER_EOF__
+	# --- sysusers
+	install -d "$2/sysusers"
+	printf '%s
+' 'oneshot' > "$2/sysusers/type"
+	: > "$2/sysusers/flag-recommended"
+	_deps "$2/sysusers" mount-filesystems 
+	_put 0644 "$2/sysusers/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/systemd-sysusers }
+exit 0
+__RIVER_EOF__
+	# --- tmpfiles-dev
+	install -d "$2/tmpfiles-dev"
+	printf '%s
+' 'oneshot' > "$2/tmpfiles-dev/type"
+	: > "$2/tmpfiles-dev/flag-essential"
+	_deps "$2/tmpfiles-dev" mount-kernfs 
+	_put 0644 "$2/tmpfiles-dev/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/systemd-tmpfiles --prefix=/dev --create --boot }
+exit 0
+__RIVER_EOF__
+	# --- tmpfiles-setup
+	install -d "$2/tmpfiles-setup"
+	printf '%s
+' 'oneshot' > "$2/tmpfiles-setup/type"
+	: > "$2/tmpfiles-setup/flag-recommended"
+	_deps "$2/tmpfiles-setup" sysusers 
+	_put 0644 "$2/tmpfiles-setup/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/systemd-tmpfiles --create --remove --boot }
+exit 0
+__RIVER_EOF__
+	# --- tty1
+	install -d "$2/tty1"
+	printf '%s
+' 'longrun' > "$2/tty1/type"
+	: > "$2/tty1/flag-recommended"
+	_deps "$2/tty1" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty1/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty1
+__RIVER_EOF__
+	# --- tty2
+	install -d "$2/tty2"
+	printf '%s
+' 'longrun' > "$2/tty2/type"
+	: > "$2/tty2/flag-recommended"
+	_deps "$2/tty2" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty2/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty2
+__RIVER_EOF__
+	# --- tty3
+	install -d "$2/tty3"
+	printf '%s
+' 'longrun' > "$2/tty3/type"
+	: > "$2/tty3/flag-recommended"
+	_deps "$2/tty3" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty3/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty3
+__RIVER_EOF__
+	# --- tty4
+	install -d "$2/tty4"
+	printf '%s
+' 'longrun' > "$2/tty4/type"
+	: > "$2/tty4/flag-recommended"
+	_deps "$2/tty4" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty4/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty4
+__RIVER_EOF__
+	# --- tty5
+	install -d "$2/tty5"
+	printf '%s
+' 'longrun' > "$2/tty5/type"
+	: > "$2/tty5/flag-recommended"
+	_deps "$2/tty5" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty5/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty5
+__RIVER_EOF__
+	# --- tty6
+	install -d "$2/tty6"
+	printf '%s
+' 'longrun' > "$2/tty6/type"
+	: > "$2/tty6/flag-recommended"
+	_deps "$2/tty6" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/tty6/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty tty6
+__RIVER_EOF__
+	# --- ttyS
+	install -d "$2/ttyS"
+	printf '%s
+' 'longrun' > "$2/ttyS/type"
+	: > "$2/ttyS/flag-recommended"
+	_deps "$2/ttyS" hostname mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/ttyS/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+fdmove -c 2 1
+/usr/lib/runink-s6/getty ttyS
+__RIVER_EOF__
+	# --- udevadm
+	install -d "$2/udevadm"
+	printf '%s
+' 'oneshot' > "$2/udevadm/type"
+	: > "$2/udevadm/flag-essential"
+	_deps "$2/udevadm" udevd 
+	_put 0644 "$2/udevadm/up" <<'__RIVER_EOF__'
+foreground { /usr/bin/udevadm trigger --action=add --type=subsystems }
+foreground { /usr/bin/udevadm trigger --action=add --type=devices }
+foreground { /usr/bin/udevadm settle --timeout=60 }
+exit 0
+__RIVER_EOF__
+	# --- udevd
+	install -d "$2/udevd"
+	printf '%s
+' 'longrun' > "$2/udevd/type"
+	printf '%s
+' '3' > "$2/udevd/notification-fd"
+	: > "$2/udevd/flag-essential"
+	_deps "$2/udevd" tmpfiles-dev 
+	_put 0755 "$2/udevd/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# The udev daemon (runink-udev). Ready once it answers a ping on its control socket:
+# s6-notifyoncheck polls and writes the readiness line to fd 3 (notification-fd).
+fdmove -c 2 1
+s6-notifyoncheck -d -n 0 -w 100 -c "/usr/bin/udevadm control --ping"
+/usr/lib/systemd/systemd-udevd
+__RIVER_EOF__
+}
+
+_sv() { # $1 = the store
+	set -- "" "$1"
+	# --- bluetoothd-srv
+	install -d "$2/bluetoothd-srv"
+	printf '%s
+' 'longrun' > "$2/bluetoothd-srv/type"
+	_deps "$2/bluetoothd-srv" dbus udevadm 
+	_put 0755 "$2/bluetoothd-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# BlueZ in the foreground.
+fdmove -c 2 1
+/usr/lib/bluetooth/bluetoothd -n
+__RIVER_EOF__
+	# --- chrony-srv
+	install -d "$2/chrony-srv"
+	printf '%s
+' 'longrun' > "$2/chrony-srv/type"
+	_deps "$2/chrony-srv" mount-filesystems sysusers 
+	_put 0755 "$2/chrony-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# chronyd in the foreground (-d logs to stderr, which the log service keeps), as user chrony.
+fdmove -c 2 1
+/usr/bin/chronyd -d -u chrony
+__RIVER_EOF__
+	# --- cupsd-srv
+	install -d "$2/cupsd-srv"
+	printf '%s
+' 'longrun' > "$2/cupsd-srv/type"
+	_deps "$2/cupsd-srv" dbus tmpfiles-setup 
+	_put 0755 "$2/cupsd-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# CUPS in the foreground (-f; -l is for socket activation, which nothing does here).
+fdmove -c 2 1
+/usr/bin/cupsd -f
+__RIVER_EOF__
+	# --- dbus-srv
+	install -d "$2/dbus-srv"
+	printf '%s
+' 'longrun' > "$2/dbus-srv/type"
+	printf '%s
+' '3' > "$2/dbus-srv/notification-fd"
+	_deps "$2/dbus-srv" machine-id mount-filesystems sysusers tmpfiles-setup 
+	_put 0755 "$2/dbus-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# The system message bus. dbus-daemon prints its address, newline-terminated, on fd 3 once it
+# listens: that is the s6 readiness notification (notification-fd), so services that depend on
+# dbus start only when the bus answers.
+fdmove -c 2 1
+foreground { /usr/bin/install -d -m 0755 /run/dbus }
+foreground { /usr/bin/dbus-uuidgen --ensure }
+/usr/bin/dbus-daemon --system --nofork --nopidfile --print-address=3
+__RIVER_EOF__
+	# --- NetworkManager-srv
+	install -d "$2/NetworkManager-srv"
+	printf '%s
+' 'longrun' > "$2/NetworkManager-srv/type"
+	_deps "$2/NetworkManager-srv" dbus udevadm 
+	_put 0755 "$2/NetworkManager-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# NetworkManager in the foreground; its supplicant is started over D-Bus on demand.
+fdmove -c 2 1
+/usr/bin/NetworkManager --no-daemon
+__RIVER_EOF__
+	# --- sshd-srv
+	install -d "$2/sshd-srv"
+	printf '%s
+' 'longrun' > "$2/sshd-srv/type"
+	_deps "$2/sshd-srv" mount-filesystems tmpfiles-setup 
+	_put 0755 "$2/sshd-srv/run" <<'__RIVER_EOF__'
+#!/bin/execlineb -P
+# OpenSSH. Host keys are created on first start (ssh-keygen -A only writes missing ones).
+fdmove -c 2 1
+foreground { /usr/bin/ssh-keygen -A }
+/usr/bin/sshd -D -e
+__RIVER_EOF__
+	# --- tailscaled-srv
+	install -d "$2/tailscaled-srv"
+	printf '%s
+' 'longrun' > "$2/tailscaled-srv/type"
+	_deps "$2/tailscaled-srv" modules mount-filesystems 
+	_put 0755 "$2/tailscaled-srv/run" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# tailscaled, written for s6 (the upstream package ships only a systemd unit). The same state
+# file, socket and port as that unit; PORT and FLAGS come from /etc/default/tailscaled, which
+# Arch's tailscale package ships. It needs /dev/net/tun, so the module is loaded first.
+exec 2>&1
+PATH=/usr/bin; export PATH
+PORT=41641
+FLAGS=""
+# shellcheck disable=SC1091 # the package's defaults file
+[ ! -r /etc/default/tailscaled ] || . /etc/default/tailscaled
+modprobe -q tun || true
+install -d -m 0700 /var/lib/tailscale
+install -d -m 0755 /run/tailscale
+# shellcheck disable=SC2086 # FLAGS is a word list by design
+exec /usr/bin/tailscaled --state=/var/lib/tailscale/tailscaled.state \
+	--socket=/run/tailscale/tailscaled.sock --port="$PORT" $FLAGS
+__RIVER_EOF__
+	_put 0755 "$2/tailscaled-srv/finish" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# Remove tailscaled's routes, firewall rules and DNS settings after it stops (the unit's
+# ExecStopPost). Runs on every exit; s6 gives finish scripts five seconds.
+exec /usr/bin/tailscaled --cleanup
+__RIVER_EOF__
+}
+
+_lib() { # $1 = /usr/lib/runink-s6 in $pkgdir
+	_put 0755 "$1/getty" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# getty <service> — the run program of the tty1..tty6 and ttyS longruns. Settings come from
+# /etc/s6/config/<service>.conf, a shell fragment with these variables:
+#   SPAWN      "yes" to run a getty; anything else leaves the service down for good (s6-svc -O)
+#   GETTY      the getty program (agetty)
+#   ARGS       extra arguments, word-split (for example "--autologin someone --noclear")
+#   TTY        the device name (default: the service name; ttyS defaults to ttyS0)
+#   BAUD_RATE  line speed (default 38400; ttyS 115200)
+#   TERM_TYPE  the TERM value (default linux; ttyS vt100)
+PATH=/usr/bin; export PATH
+svc="${1:?usage: getty <service>}"
+SPAWN=yes GETTY=agetty ARGS="--noclear" TTY="$svc" BAUD_RATE=38400 TERM_TYPE=linux
+if [ "$svc" = ttyS ]; then
+	SPAWN=no ARGS="" TTY=ttyS0 BAUD_RATE=115200 TERM_TYPE=vt100
+fi
+conf="/etc/s6/config/$svc.conf"
+# shellcheck disable=SC1090 # the file is the administrator's
+[ ! -r "$conf" ] || . "$conf"
+if [ "$SPAWN" != yes ]; then
+	s6-svc -O .
+	exit 0
+fi
+[ -c "/dev/$TTY" ] || { echo "getty: /dev/$TTY does not exist; not spawning" >&2; s6-svc -O .; exit 0; }
+# shellcheck disable=SC2086 # ARGS is a word list by design
+exec "$GETTY" $ARGS "$TTY" "$BAUD_RATE" "$TERM_TYPE"
+__RIVER_EOF__
+	_put 0755 "$1/hostname" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# hostname — set the kernel host name from /etc/hostname (first word of the first non-comment
+# line). With no file the kernel's default stays.
+PATH=/usr/bin; export PATH
+h=""
+[ ! -r /etc/hostname ] || h="$(sed -e 's/#.*//' /etc/hostname | awk 'NF { print $1; exit }')"
+[ -z "$h" ] || printf '%s\n' "$h" > /proc/sys/kernel/hostname
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/init-maker" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# init-maker — (re)generate /etc/s6/current, the s6-linux-init directory /usr/bin/init runs,
+# from the skeleton in /etc/s6/skel. s6-linux-init-maker must run on the system that boots
+# (fifos, ownership), so an alpm hook runs this after s6-linux-init or runink-s6-base change.
+# The administrator's environment for PID 1's children (/etc/s6/current/env, for example LANG)
+# is carried over.
+set -eu
+PATH=/usr/bin; export PATH
+base=/etc/s6/current
+new="/etc/s6/.current.new.$$"
+old="/etc/s6/.current.old.$$"
+rm -rf "$new"
+# -1: also copy the catch-all log to /dev/console (boot messages on screen and serial).
+# -s: key=value kernel arguments become an envdir at /run/kernel_env.
+# -t 2: ISO 8601 timestamps in the catch-all log.
+s6-linux-init-maker -1 -c "$base" -f /etc/s6/skel -p /usr/local/sbin:/usr/local/bin:/usr/bin \
+	-m 0022 -t 2 -s /run/kernel_env -D default "$new"
+if [ -d "$base/env" ]; then
+	mkdir -p "$new/env"
+	cp -a "$base/env/." "$new/env/"
+fi
+if [ -e "$base" ]; then mv "$base" "$old"; fi
+mv "$new" "$base"
+rm -rf "$old"
+__RIVER_EOF__
+	_put 0755 "$1/machine-id" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# machine-id — give the machine an /etc/machine-id when it has none (first boot of a fresh
+# image). 32 lowercase hex digits, from the kernel's random UUID. dbus links
+# /var/lib/dbus/machine-id to it (its tmpfiles.d).
+PATH=/usr/bin; export PATH
+[ -s /etc/machine-id ] && exit 0
+id="$(tr -d '-' < /proc/sys/kernel/random/uuid)"
+case "$id" in
+????????????????????????????????) ;;
+*) echo "machine-id: could not read a random UUID" >&2; exit 0 ;;
+esac
+( umask 0222 && printf '%s\n' "$id" > /etc/machine-id.new && mv /etc/machine-id.new /etc/machine-id ) ||
+	echo "machine-id: / is not writable, no /etc/machine-id" >&2
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/modules-load" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# modules-load — load the modules named in modules-load.d (the same files and precedence as
+# systemd-modules-load: /etc over /run over /usr/lib, by file name) and on the kernel command
+# line (modules-load= and rd.modules-load=, comma-separated). A module that fails to load is
+# reported and the boot goes on.
+PATH=/usr/bin; export PATH
+mods=""
+seen=" "
+for d in /etc/modules-load.d /run/modules-load.d /usr/lib/modules-load.d; do
+	for f in "$d"/*.conf; do
+		[ -f "$f" ] || continue
+		b="${f##*/}"
+		case "$seen" in *" $b "*) continue ;; esac
+		seen="$seen$b "
+		mods="$mods $(sed -e 's/[#;].*//' "$f" | tr -s ' \t' '\n')"
+	done
+done
+set -f # words, never globs, from here on
+# shellcheck disable=SC2013 # the command line is a list of words
+for w in $(cat /proc/cmdline 2>/dev/null); do
+	case "$w" in
+	modules-load=* | rd.modules-load=*) mods="$mods $(printf '%s' "${w#*=}" | tr ',' ' ')" ;;
+	esac
+done
+for m in $mods; do
+	modprobe -b -q "$m" || echo "modules: could not load $m" >&2
+done
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/mount-filesystems" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# mount-filesystems — everything in /etc/fstab except network filesystems (mounted later, by
+# whoever needs them) and ZFS (the zfs-mount service), then swap. Failures are reported and the
+# boot goes on.
+PATH=/usr/bin; export PATH
+mount -a -t nonfs,nonfs4,nosmbfs,nocifs,nocodafs,noncpfs,noshfs,nofuse,nofuseblk,noglusterfs,nodavfs,nozfs -O no_netdev ||
+	echo "mount-filesystems: some /etc/fstab entries did not mount (mount -a failed)" >&2
+swapon -a || echo "mount-filesystems: swapon -a failed" >&2
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/mount-kernfs" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# mount-kernfs — the kernel filesystems, first thing in the boot set (s6-linux-init mounts only
+# /run, and /dev when the kernel has not). Every mount is skipped when already present: the
+# initramfs moves /proc, /sys and /dev into the new root.
+PATH=/usr/bin; export PATH
+mnt() { # type source options target
+	[ -d "$4" ] || mkdir -p "$4" 2>/dev/null || return 0
+	mountpoint -q "$4" && return 0
+	mount -t "$1" -o "$3" "$2" "$4" || echo "mount-kernfs: could not mount $1 on $4" >&2
+}
+mnt proc proc nosuid,noexec,nodev /proc
+mnt sysfs sysfs nosuid,noexec,nodev /sys
+mnt devtmpfs dev mode=0755,nosuid /dev
+mnt devpts devpts mode=0620,gid=5,ptmxmode=0666,nosuid,noexec /dev/pts
+mnt tmpfs shm mode=1777,nosuid,nodev /dev/shm
+mnt mqueue mqueue nosuid,noexec,nodev /dev/mqueue
+mnt cgroup2 cgroup2 nosuid,noexec,nodev,nsdelegate /sys/fs/cgroup
+[ ! -d /sys/kernel/security ] || mnt securityfs securityfs nosuid,noexec,nodev /sys/kernel/security
+[ ! -d /sys/kernel/config ] || mnt configfs configfs nosuid,noexec,nodev /sys/kernel/config
+[ ! -d /sys/kernel/tracing ] || mnt tracefs tracefs nosuid,noexec,nodev /sys/kernel/tracing
+[ ! -d /sys/fs/bpf ] || mnt bpf bpf mode=0700,nosuid,noexec,nodev /sys/fs/bpf
+[ ! -d /sys/fs/pstore ] || mnt pstore pstore nosuid,noexec,nodev /sys/fs/pstore
+[ ! -d /sys/firmware/efi/efivars ] || mnt efivarfs efivarfs nosuid,noexec,nodev /sys/firmware/efi/efivars
+# The /dev links devtmpfs does not create.
+[ -e /dev/fd ] || ln -s /proc/self/fd /dev/fd
+[ -e /dev/stdin ] || ln -s /proc/self/fd/0 /dev/stdin
+[ -e /dev/stdout ] || ln -s /proc/self/fd/1 /dev/stdout
+[ -e /dev/stderr ] || ln -s /proc/self/fd/2 /dev/stderr
+[ -e /dev/core ] || ln -s /proc/kcore /dev/core
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/mount-tmpfs" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# mount-tmpfs — /tmp on a tmpfs, as Arch's default (half of RAM, a million inodes), unless
+# /etc/fstab mounts /tmp itself or something already did.
+PATH=/usr/bin; export PATH
+mountpoint -q /tmp && exit 0
+if [ -r /etc/fstab ] && awk '$1 !~ /^#/ && $2 == "/tmp" { found = 1 } END { exit !found }' /etc/fstab; then
+	exit 0
+fi
+mount -t tmpfs -o mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m tmpfs /tmp ||
+	echo "mount-tmpfs: could not mount a tmpfs on /tmp" >&2
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/rc-local" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# rc-local — run /etc/s6/rc.local, the image's local start-up script, when it is executable.
+[ -x /etc/s6/rc.local ] || exit 0
+exec /etc/s6/rc.local
+__RIVER_EOF__
+	_put 0755 "$1/remount-root" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# remount-root — make / writable, unless /etc/fstab asks for a read-only root. A failure is
+# reported and does not stop the boot: the machine must stay reachable to be repaired.
+PATH=/usr/bin; export PATH
+if [ -r /etc/fstab ] && awk '$1 !~ /^#/ && $2 == "/" && $4 ~ /(^|,)ro(,|$)/ { found = 1 } END { exit !found }' /etc/fstab; then
+	exit 0
+fi
+mount -o remount,rw / || echo "remount-root: could not remount / read-write" >&2
+exit 0
+__RIVER_EOF__
+	_put 0755 "$1/repo-sync" <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# repo-sync — keep the s6-rc repository (/etc/s6/repo) in step with the service stores
+# (/etc/s6/adminsv, /etc/s6/sv), as s6-frontend asks of the package manager. Creates the
+# repository on first use. It never changes which services are enabled or touches the live
+# system: that is the image build's and the installer's job (s6 set ..., s6 live install).
+PATH=/usr/bin; export PATH
+command -v s6 >/dev/null 2>&1 || exit 0
+if [ -d /etc/s6/repo ]; then
+	s6 repository sync
+else
+	s6 repository init
+fi
+__RIVER_EOF__
+}
+
+_skel() { # $1 = /etc/s6/skel in $pkgdir
+	_put 0755 "$1/rc.init" <<'__RIVER_EOF__'
+#!/bin/sh -e
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# rc.init — stage 2, run by s6-linux-init once s6-svscan is PID 1. Starts s6-rc on the boot
+# database the image build or the installer compiled (s6 set commit; s6 live install --init)
+# and brings up the runlevel ("default" unless the kernel command line names another).
+rl="$1"
+shift
+if [ ! -e /etc/s6/rc/compiled ]; then
+	echo "rc.init: no s6-rc boot database at /etc/s6/rc/compiled." >&2
+	echo "rc.init: build one with: s6 repository init; s6 set commit; s6 live install --init" >&2
+	exit 1
+fi
+s6-rc-init -c /etc/s6/rc/compiled -l /run/s6-rc /run/service
+exec /etc/s6/current/scripts/runlevel "$rl"
+__RIVER_EOF__
+	_put 0755 "$1/rc.shutdown" <<'__RIVER_EOF__'
+#!/bin/sh -e
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# rc.shutdown — bring every service down, essential ones included, in reverse dependency
+# order. s6-linux-init then kills what is left, unmounts and halts.
+exec s6-rc -v2 -l /run/s6-rc -bDa change
+__RIVER_EOF__
+	_put 0755 "$1/rc.shutdown.final" <<'__RIVER_EOF__'
+#!/bin/sh -e
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# rc.shutdown.final — runs after the filesystems are unmounted, right before the halt. Nothing
+# is needed here.
+:
+__RIVER_EOF__
+	_put 0755 "$1/runlevel" <<'__RIVER_EOF__'
+#!/bin/sh -e
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# runlevel <bundle> — bring the machine to the named s6-rc bundle, stopping what is not in it.
+# Called once by rc.init and again by telinit.
+test "$#" -gt 0 || { echo 'runlevel: fatal: too few arguments' >&2; exit 100; }
+exec s6-rc -v2 -l /run/s6-rc -up change "$1"
+__RIVER_EOF__
+}

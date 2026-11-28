@@ -1,0 +1,41 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# execline — skarnet.org non-interactive scripting language (s6-rc and s6-linux-init scripts)
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# Static skarnet libraries only (skalibs --disable-shared, every package's --enable-allstatic
+# default): the programs link libc dynamically and nothing else, so the stack carries no shared
+# library of its own and no ABI coupling between its packages on upgrade.
+
+pkgname=execline
+pkgver=2.10.0.0
+pkgrel=1
+pkgdesc="skarnet.org non-interactive scripting language (s6-rc and s6-linux-init scripts)"
+arch=('x86_64')
+url="https://skarnet.org/software/execline/"
+license=('ISC')
+options=('staticlibs')
+depends=('glibc')
+makedepends=('skalibs')
+source=("https://skarnet.org/software/execline/execline-${pkgver}.tar.gz")
+sha256sums=('561be2ce578604644e2263a889bbdf4736e7980401ee88556a7f9017c166dbab')
+
+build() {
+	cd "execline-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/execline \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps
+	make
+}
+
+package() {
+	cd "execline-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

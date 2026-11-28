@@ -1,0 +1,49 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# s6-linux-init — skarnet.org tools to boot a Linux system with s6 as PID 1
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# Static skarnet libraries only (skalibs --disable-shared, every package's --enable-allstatic
+# default): the programs link libc dynamically and nothing else, so the stack carries no shared
+# library of its own and no ABI coupling between its packages on upgrade.
+#
+# The default skeleton path compiled into s6-linux-init-maker is /usr/share/s6-linux-init/skel,
+# which nothing installs (upstream does not install its skel/): a maker run without -f fails.
+# runink-s6-base ships the scripts this system boots with (/etc/s6/skel) and generates
+# /etc/s6/current from them with s6-linux-init-maker on the target (it must run on the machine
+# that boots: the directory holds fifos and ownership-sensitive files).
+pkgname=s6-linux-init
+pkgver=1.2.0.2
+pkgrel=1
+pkgdesc="skarnet.org tools to boot a Linux system with s6 as PID 1"
+arch=('x86_64')
+url="https://skarnet.org/software/s6-linux-init/"
+license=('ISC')
+options=('staticlibs')
+depends=('glibc' 'execline' 's6')
+makedepends=('skalibs' 'execline' 's6')
+source=("https://skarnet.org/software/s6-linux-init/s6-linux-init-${pkgver}.tar.gz")
+sha256sums=('6fad014da162c0c81924197c57d16e1a75c133b34a20e423431a1b741e907b1d')
+
+build() {
+	cd "s6-linux-init-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/s6-linux-init \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps \
+		--skeldir=/usr/share/s6-linux-init/skel \
+		--tmpfsdir=/run \
+		--scandir=service
+	make
+}
+
+package() {
+	cd "s6-linux-init-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

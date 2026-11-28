@@ -1,0 +1,10 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/udev/hwdb.d/*
+
+[Action]
+Description = Updating the udev hardware database...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/runink-udev-hook hwdb

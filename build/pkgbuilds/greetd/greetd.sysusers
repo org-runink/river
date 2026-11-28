@@ -1,0 +1,5 @@
+# greetd's greeter account (Runink River). The greeter runs as this user; the video group
+# opens /run/seatd.sock (seatd -g video) and the DRM devices.
+u greeter - "greetd greeter" /var/lib/greetd /usr/bin/nologin
+m greeter video
+m greeter input

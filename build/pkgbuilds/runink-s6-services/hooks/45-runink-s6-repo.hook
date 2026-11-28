@@ -1,0 +1,12 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Target = etc/s6/sv/*
+Target = etc/s6/adminsv/*
+
+[Action]
+Description = Syncing the s6-rc service repository with the service stores...
+When = PostTransaction
+Exec = /usr/lib/runink-s6/repo-sync

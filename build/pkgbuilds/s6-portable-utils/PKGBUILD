@@ -1,0 +1,41 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# s6-portable-utils — skarnet.org small portable Unix utilities (s6-hiercopy and friends)
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# Static skarnet libraries only (skalibs --disable-shared, every package's --enable-allstatic
+# default): the programs link libc dynamically and nothing else, so the stack carries no shared
+# library of its own and no ABI coupling between its packages on upgrade.
+
+pkgname=s6-portable-utils
+pkgver=2.3.1.2
+pkgrel=1
+pkgdesc="skarnet.org small portable Unix utilities (s6-hiercopy and friends)"
+arch=('x86_64')
+url="https://skarnet.org/software/s6-portable-utils/"
+license=('ISC')
+options=('staticlibs')
+depends=('glibc')
+makedepends=('skalibs')
+source=("https://skarnet.org/software/s6-portable-utils/s6-portable-utils-${pkgver}.tar.gz")
+sha256sums=('cfb90186d0c0eb204e1e5c6f9379e99413c546bccf38bb6e76177f82371aa3aa')
+
+build() {
+	cd "s6-portable-utils-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/s6-portable-utils \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps
+	make
+}
+
+package() {
+	cd "s6-portable-utils-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}
