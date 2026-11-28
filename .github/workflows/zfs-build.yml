@@ -11,9 +11,9 @@ name: build runink-zfs — OpenZFS from source vs linux-runink (Artix container)
 # The userland used to come from archzfs's zfs-utils (2.3.3 against 2.4.4 modules); it is
 # built here now so the pair cannot skew. Manual-dispatch only.
 #
-# Runs on GitHub-hosted ubuntu-latest (workflow_dispatch only, so no pull-request code
-# reaches it). It needs docker, the gh CLI and ~10 GB of disk, all of which a standard
-# runner has; the build takes ~15-30 min. It built on hosted runners in August and
+# Runs on the project's own `public-ci-vm` machines (workflow_dispatch only, so no
+# pull-request code reaches it). It needs docker, the gh CLI and ~10 GB of disk, all of which
+# that machine has; the build takes ~15-30 min. It built on hosted runners in August and
 # September 2026.
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, public-ci-vm]
     timeout-minutes: 60   # a from-source ZFS build is ~15-30 min, far lighter than the kernel
     env:
       # Inputs reach scripts through env, never spliced into them (template injection).

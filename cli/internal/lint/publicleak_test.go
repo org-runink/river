@@ -117,6 +117,8 @@ func TestPublicLeakFlagsEachRule(t *testing.T) {
 		"tunnel":        {"tunnel 2001:470:1d:4c9::1/64", "internal-ip"},
 		"ula":           {"cluster at fd42:dead:beef::/48", "ula"},
 		"runner":        {"runs-on: [self-hosted, zorb-egress]", "runner-label"},
+		"runner-mixed":  {"runs-on: [self-hosted, public-ci, zorb-egress]", "runner-label"},
+		"runner-other":  {"runs-on: [self-hosted, linux]", "runner-label"},
 		"label":         {"the job needs zorb-egress", "runner-label"},
 		"hardware":      {"sized on the ZorbTech box", "target-hw"},
 		"server":        {"the runink-server ISO", "server-name"},
@@ -236,5 +238,17 @@ func TestPublicLeakHistory(t *testing.T) {
 		if !strings.Contains(errb.String(), want) {
 			t.Errorf("history report lacks %q:\n%s", want, errb.String())
 		}
+	}
+}
+
+// The project's own public runners may be named, exactly in this form (docs/governance/CI.md).
+func TestPublicLeakAllowsThePublicRunners(t *testing.T) {
+	withLeakTerms(t)
+	dir := leakRepo(t)
+	writeLeak(t, dir, ".github/workflows/x.yml", "jobs:\n  a:\n    runs-on: [self-hosted, public-ci]\n  b:\n    runs-on: [self-hosted, public-ci-vm]  # a whole machine\n")
+	writeLeak(t, dir, "docs/runners.md", "- `[self-hosted, public-ci]`: a fresh container per job.\n")
+	gitLeak(t, dir, "add", "-A")
+	if err, errs, _ := runLeak(t, dir); err != nil {
+		t.Fatalf("the public runner labels were flagged: %v\n%s", err, errs)
 	}
 }

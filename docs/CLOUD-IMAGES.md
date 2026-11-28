@@ -112,9 +112,8 @@ OVMF, `go`, GNU tar, and about 40 GB free under `~/.cache` with the model payloa
 ### Building in GitHub Actions
 
 `.github/workflows/images.yml` builds the **public, payload-free** artifacts on
-GitHub-hosted `ubuntu-24.04` runners (this public repository never uses a self-hosted runner;
-the workflow header lists how each job fits a standard runner's 4 vCPU, 16 GB of RAM and
-~14 GB of free disk): the server ISO, the workstation ISO (both with
+the project's own `public-ci-vm` machines (a fresh Ubuntu 24.04 VM per job; the workflow
+header lists how each job fits): the server ISO, the workstation ISO (both with
 `MODEL_PAYLOAD=no`), and the GCE base image (`cloud-image.sh --no-models --expect-payload
 none`, then `cloud-image-test.sh`). Manual dispatch or a pushed `runink-os-*` tag; never on
 pull requests, only in `org-runink/river`, actions pinned by SHA, `contents: read`, no
