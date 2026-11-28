@@ -123,3 +123,37 @@ if [ -f "$ML" ] || [ -f "$KR.gpg" ]; then
 		echo "pacman-key: [runink] added to /etc/pacman.conf (SigLevel = Required DatabaseRequired)"
 	fi
 fi
+
+# --- [blackarch]: the BlackArch repository, configured, NOTHING installed from it -----------
+# (docs/BLACKARCH.md) The image ships BlackArch's keyring, vendored byte for byte from the
+# project's signed keyring package (pacman/blackarch-keyring.pin; no upstream bootstrap script
+# runs, here or at build time), and /etc/pacman.d/blackarch-mirrorlist. Same rules as [runink]:
+# both or neither, and every trusted fingerprint VALID afterwards, or the node's first
+# `pacman -Syu` would fail on the database signature. The stanza goes LAST in pacman.conf:
+# pacman takes a package from the first repository that has it, so no BlackArch build can
+# shadow a distribution or [runink] package of the same name. Installing a tool is the user's
+# own `pacman -S`; no step here installs one.
+BML="$TARGET/etc/pacman.d/blackarch-mirrorlist"
+BKR="$TARGET/usr/share/pacman/keyrings/blackarch"
+if [ -f "$BML" ] || [ -f "$BKR.gpg" ]; then
+	if [ ! -s "$BML" ] || [ ! -s "$BKR.gpg" ] || [ ! -s "$BKR-trusted" ]; then
+		echo "pacman-key: FATAL the image ships only part of [blackarch] (need $BML, $BKR.gpg and $BKR-trusted)" >&2
+		exit 1
+	fi
+	echo "pacman-key: populating: blackarch (the BlackArch repository keyring)"
+	chroot_run "pacman-key --populate blackarch"
+	for fpr in $(sed -e 's/#.*//' -e 's/:.*//' "$BKR-trusted"); do
+		printf '%s\n' "$fpr" | grep -Eqx '[0-9A-F]{40}' || {
+			echo "pacman-key: FATAL $BKR-trusted: '$fpr' is not a 40-hex fingerprint" >&2; exit 1; }
+		v=$(chroot_run "gpg --homedir /etc/pacman.d/gnupg --batch --with-colons --list-keys $fpr 2>/dev/null" \
+			| awk -F: '$1 == "pub" { print $2; exit }') || v=
+		case "$v" in
+			f|u) echo "pacman-key: [blackarch] key $fpr trusted (validity $v)" ;;
+			*) echo "pacman-key: FATAL [blackarch] key $fpr is not valid in the target keyring (validity '${v:-none}')" >&2; exit 1 ;;
+		esac
+	done
+	if ! grep -q '^\[blackarch\]' "$CONF"; then
+		printf '\n# BlackArch: configured, nothing installed from it (docs/BLACKARCH.md).\n[blackarch]\nSigLevel = Required\nInclude = /etc/pacman.d/blackarch-mirrorlist\n' >> "$CONF"
+		echo "pacman-key: [blackarch] added at the end of /etc/pacman.conf (SigLevel = Required)"
+	fi
+fi

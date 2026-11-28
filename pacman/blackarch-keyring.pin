@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# blackarch-keyring.pin — the BlackArch keyring the image ships, and where it came from.
+# Checked by `river lint blackarch` (cli/internal/lint/blackarch.go). See docs/BLACKARCH.md.
+#
+# The three files under iso-profiles/river/root-overlay/usr/share/pacman/keyrings/ are the
+# byte-for-byte contents of BlackArch's own signed keyring package. No upstream bootstrap
+# script (strap.sh) is run, at build time or on a node: the files are vendored here, and the
+# installer step 35-pacman-keyring runs `pacman-key --populate blackarch` from them.
+#
+# HOW THEY WERE OBTAINED AND VERIFIED (2026-11-28):
+#   1. blackarch.db and blackarch.db.sig from https://www.blackarch.org/blackarch/blackarch/os/x86_64/;
+#      the database names blackarch-keyring 20251011-2 with %SHA256SUM% UPSTREAM_PKG_SHA256 below.
+#   2. The package and its .sig from the same directory; sha256 equal to the database entry.
+#   3. The signer's key fetched independently from keyserver.ubuntu.com (IPv4); `gpg --verify`
+#      of the package: VALIDSIG F9A6E68A711354D84A9B91637533BAFE69A25079 (2025-10-12).
+#   4. That fingerprint is in the KEYRING_SIGNERS list of https://blackarch.org/strap.sh
+#      ("keep in sync with blackarch-trusted"), the script whose SHA1
+#      d338a4bb95d9e09f97508da68ac9e17d963b85f6 https://blackarch.org/downloads.html publishes;
+#      the copy fetched matched that SHA1. strap.sh was READ for its fingerprint list, never run.
+#   5. blackarch.gpg is identical to blackarch.gpg in https://github.com/BlackArch/blackarch-keyring
+#      (git blob c9eede6ec342b02d4875bd4a5fc0e1d050ecc558, commit e5bb520, 2025-10-11).
+#   6. With ONLY these files trusted, pacman verified the live blackarch.db signature
+#      (signed 2026-11-27 by the same key).
+#
+# TO BUMP: repeat 1-6 for the new keyring package, replace the three files, and update every
+# value below in the same commit. The lint fails if a file and its hash disagree.
+
+UPSTREAM_PKG="blackarch-keyring-20251011-2-any.pkg.tar.zst"
+UPSTREAM_PKG_SHA256="d40c1301f84195164a2843f2447f5b3833bd9ea30e5cfdaf4271ad9c9771ee07"
+# The key that signs the BlackArch database and packages today (VALIDSIG primary fingerprint).
+REPO_SIGNER="F9A6E68A711354D84A9B91637533BAFE69A25079"
+# Exactly the fingerprints of blackarch-trusted, in file order (= strap.sh KEYRING_SIGNERS).
+TRUSTED="8F9A9793CB8591147C2EC70566E0CDBD1E01F333 A0917C4147A37007CB54C1CFD295AA940EFDDF62 4345771566D76038C7FEB43863EC0ADBEA87E4E3 F9A6E68A711354D84A9B91637533BAFE69A25079"
+SHA256_BLACKARCH_GPG="aafde833f921fe8ae6272a74793ad8991897e9487c061da519d840b5f78369f8"
+SHA256_BLACKARCH_TRUSTED="508a51a2a5a4d879013500672f03cd06f323adb6ac68ade1ebb84e42251d0ba1"
+SHA256_BLACKARCH_REVOKED="f80df536d4c917a89161b7ea3a5284e67bf467b3f7251dda14666d52cefccf52"

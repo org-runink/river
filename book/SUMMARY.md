@@ -21,6 +21,7 @@
     * [Services (s6)](docs/configuration/services/README.md)
     * [Updates](docs/configuration/updates/README.md)
     * [Package repository](docs/configuration/package-repository/README.md)
+    * [Security tools (BlackArch)](docs/configuration/blackarch/README.md)
     * [Keyboard & language](docs/configuration/keyboard-locale/README.md)
     * [Networking](docs/configuration/networking/README.md)
   * [Troubleshooting](docs/troubleshooting/README.md)

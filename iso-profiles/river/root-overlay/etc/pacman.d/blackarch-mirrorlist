@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# /etc/pacman.d/blackarch-mirrorlist — mirrors of the BlackArch [blackarch] repository.
+# See docs/BLACKARCH.md in the Runink River repository.
+#
+# Taken from the project's own list (https://blackarch.org/blackarch-mirrorlist, 2026-11-28).
+# HTTPS only. Every mirror below answered over IPv4 on 2026-11-28 with the same database
+# (blackarch.db.sig Last-Modified 2026-11-27 21:33:07 GMT); all but blackarch.org also publish
+# AAAA records. pacman tries them in order and moves on after any failure.
+#
+# A mirror is trusted for availability only: the database and every package must carry a
+# valid signature from a key in /usr/share/pacman/keyrings/blackarch-trusted (SigLevel =
+# Required in /etc/pacman.conf), so a mirror cannot alter what it serves undetected. It CAN
+# serve an old database; see "Freshness" in docs/BLACKARCH.md.
+Server = https://ftp.halifax.rwth-aachen.de/blackarch/$repo/os/$arch
+Server = https://mirrors.dotsrc.org/blackarch/$repo/os/$arch
+Server = https://www.mirrorservice.org/sites/blackarch.org/blackarch/$repo/os/$arch
+Server = https://ftp2.osuosl.org/pub/blackarch/$repo/os/$arch
+Server = https://mirrors.ocf.berkeley.edu/blackarch/$repo/os/$arch
+Server = https://mirror.team-cymru.com/blackarch/$repo/os/$arch
+# The project's own server: IPv4 only (no AAAA record on 2026-11-28).
+Server = https://www.blackarch.org/blackarch/$repo/os/$arch

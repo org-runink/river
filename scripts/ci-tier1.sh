@@ -71,6 +71,9 @@ run "$RIVER" lint k0s-pin --repo .
 # 6. the AUR packaging (packaging/aur/) pins the same kernel, configs and OpenZFS as the tree.
 run "$RIVER" lint aur-sync --repo .
 run "$RIVER" lint profile-manifest --repo .
+#    ... and [blackarch]: the vendored keyring is the pinned one, the stanza is last and
+#    signature-required, the mirrors are HTTPS, and no package list installs a BlackArch package.
+run "$RIVER" lint blackarch --repo .
 # 7. the host firewall: default-deny input, no fixed port, forward default-drop, the pairing
 #    ports link-local and live-only (loaded into a namespace where nft and userns allow).
 run "$RIVER" lint firewall --repo .
