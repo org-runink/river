@@ -1,0 +1,49 @@
+# Packages-Live.arch — the ARCH LINUX variant of Packages-Live (migrating from Artix, in
+# progress: docs/ARCH-BASE.md). NOTHING READS THIS FILE YET; it replaces Packages-Live when the
+# Arch-based ISO builder (ARCH-BASE.md §5, D2) reads it and its ISO boots (D4). Names checked
+# against the Arch Linux Archive snapshot of 2026-11-25.
+#
+# The LIVE-ONLY layer of the Runink River ISO (profile.yaml
+# `livefs:`, LiveOS/livefs.img). Never in rootfs.img; 20-clone-rootfs removes them from an
+# installed machine (the install clones the running live system, which includes this layer).
+# river lint profile-manifest checks that profile.yaml's livefs list is exactly this file.
+#
+# The live session is configuration in live-overlay/ (see the header of profile.yaml).
+
+## No runink-grub-live: it existed only to feed artools buildiso's prepare_grub(); the Arch-based
+## builder takes the live menu straight from iso-profiles/river/grub/ (ARCH-BASE.md §3 row 13).
+
+## weston — the reference Wayland compositor, run with its KIOSK SHELL.
+##
+## WHY IT IS HERE, and why it is not wpewebkit any more. river-live-fallback's chain is: a
+## graphical session, else river-kiosk, else the text installer. The kiosk used to be WPE
+## WebKit's MiniBrowser drawn straight onto KMS/DRM with no compositor at all. That wants a
+## hardware cursor plane and a GPU renderer, and a plain EFI framebuffer (simpledrm) has
+## neither -- so it failed on precisely the machines that needed a fallback. On the owner's
+## XPS 13 9300 it aborted five times in ten seconds with "No suitable DRM device found", on a
+## laptop where CachyOS, Manjaro and Fedora all open their installer without trouble.
+##
+## Those distributions do the boring thing: boot a session, run the installer as an ordinary
+## window in it. So does this now. weston's kiosk-shell exists for exactly this -- one
+## application, fullscreen, no desktop furniture -- and weston is the REFERENCE compositor, so
+## it is the one most likely to come up on odd hardware. It renders through pixman when there
+## is no GPU, which is the simpledrm case. Inside it runs river-installer-desktop, the one
+## launcher, so there is one browser and one definition of what the
+## installer looks like.
+##
+## NOT cage: the kiosk is weston's kiosk shell, the REFERENCE compositor, for the reasons above.
+## (On the Artix path cage was also missing from the repositories; Arch [extra] has both.)
+## Verify a package against the db the BUILD uses.
+##
+## firefox is already in Packages-Root, so this swap ADDS a small compositor and REMOVES a
+## whole second browser engine.
+##
+## It is LIVE-ONLY on purpose. An installed workstation has DEsk and a browser and no use for
+## the kiosk; 20-clone-rootfs removes this layer from the installed machine, so the installed
+## footprint is unchanged. The cost is paid only on the medium that needs a graphical installer
+## without a desktop.
+##
+## Downstream images are unaffected: a profile that needs a different kiosk ships its own copy
+## of river-kiosk and its own live package list, because an image with no desktop should not
+## grow one just to show an installer.
+weston
