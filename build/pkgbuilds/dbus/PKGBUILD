@@ -52,9 +52,21 @@ pkgdesc="Freedesktop.org message bus system, built without X11"
 arch=('x86_64')
 url="https://www.freedesktop.org/wiki/Software/dbus/"
 license=('AFL-2.1 OR GPL-2.0-or-later')
-depends=('glibc' 'audit' 'expat' 'libcap-ng' 'libelogind'
-	'libaudit.so' 'libcap-ng.so' 'libexpat.so')
-makedepends=('elogind')
+# RIVER_BASE=arch (the Arch-based image): no elogind exists there (base/README.md), so this
+# build drops patch 0002 and the libelogind link; console-user detection (at_console, which no
+# policy this image installs uses) is then off. Every other option is the same. The default
+# (artix) is the build above, unchanged, until the Arch-based image replaces the transitional one.
+if [ "${RIVER_BASE:-artix}" = arch ]; then
+	depends=('glibc' 'audit' 'expat' 'libcap-ng'
+		'libaudit.so' 'libcap-ng.so' 'libexpat.so')
+	makedepends=()
+	_elogind=disabled
+else
+	depends=('glibc' 'audit' 'expat' 'libcap-ng' 'libelogind'
+		'libaudit.so' 'libcap-ng.so' 'libexpat.so')
+	makedepends=('elogind')
+	_elogind=enabled
+fi
 provides=('libdbus' 'libdbus-1.so=3-64')
 conflicts=('libdbus')
 replaces=('libdbus')
@@ -65,12 +77,12 @@ source=("https://dbus.freedesktop.org/releases/dbus/dbus-${pkgver}.tar.xz"
 sha256sums=('d08b05526c2cb7966a5fb79210d6112b1aca3d135f315c1b302e14b4b0297dac'
 	'35a7100b93d10b2a4e6a240c97e6236ea33512a08343d5194907edde13417faa'
 	'f6bb4b6247ea62b5f3ec425056fc4abfc750ecc0527a697e439a1ea41fc5daf6'
-	'0c05cf40301183cd4488e8fffb3cb0557687ca5ac54805d0edf6dda4af39a903')
+	'43908d3565f6e00cc6378657c5c6697b5d2d53e2060ea6bffa13845dc31494ec')
 
 prepare() {
 	cd "dbus-${pkgver}"
 	patch -Np1 -i ../0001-arch-layout.patch
-	patch -Np1 -i ../0002-add-elogind-build-support.patch
+	[ "$_elogind" = disabled ] || patch -Np1 -i ../0002-add-elogind-build-support.patch
 	patch -Np1 -i ../0003-build-without-python.patch
 }
 
@@ -83,7 +95,7 @@ build() {
 	muon setup -Dprefix=/usr -Dlibexecdir=lib -Dsbindir=bin -Dsysconfdir=/etc -Dlocalstatedir=/var \
 		-Dbuildtype=plain -Db_pie=true -Ddefault_library=shared \
 		-Dx11_autolaunch=disabled \
-		-Delogind=enabled -Dsystemd=disabled -Duser_session=false \
+		$( [ "$_elogind" = disabled ] || echo -Delogind=enabled ) -Dsystemd=disabled -Duser_session=false \
 		-Dlibaudit=enabled -Dapparmor=disabled -Dselinux=disabled \
 		-Dkqueue=disabled -Dlaunchd=disabled -Drelocation=disabled \
 		-Depoll=enabled -Dinotify=enabled -Dvalgrind=disabled \

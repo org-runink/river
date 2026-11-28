@@ -1,0 +1,10 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/tmpfiles.d/*.conf
+
+[Action]
+Description = Creating temporary files and directories (tmpfiles.d)...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/runink-udev-hook tmpfiles

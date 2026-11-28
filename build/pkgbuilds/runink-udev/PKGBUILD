@@ -1,0 +1,148 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# runink-udev, runink-sysusers-tmpfiles — the udev daemon, udevadm, the hwdb compiler and the standalone sysusers and
+# tmpfiles tools, for an Arch-based Runink River that runs s6 as PID 1 and has no systemd.
+#
+# THE DECISION (2026-11-28). On Arch, udev exists only inside the `systemd` package, and the
+# `systemd` package may not be installed (forbidden closure: it carries PID 1, journald, logind
+# and the units). The options were:
+#   eudev   not in Arch; its libudev.so.1 collides with systemd-libs' (which dbus, util-linux,
+#           NetworkManager, libinput and the rest link), and its /run/udev database would be read
+#           by systemd-libs' newer libudev. Rejected.
+#   mdevd   (skarnet) writes no udev database at all, so libinput, wlroots, udisks2 and the ZFS
+#           by-id links get nothing. Fine for a server without a desktop, wrong for this image.
+#           Rejected for now.
+#   build udev from the systemd source tarball: systemd's meson build runs Python generators
+#           (jinja2 and friends), and this project builds nothing with Python. Rejected.
+#   repackage from the pinned Arch `systemd` package: CHOSEN. This is the "allowed with a note"
+#           line of docs/ARCH-BASE.md section 4: the udev daemon and the standalone sysusers and
+#           tmpfiles tools, byte for byte, with no systemd daemon and no unit. libsystemd and
+#           libudev stay where Arch puts them (systemd-libs, library-only coupling).
+#
+# WHAT IS TAKEN, nothing else: udevadm (systemd-udevd is a symlink to it), systemd-hwdb,
+# systemd-sysusers, systemd-tmpfiles, libsystemd-shared-<ver>.so (their only non-libc link;
+# everything else it uses is dlopen()ed on demand), /usr/lib/udev (rules, hwdb.d and the
+# ata_id/scsi_id/cdrom_id/... helpers), systemd's basic sysusers.d (root, nobody and the device
+# groups: tty, video, input, kvm, render, ...) and the tmpfiles.d snippets that are not about a
+# systemd daemon. Arch's alpm hooks call systemd-detect-virt and systemctl, so they are not
+# taken; ours are in this directory and call the tools directly.
+#
+# THE VERSION MUST EQUAL systemd-libs', or libudev clients read a database written by a
+# different udev. The pin is the systemd in the Arch archive snapshot the build uses
+# (2026/11/25: systemd 262.2-1, systemd-libs 262.2-1), and depends= holds it exactly. Bump both
+# together, from the same snapshot.
+#
+# Source: the package file from archive.archlinux.org, pinned by sha256 (it is also signed by an
+# Arch packager key; pacman's keyring verifies that on the builder, the sha256 is the pin).
+#
+# TWO PACKAGES. runink-sysusers-tmpfiles carries systemd-sysusers, systemd-tmpfiles and the
+# shared library they and udevadm link; a profile without udev (a container) can install it
+# alone. runink-udev carries the device manager and requires the other at the same version.
+pkgbase=runink-udev
+pkgname=('runink-sysusers-tmpfiles' 'runink-udev')
+_sdver=262.2
+_sdrel=1
+pkgver=${_sdver}
+pkgrel=1
+pkgdesc="udev, sysusers and tmpfiles from Arch's pinned systemd package, without systemd"
+arch=('x86_64')
+url="https://github.com/org-runink/river"
+license=('LGPL-2.1-or-later' 'GPL-2.0-or-later')
+noextract=("systemd-${_sdver}-${_sdrel}-x86_64.pkg.tar.zst")
+source=("https://archive.archlinux.org/packages/s/systemd/systemd-${_sdver}-${_sdrel}-x86_64.pkg.tar.zst"
+	20-runink-sysusers.hook
+	21-runink-tmpfiles.hook
+	25-runink-hwdb.hook
+	35-runink-udev-reload.hook)
+sha256sums=('38a9c2d5e4f5db9bbb2c58d274de973d6637c87eba81c19c7a1b4fb1aca0b513'
+	'8a1e75fc7426cf9c6a268def1377f3573b098c607260b355dc49525461cb5de3'
+	'77775526b4f0f9b9da0b4af90ed649e762486a2d93234723bb2b5bd843c17828'
+	'6ab23510e1fc450f3c04b5cffccb104783be812511c42104b33ba175e4dfdc6a'
+	'585bcc6c1c939abc64cd43048890b73a881dc0208aaac5738fee3fb1937abd5f')
+
+prepare() {
+	rm -rf sd && mkdir sd
+	bsdtar -xf "systemd-${_sdver}-${_sdrel}-x86_64.pkg.tar.zst" -C sd
+	# The pin must still be the version the builder's systemd-libs has: a skew is the one way
+	# this package breaks every libudev client, so it fails here rather than on a node.
+	local have
+	have="$(pacman -Q systemd-libs 2>/dev/null | awk '{print $2}')"
+	case "$have" in
+	"${_sdver}"-*) ;;
+	*) echo "runink-udev: builder has systemd-libs '${have:-none}', this package pins ${_sdver}" >&2; return 1 ;;
+	esac
+}
+
+package_runink-sysusers-tmpfiles() {
+	pkgdesc="systemd-sysusers and systemd-tmpfiles (standalone, from Arch's pinned systemd), with alpm hooks"
+	depends=('glibc' 'libgcc' 'acl' 'libcap' 'libxcrypt' 'util-linux-libs')
+	conflicts=('systemd')
+	local s="$srcdir/sd" f
+	cd "$s"
+	install -d "$pkgdir/usr/bin" "$pkgdir/usr/lib/systemd" "$pkgdir/usr/lib/sysusers.d" "$pkgdir/usr/lib/tmpfiles.d"
+	install -m755 usr/bin/systemd-sysusers usr/bin/systemd-tmpfiles "$pkgdir/usr/bin/"
+	install -m755 "usr/lib/systemd/libsystemd-shared-${_sdver}-${_sdrel}.so" "$pkgdir/usr/lib/systemd/"
+	install -m644 usr/lib/sysusers.d/basic.conf "$pkgdir/usr/lib/sysusers.d/"
+	for f in home.conf legacy.conf static-nodes-permissions.conf tmp.conf var.conf x11.conf root.conf; do
+		[ ! -f "usr/lib/tmpfiles.d/$f" ] || install -m644 "usr/lib/tmpfiles.d/$f" "$pkgdir/usr/lib/tmpfiles.d/"
+	done
+	for f in systemd-sysusers systemd-tmpfiles; do
+		[ ! -f "usr/share/man/man8/$f.8.gz" ] || install -Dm644 "usr/share/man/man8/$f.8.gz" -t "$pkgdir/usr/share/man/man8/"
+	done
+	install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname/" usr/share/licenses/systemd/*
+	install -d "$pkgdir/usr/share/libalpm/scripts"
+	_hook_script > "$pkgdir/usr/share/libalpm/scripts/runink-udev-hook"
+	chmod 0755 "$pkgdir/usr/share/libalpm/scripts/runink-udev-hook"
+	install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks/" "$srcdir/20-runink-sysusers.hook" "$srcdir/21-runink-tmpfiles.hook"
+}
+
+package_runink-udev() {
+	pkgdesc="udev device manager (udevd, udevadm, hwdb, rules) from Arch's pinned systemd, without systemd"
+	depends=('glibc' 'libgcc' "systemd-libs=${_sdver}" "runink-sysusers-tmpfiles=${pkgver}-${pkgrel}"
+		'kmod' 'hwdata' 'util-linux-libs' 'acl')
+	provides=('udev')
+	conflicts=('systemd' 'eudev' 'udev')
+	backup=('etc/udev/udev.conf')
+	local s="$srcdir/sd" f
+	cd "$s"
+	install -d "$pkgdir/usr/bin" "$pkgdir/usr/lib/systemd" "$pkgdir/etc/udev/rules.d" "$pkgdir/etc/udev/hwdb.d"
+	install -m755 usr/bin/udevadm usr/bin/systemd-hwdb "$pkgdir/usr/bin/"
+	ln -s ../../bin/udevadm "$pkgdir/usr/lib/systemd/systemd-udevd"
+	cp -a usr/lib/udev "$pkgdir/usr/lib/udev"
+	# 99-systemd.rules tags devices for systemd units (SYSTEMD_WANTS); nothing reads it here.
+	rm -f "$pkgdir/usr/lib/udev/rules.d/99-systemd.rules"
+	install -m644 etc/udev/udev.conf "$pkgdir/etc/udev/udev.conf"
+	for f in udevadm systemd-hwdb systemd-udevd; do
+		[ ! -f "usr/share/man/man8/$f.8.gz" ] || install -Dm644 "usr/share/man/man8/$f.8.gz" -t "$pkgdir/usr/share/man/man8/"
+	done
+	install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname/" usr/share/licenses/systemd/*
+	# The binary hwdb is generated on the target by the hook (systemd-hwdb --usr update), not shipped.
+	install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks/" "$srcdir/25-runink-hwdb.hook" "$srcdir/35-runink-udev-reload.hook"
+}
+
+# runink-udev-hook, written by package_runink-sysusers-tmpfiles: what Arch's systemd-hook does for
+# these four operations, without asking systemd whether it runs (it never does here).
+_hook_script() {
+	cat <<'__RIVER_EOF__'
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# runink-udev-hook — what Arch's systemd-hook does for udev, sysusers, tmpfiles and hwdb, without
+# asking systemd whether it is running (it never is here).
+set -eu
+case "${1:-}" in
+sysusers) exec /usr/bin/systemd-sysusers ;;
+tmpfiles) exec /usr/bin/systemd-tmpfiles --create ;;
+hwdb) exec /usr/bin/systemd-hwdb --usr update ;;
+udev-reload)
+	# Only on a booted system with udevd up: in a chroot or an image build there is no
+	# control socket and nothing to reload.
+	[ -S /run/udev/control ] || exit 0
+	/usr/bin/udevadm control --reload
+	/usr/bin/udevadm trigger -c change
+	exec /usr/bin/udevadm settle
+	;;
+*) echo "runink-udev-hook: unknown operation '${1:-}'" >&2; exit 2 ;;
+esac
+__RIVER_EOF__
+}

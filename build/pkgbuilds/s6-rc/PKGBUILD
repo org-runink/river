@@ -1,0 +1,48 @@
+# Maintainer: The RIVER Authors (see MAINTAINERS.md)
+# s6-rc — skarnet.org service manager for s6: dependency-ordered oneshots and longruns
+#
+# Built from skarnet.org's release tarball, pinned by sha256 below. skarnet publishes a .sha256
+# beside each tarball and no OpenPGP signature; the pin was checked against that file
+# (2026-11-28), which is a transcription check from the same origin, not independent provenance.
+# This replaces the distribution's binary package: the s6 stack in [runink] is built here, from
+# upstream source, and nothing in it comes from another distribution.
+#
+# Static skarnet libraries only (skalibs --disable-shared, every package's --enable-allstatic
+# default): the programs link libc dynamically and nothing else, so the stack carries no shared
+# library of its own and no ABI coupling between its packages on upgrade.
+#
+# Paths: the boot database at /etc/s6/rc/compiled, the live state in /run/s6-rc and the
+# repository of service sets at /etc/s6/repo. The same three are compiled into s6-frontend and
+# written to /etc/s6.conf by runink-s6-base, so every tool agrees without a flag.
+pkgname=s6-rc
+pkgver=0.8.0.2
+pkgrel=1
+pkgdesc="skarnet.org service manager for s6: dependency-ordered oneshots and longruns"
+arch=('x86_64')
+url="https://skarnet.org/software/s6-rc/"
+license=('ISC')
+options=('staticlibs')
+depends=('glibc' 'execline' 's6')
+makedepends=('skalibs' 'execline' 's6')
+source=("https://skarnet.org/software/s6-rc/s6-rc-${pkgver}.tar.gz")
+sha256sums=('2fc0fcfe1e74b404b132a978eb316668c8bcdbc1104b3b0fe702a3d2d76caef5')
+
+build() {
+	cd "s6-rc-${pkgver}"
+	./configure \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/s6-rc \
+		--with-sysdeps=/usr/lib/skalibs/sysdeps \
+		--livedir=/run/s6-rc \
+		--repodir=/etc/s6/repo \
+		--bootdb=/etc/s6/rc/compiled \
+		--with-default-bundle=default
+	make
+}
+
+package() {
+	cd "s6-rc-${pkgver}"
+	make DESTDIR="$pkgdir" install
+	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

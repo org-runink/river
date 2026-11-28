@@ -27,6 +27,16 @@ step() {
 	exit 1
 }
 
+# RIVER_BASE: the distribution base the [runink] packages are built for. artix (the default)
+# is the transitional image; arch is the Arch-based image with our own s6 layer. The dbus and
+# runink-greetd-s6 PKGBUILDs read it too, hence the export.
+RIVER_BASE="${RIVER_BASE:-artix}"
+case "$RIVER_BASE" in
+artix | arch) ;;
+*) echo "build-all: RIVER_BASE must be artix or arch, not '$RIVER_BASE'" >&2; exit 1 ;;
+esac
+export RIVER_BASE
+
 echo "== build-all: components from source =="
 if [ "${RIVER_PAYLOAD_PREBUILT:-0}" = 1 ]; then
 	# The caller already ran "$RIVER_PAYLOAD_DIR/build.sh" "$OUT_DIR" (build/local-iso.sh
@@ -103,6 +113,38 @@ if command -v makepkg >/dev/null 2>&1; then
 	( cd "$HERE/pkgbuilds/runink-grub-live" && \
 	  RUNINK_OUT="$OUT_DIR" makepkg -f -C --noconfirm ) \
 	  || { echo "  makepkg runink-grub-live FAILED" >&2; exit 1; }
+
+	# The s6 init layer of the Arch-based image (RIVER_BASE=arch): every init and service package
+	# from our own recipes on top of official Arch, nothing from another distribution.
+	#   skalibs .. s6-frontend   skarnet's upstream sources, sha256-pinned, built in dependency
+	#                            order; each is installed into this throwaway builder right after
+	#                            it is built, because the next one compiles against it.
+	#   runink-udev              udev + standalone sysusers/tmpfiles, repackaged from the pinned
+	#                            Arch systemd package (its PKGBUILD says why); it refuses to build
+	#                            unless the builder's systemd-libs is the same version.
+	#   runink-s6-services       runink-s6-base (boot glue, base services, gettys, hooks) and
+	#                            runink-s6-services (dbus, NetworkManager, sshd, chrony, bluetoothd,
+	#                            cupsd, tailscaled).
+	#   greetd                   Arch's greetd minus its systemd dependency (cargo, scdoc).
+	# The transitional image (RIVER_BASE unset or artix) takes its s6 stack from its own
+	# distribution and builds none of these: building them there would put them ahead of that
+	# distribution's packages in every closure.
+	if [ "$RIVER_BASE" = arch ]; then
+		for p in skalibs execline s6 s6-rc s6-linux-init s6-portable-utils s6-frontend; do
+			echo "  makepkg $p (integrity-checked)"
+			( cd "$HERE/pkgbuilds/$p" && \
+			  RUNINK_OUT="$OUT_DIR" makepkg -f -C --nodeps --noconfirm ) \
+			  || { echo "  makepkg $p FAILED" >&2; exit 1; }
+			sudo pacman -U --noconfirm "$HERE/pkgbuilds/$p/$p-"[0-9]*.pkg.tar.zst \
+			  || { echo "  installing $p into the builder FAILED" >&2; exit 1; }
+		done
+		for p in runink-udev runink-s6-services greetd; do
+			echo "  makepkg $p (integrity-checked)"
+			( cd "$HERE/pkgbuilds/$p" && \
+			  RUNINK_OUT="$OUT_DIR" makepkg -f -C --noconfirm ) \
+			  || { echo "  makepkg $p FAILED" >&2; exit 1; }
+		done
+	fi
 
 	# dbus 1.16.4 built without X11 (no X11 autolaunch). Named dbus, so with [runink] ahead of
 	# [system] it replaces the distribution's X11-linked dbus in every profile's closure.
