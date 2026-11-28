@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river_loop_mnt — mkinitcpio install hook: boot a Runink River ISO that is a FILE on another
+# disk (a multi-image stick, build/make-multiboot-usb.sh). Must come after river_live in HOOKS.
+
+build() {
+	add_module loop
+	# The file system that holds the ISO file. The `filesystems` hook adds the common ones;
+	# these are the ones a stick is usually formatted with, named so the hook works without it.
+	add_module vfat
+	add_module exfat
+	add_module ext4
+	add_module nls_cp437
+	add_module nls_iso8859-1
+	add_runscript
+}
+
+help() {
+	cat <<HELPEOF
+With img_dev=<device> and img_loop=<path>, mounts <device> read-only, attaches <path> on it to
+a loop device and hands that to river_live as the live medium. The live GRUB menu passes both
+when it is booted through loopback.cfg (GRUB sets iso_path and rootuuid).
+HELPEOF
+}

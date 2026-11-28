@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/org-runink/river/cli/internal/isocmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -283,6 +284,15 @@ func ProfileManifest(_ context.Context, repo string, dirs []string, errw, outw i
 		}
 		if len(art) > 0 {
 			r.fail("%s: profile.yaml installs Artix's live-session setup: %s", p, pmWords(art))
+		}
+		// The Arch path (RIVER_BASE=arch): `river iso build` installs Packages-Root.arch and
+		// Packages-Live.arch exactly, so the pairing is checked the way the builder reads it:
+		// both present and non-empty, disjoint, and carrying the packages the builder needs
+		// (the kernel, mkinitcpio, grub, the microcode images, the live initramfs hooks).
+		if _, err := os.Stat(filepath.Join(d, "Packages-Root.arch")); err == nil {
+			if _, err := isocmd.LoadProfile(d); err != nil {
+				r.fail("%s (Arch path): %v", p, err)
+			}
 		}
 
 		rootb, _ := os.ReadFile(filepath.Join(d, "Packages-Root"))

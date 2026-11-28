@@ -273,3 +273,20 @@ func TestProfileManifestGreetdNeedsItsPAM(t *testing.T) {
 		t.Fatalf("with the PAM file: %v\n%s", err, out)
 	}
 }
+
+// The Arch path's manifests are checked the way `river iso build` reads them.
+func TestProfileManifestArchPairing(t *testing.T) {
+	dir := pmFixture(t, false)
+	p := "iso-profiles/river/"
+	lbWrite(t, dir, p+"profile.yaml", "live-session:\n  user: runink\n  password: runink\nrootfs:\n  packages:\n    - base\n    - linux-runink\n  packages-init:\n    s6:\n      - openssh-s6\nlivefs:\n  packages:\n    - river-live\n")
+	lbWrite(t, dir, p+"Packages-Root.arch", "linux-runink mkinitcpio grub intel-ucode amd-ucode\n")
+	lbWrite(t, dir, p+"Packages-Live.arch", "river-live\n")
+	out, err := pmRun(t, dir)
+	if err == nil || !strings.Contains(out, "(Arch path)") || !strings.Contains(out, "runink-live-initcpio") {
+		t.Fatalf("Packages-Live.arch without the live initramfs hooks passed: %v\n%s", err, out)
+	}
+	lbWrite(t, dir, p+"Packages-Live.arch", "river-live\nrunink-live-initcpio\n")
+	if out, err := pmRun(t, dir); err != nil {
+		t.Fatalf("a complete Arch pairing failed: %v\n%s", err, out)
+	}
+}

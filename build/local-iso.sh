@@ -12,7 +12,8 @@
 #
 #   0. the profile copy, for an external profile (RIVER_PROFILE_DIR) or edition branding
 #      (RIVER_BRANDING_DIR): docs/BUILD.md "Downstream distributions"
-#   1. the Artix builder image                  (podman, `make builder`)
+#   1. the builder image                        (podman: builder/Containerfile, Artix, or
+#                                                with RIVER_BASE=arch builder/arch.Containerfile)
 #   2. linux-runink + runink-zfs                (build/build-kernel-zfs.sh, rootless podman;
 #                                                rebuilt every run, then build/verify-kernel-zfs.sh)
 #   3. the downstream payload, if any           ("$RIVER_PAYLOAD_DIR/build.sh", on this host)
@@ -28,8 +29,15 @@
 #   8. the builder image as an archive root's podman can load, and the root-stage file
 #
 # Then it prints:   sudo sh <repo>/build/iso-root-stage.sh <state>/root-stage-<profile>.env
-# which runs buildiso in a privileged container, attaches the model payload to a private
-# server ISO (a downstream profile), checks the result and hands the ISO back to you.
+# which runs the ISO builder in a privileged container (artools' buildiso, or with
+# RIVER_BASE=arch `river iso build`), attaches the model payload to a private server ISO (a
+# downstream profile), checks the result and hands the ISO back to you.
+#
+# TWO BASES while Runink River moves off Artix (docs/ARCH-BASE.md). RIVER_BASE=artix (the
+# default until the Arch ISO has boot evidence) builds as before. RIVER_BASE=arch builds from
+# the pinned Arch archive and [runink] with River's own builder (cli/internal/isocmd): the
+# profile's Packages-Root.arch and Packages-Live.arch installed exactly, River's own live
+# initramfs hooks (runink-live-initcpio), the same GRUB menu, theme, label and overlays.
 #
 # Usage:  build/local-iso.sh [--no-lint]
 # PUBLIC and PRIVATE images. A build is PUBLIC unless it has a downstream payload
@@ -62,7 +70,8 @@
 #                      It is NEVER copied to the ISO; keep it off the stick.
 #   OUT_DIR            where the finished ISO lands (default ~/.cache/river-build/iso-out)
 #   KERNEL_OUT         kernel/ZFS packages (default ~/.cache/river-build/kernel)
-#   BUILDER_IMAGE      default runink-os-builder
+#   RIVER_BASE         artix (default) | arch: which base and ISO builder (see above)
+#   BUILDER_IMAGE      default runink-os-builder (artix) or runink-os-builder-arch (arch)
 #   STATE              working state (default ~/.cache/river-build/local-iso)
 # Big files go under ~/.cache on purpose: /tmp is often a tmpfs, and filling it kills
 # processes without a disk-full error.
@@ -84,7 +93,12 @@ MODEL_PAYLOAD="${MODEL_PAYLOAD:-auto}"
 PASSFILE="${RIVER_MODELS_PASSPHRASE_FILE:-$CACHE/river-build/secrets/models-passphrase}"
 OUT_DIR="${OUT_DIR:-$CACHE/river-build/iso-out}"
 KERNEL_OUT="${KERNEL_OUT:-$CACHE/river-build/kernel}"
-BUILDER_IMAGE="${BUILDER_IMAGE:-runink-os-builder}"
+RIVER_BASE="${RIVER_BASE:-artix}"
+case "$RIVER_BASE" in
+	artix) BUILDER_IMAGE="${BUILDER_IMAGE:-runink-os-builder}" BUILDER_FILE="$REPO/builder/Containerfile" ;;
+	arch) BUILDER_IMAGE="${BUILDER_IMAGE:-runink-os-builder-arch}" BUILDER_FILE="$REPO/builder/arch.Containerfile" ;;
+	*) echo "local-iso: RIVER_BASE must be artix or arch" >&2; exit 1 ;;
+esac
 STATE="${STATE:-$CACHE/river-build/local-iso}"
 RIVER_PAYLOAD_STAGE="${RIVER_PAYLOAD_STAGE:-}"
 RIVER_ISO_VARIANT="${RIVER_ISO_VARIANT:-}"
@@ -97,7 +111,7 @@ die() { echo "local-iso: $*" >&2; exit 1; }
 case "${1:-}" in
 	--no-lint) LINT=0 ;;
 	'') ;;
-	-h|--help) sed -n '5,65p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h|--help) sed -n '5,/^set -eu$/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
 	*) die "unknown argument $1 (see --help)" ;;
 esac
 
@@ -111,6 +125,10 @@ else
 	PROFILE_SRC="$REPO/iso-profiles/$PROFILE"
 fi
 [ -f "$PROFILE_SRC/profile.yaml" ] || die "no profile at $PROFILE_SRC (no profile.yaml)"
+# The Arch path installs the profile's Arch allow-lists exactly (cli/internal/isocmd).
+if [ "$RIVER_BASE" = arch ]; then
+	[ -f "$PROFILE_SRC/Packages-Root.arch" ] || die "RIVER_BASE=arch: $PROFILE_SRC has no Packages-Root.arch"
+fi
 if [ -n "$RIVER_BRANDING_DIR" ]; then
 	RIVER_BRANDING_DIR="$(cd "$RIVER_BRANDING_DIR" 2>/dev/null && pwd)" || die "RIVER_BRANDING_DIR is not a directory"
 	[ -d "$RIVER_BRANDING_DIR/overlay" ] || die "RIVER_BRANDING_DIR=$RIVER_BRANDING_DIR has no overlay/"
@@ -159,7 +177,7 @@ case "$MODEL_PAYLOAD" in
 	no) ;;
 	*) die "MODEL_PAYLOAD must be auto, yes or no" ;;
 esac
-echo "local-iso: PROFILE=$PROFILE ($RP_KIND, label $RP_ISO_LABEL${RIVER_PROFILE_DIR:+, from $RIVER_PROFILE_DIR}${RIVER_BRANDING_DIR:+, branding $RIVER_BRANDING_DIR}) RIVER_PUBLIC=$RIVER_PUBLIC${RIVER_ISO_VARIANT:+ RIVER_ISO_VARIANT=$RIVER_ISO_VARIANT} MODEL_PAYLOAD=$MODEL_PAYLOAD${RIVER_PAYLOAD_STAGE:+ RIVER_PAYLOAD_STAGE=$RIVER_PAYLOAD_STAGE}"
+echo "local-iso: RIVER_BASE=$RIVER_BASE PROFILE=$PROFILE ($RP_KIND, label $RP_ISO_LABEL${RIVER_PROFILE_DIR:+, from $RIVER_PROFILE_DIR}${RIVER_BRANDING_DIR:+, branding $RIVER_BRANDING_DIR}) RIVER_PUBLIC=$RIVER_PUBLIC${RIVER_ISO_VARIANT:+ RIVER_ISO_VARIANT=$RIVER_ISO_VARIANT} MODEL_PAYLOAD=$MODEL_PAYLOAD${RIVER_PAYLOAD_STAGE:+ RIVER_PAYLOAD_STAGE=$RIVER_PAYLOAD_STAGE}"
 
 # A private variant keeps its own repository, work dir and stage file, so the public and the
 # private server image can be prepared side by side (their runink-core packages differ).
@@ -198,7 +216,8 @@ river_profile_self_edition "${PROFILE_DIR:-$PROFILE_SRC}" "$RP_ISO_LABEL" "$RP_E
 
 # --- 1. builder image ------------------------------------------------------------------
 log "1/8 builder image ($BUILDER_IMAGE)"
-podman image exists "$BUILDER_IMAGE" || podman build -t "$BUILDER_IMAGE" "$REPO/builder"
+[ -f "$BUILDER_FILE" ] || die "RIVER_BASE=$RIVER_BASE needs $BUILDER_FILE (not in this checkout yet?)"
+podman image exists "$BUILDER_IMAGE" || podman build -t "$BUILDER_IMAGE" -f "$BUILDER_FILE" "$REPO/builder"
 
 # --- 2. kernel + ZFS ---------------------------------------------------------------------
 log "2/8 linux-runink + runink-zfs ($KERNEL_OUT)"
@@ -402,28 +421,42 @@ if [ "$LINT" -eq 1 ]; then
 		set -- -v "$PROFILE_DIR:/staged/$PROFILE:ro"
 	fi
 	# The closure lint needs pactree and every repo the manifests resolve from, including this
-	# [runink] repo, so it runs in the builder with the repo injected ahead of [system]. The
-	# in-tree profile is checked, whichever one is being built, and the staged one if any.
-	podman run --rm --user root -v "$REPO:/os:ro" -v "$REPODIR:/localrepo:ro" -v "$RIVER:/usr/local/bin/river:ro" "$@" "$BUILDER_IMAGE" sh -euc '
+	# [runink] repo, so it runs in the builder with the repo injected ahead of the first one
+	# ([system] on Artix, [core] on Arch). The in-tree profile is checked, whichever one is being
+	# built, and the staged one if any; on the Arch path its Packages-Root.arch.
+	FIRST=system MANIFEST=Packages-Root
+	[ "$RIVER_BASE" = arch ] && FIRST=core MANIFEST=Packages-Root.arch
+	podman run --rm --user root -v "$REPO:/os:ro" -v "$REPODIR:/localrepo:ro" -v "$RIVER:/usr/local/bin/river:ro" "$@" \
+		-e FIRST="$FIRST" -e MANIFEST="$MANIFEST" "$BUILDER_IMAGE" sh -euc '
 		pacman -Sy --noconfirm --needed pacman-contrib >/dev/null
-		sed -i "0,/^\[system\]/s||[runink]\nSigLevel = Optional TrustAll\nServer = file:///localrepo\n\n[system]|" /etc/pacman.conf
+		grep -q "^\[$FIRST\]" /etc/pacman.conf || { echo "no [$FIRST] in the builder pacman.conf" >&2; exit 1; }
+		sed -i "0,/^\[$FIRST\]/s||[runink]\nSigLevel = Optional TrustAll\nServer = file:///localrepo\n\n[$FIRST]|" /etc/pacman.conf
 		pacman -Sy >/dev/null
-		for p in /os/iso-profiles/*/Packages-Root /staged/*/Packages-Root; do
+		n=0
+		for p in /os/iso-profiles/*/"$MANIFEST" /staged/*/"$MANIFEST"; do
 			[ -f "$p" ] || continue
-			echo "== lint-closure $p"; river lint closure "$p"
-		done'
+			echo "== lint-closure $p"; river lint closure "$p"; n=$((n + 1))
+		done
+		[ "$n" -gt 0 ] || { echo "no $MANIFEST was checked" >&2; exit 1; }'
 else
 	log "7/8 lints SKIPPED (--no-lint): do not ship this image"
 fi
 
 # --- 8. root stage -----------------------------------------------------------------------------------
 log "8/8 root stage"
-ARCHIVE="$STATE/builder-image.oci.tar"
+ARCHIVE="$STATE/builder-image-$RIVER_BASE.oci.tar"
 ID="$(podman image inspect --format '{{.Id}}' "$BUILDER_IMAGE")"
 if [ "$(cat "$ARCHIVE.id" 2>/dev/null)" != "$ID" ]; then
 	rm -f "$ARCHIVE"
 	podman save --format oci-archive -o "$ARCHIVE" "$BUILDER_IMAGE"
 	echo "$ID" > "$ARCHIVE.id"
+fi
+# The Arch path runs `river iso build` from the static river binary built here (stage 7 builds
+# it too; --no-lint skips that, so it is built again for the root stage).
+WORK="$STATE/artools-$FLAVOR" RIVER_BIN=""
+if [ "$RIVER_BASE" = arch ]; then
+	WORK="$STATE/iso-work-$FLAVOR" RIVER_BIN="$STATE/river"
+	( cd "$REPO/cli" && CGO_ENABLED=0 go build -buildvcs=false -o "$RIVER_BIN" ./cmd/river )
 fi
 ENVF="$STATE/root-stage-$FLAVOR.env"
 {
@@ -432,7 +465,10 @@ ENVF="$STATE/root-stage-$FLAVOR.env"
 	echo "REPO=$REPO"
 	echo "LOCALREPO=$REPODIR"
 	echo "OUT_DIR=$OUT_DIR"
-	echo "WORK_DIR=$STATE/artools-$FLAVOR"
+	echo "WORK_DIR=$WORK"
+	echo "BASE=$RIVER_BASE"
+	echo "ISO_LABEL=$RP_ISO_LABEL"
+	echo "RIVER_BIN=$RIVER_BIN"
 	echo "BUILDER_ARCHIVE=$ARCHIVE"
 	echo "BUILDER_ID=$ID"
 	echo "MODEL_PAYLOAD_DIR=$PAYLOAD_DIR"
@@ -452,8 +488,8 @@ cat <<EOF
 
    sudo sh $HERE/iso-root-stage.sh $ENVF
 
- It loads the builder image into root's podman, runs buildiso in a privileged
- container (work dir $STATE/artools-$FLAVOR, removed after),
+ It loads the builder image into root's podman, runs $( [ "$RIVER_BASE" = arch ] && echo "river iso build (Arch base)" || echo buildiso) in a privileged
+ container (work dir $WORK, removed after),
 $( [ -n "$PAYLOAD_DIR" ] && echo " attaches the encrypted model payload ($(du -sh "$PAYLOAD_DIR" | cut -f1)) under /river-models," )
 $( [ -n "$PAYLOADS_DIR" ] && echo " attaches the downstream payloads ($(du -sh "$PAYLOADS_DIR" | cut -f1)) under /river-<kind>/," )
 $( [ "$RIVER_PUBLIC" = 1 ] && echo " (PUBLIC image: it refuses to attach any payload)" || echo " names it $RP_ISO_NAME-$RIVER_ISO_VARIANT-<date>-x86_64.iso," )

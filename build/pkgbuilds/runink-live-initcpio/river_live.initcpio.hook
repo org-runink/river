@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: 2026 The RIVER Authors
+# SPDX-License-Identifier: MIT
+#
+# river_live — mkinitcpio runtime hook (busybox ash): boot the Runink River live medium.
+#
+# Kernel parameters (the live GRUB entries pass the first two):
+#   label=<LABEL>        the medium's ISO volume label, e.g. RIVER. Without it this hook does
+#                        nothing and the normal root= handling applies.
+#   overlay=livefs       mount LiveOS/livefs.img above LiveOS/rootfs.img (the live layer)
+#   copytoram=y          copy the layers into RAM first and release the medium
+#   cow_spacesize=<size> the tmpfs that holds every write of the session (default 75%)
+#   river_timeout=<s>    how long to wait for the medium to appear (default 30)
+#
+# Layout after switch_root (the init moves /run into the new root):
+#   /run/river/bootmnt       the medium, read-only (empty with copytoram=y)
+#   /run/river/copytoram     the copied layers (copytoram=y only)
+#   /run/river/sfs/rootfs    LiveOS/rootfs.img, the golden system installs clone
+#   /run/river/sfs/livefs    LiveOS/livefs.img, the live-only layer (overlay=livefs)
+#   /run/river/cowspace      the writable tmpfs: upper/ and work/ of the root overlay
+#
+# river_loop_mnt (img_dev= img_loop=, an ISO booted as a file from a multi-image stick) runs
+# after this hook and hands the loop device over in river_live_dev.
+
+river_live_fail() {
+	err "river_live: $*"
+	echo "The live medium could not be mounted. You are in the initramfs shell; 'exit' retries the boot."
+	launch_interactive_shell
+}
+
+# river_live_wait <block device> <seconds>
+river_live_wait() {
+	_rl_n=$(( $2 * 10 ))
+	while [ ! -b "$1" ] && [ "$_rl_n" -gt 0 ]; do
+		sleep 0.1
+		_rl_n=$(( _rl_n - 1 ))
+	done
+	[ -b "$1" ]
+}
+
+# river_live_squash <image> <mount point>
+river_live_squash() {
+	mkdir -p "$2"
+	mount -r -t squashfs -o loop "$1" "$2" || river_live_fail "cannot mount $1"
+}
+
+river_live_mount_handler() {
+	_rl_root="$1" _rl_base=/run/river
+	mkdir -p "$_rl_base/bootmnt" "$_rl_base/cowspace"
+	if [ -n "$river_live_dev" ]; then
+		_rl_dev="$river_live_dev"
+	else
+		_rl_dev="/dev/disk/by-label/$label"
+		msg ":: waiting for the live medium labelled $label"
+		river_live_wait "$_rl_dev" "${river_timeout:-30}" \
+			|| river_live_fail "no device labelled $label appeared within ${river_timeout:-30}s"
+	fi
+	mount -r -t iso9660 "$_rl_dev" "$_rl_base/bootmnt" || river_live_fail "cannot mount $_rl_dev"
+	_rl_src="$_rl_base/bootmnt/LiveOS"
+	[ -f "$_rl_src/rootfs.img" ] || river_live_fail "$_rl_dev has no LiveOS/rootfs.img"
+	if [ "$overlay" = livefs ] && [ ! -f "$_rl_src/livefs.img" ]; then
+		river_live_fail "overlay=livefs, but $_rl_dev has no LiveOS/livefs.img"
+	fi
+
+	if [ "$copytoram" = y ]; then
+		mkdir -p "$_rl_base/copytoram"
+		mount -t tmpfs -o "size=${copytoram_size:-75%},mode=0755" copytoram "$_rl_base/copytoram" \
+			|| river_live_fail "cannot create the RAM copy"
+		msg ":: copying the live layers into RAM"
+		for _rl_img in rootfs.img livefs.img; do
+			[ -f "$_rl_src/$_rl_img" ] || continue
+			cp "$_rl_src/$_rl_img" "$_rl_base/copytoram/$_rl_img" || river_live_fail "cannot copy $_rl_img into RAM (too little memory?)"
+		done
+		umount "$_rl_base/bootmnt" || river_live_fail "cannot release the medium"
+		_rl_src="$_rl_base/copytoram"
+	fi
+
+	river_live_squash "$_rl_src/rootfs.img" "$_rl_base/sfs/rootfs"
+	_rl_lower="$_rl_base/sfs/rootfs"
+	if [ "$overlay" = livefs ]; then
+		river_live_squash "$_rl_src/livefs.img" "$_rl_base/sfs/livefs"
+		_rl_lower="$_rl_base/sfs/livefs:$_rl_lower"
+	fi
+
+	mount -t tmpfs -o "size=${cow_spacesize:-75%},mode=0755" cowspace "$_rl_base/cowspace" \
+		|| river_live_fail "cannot create the writable layer"
+	mkdir -p "$_rl_base/cowspace/upper" "$_rl_base/cowspace/work"
+	mount -t overlay -o "lowerdir=$_rl_lower,upperdir=$_rl_base/cowspace/upper,workdir=$_rl_base/cowspace/work" \
+		river_root "$_rl_root" || river_live_fail "cannot mount the root overlay"
+}
+
+run_hook() {
+	[ -n "$label" ] || return 0
+	modprobe -a -q cdrom sr_mod isofs loop squashfs overlay 2>/dev/null
+	export mount_handler=river_live_mount_handler
+}
+
+# vim: set ft=sh ts=4 sw=4 noet:

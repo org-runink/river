@@ -1,6 +1,10 @@
 ---
 # artools 0.39+ profile for Runink River, the developer workstation: the live/installer ISO (s6).
 #
+# ARCH PATH (RIVER_BASE=arch, `river iso build`, docs/ARCH-BASE.md): the package lists are
+# Packages-Root.arch (rootfs.img) and Packages-Live.arch (livefs.img), installed exactly; the
+# live-session block and the presence of the `livefs:` key below are read from here.
+#
 # THIS is the file artools reads. Packages-Root is NOT read by artools — it feeds
 # `make lint` (closure policy) and `make lock`. And because 20-clone-rootfs.sh installs by
 # rsyncing the LIVE rootfs onto the ZFS target, `rootfs.packages` below is effectively the
@@ -209,12 +213,11 @@ rootfs:
     - plymouth
     # ── graphics: mesa ────────────────────────────────────────────────────────────────
     # vulkan-radeon for the AMD reference machine; vulkan-intel so one image also serves
-    # Intel hardware.
+    # Intel hardware. No libva-mesa-driver: mesa provides and replaces it (VA-API included).
     - mesa
     - vulkan-icd-loader
     - vulkan-radeon
     - vulkan-intel
-    - libva-mesa-driver
     # ── multimedia: codecs + hardware video ─────────────────────────────────────────
     # intel-media-driver = Meteor Lake VA-API (iHD); libva-utils = vainfo.
     - gst-plugins-base
