@@ -61,7 +61,7 @@ is no app store and no telemetry, and nothing in the image calls a hosted AI ser
 | **What it is** | A developer workstation operating system: the DEsk desktop on s6, one pinned kernel (`linux-runink`), an encrypted ZFS root with boot environments, a default-deny firewall, `river-sandbox` for untrusted code, and a graphical installer that sizes the machine before it touches a disk. |
 | **Who it is for** | Developers and teams who build data, analytics and AI software on their own machines and need to know exactly what runs there; and distributions that want a small, auditable base to build on. |
 | **Why it matters** | You can check what runs on your machine. Every upstream is pinned by version and checksum, the rules every change must keep are written down as [invariants](AGENTS.md) and checked in CI, releases are signed offline, and the whole image can be rebuilt from this repository. |
-| **Status** | Pre-release. **No signed release has been published yet.** The first release ships only after it installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that gate is still open. The image is assembled with transitional Artix Linux ISO tooling while the project moves to its own from-source base ([docs/OWN-BASE.md](docs/OWN-BASE.md)). |
+| **Status** | Pre-release. **No signed release has been published yet.** The first release ships only after it installs, reboots, unlocks its disk and reaches a working desktop on real hardware; that gate is still open. The image is assembled with transitional Artix Linux ISO tooling and Artix packages. The project is migrating from Artix to official Arch Linux packages plus its own s6 layer (in progress, [docs/ARCH-BASE.md](docs/ARCH-BASE.md)); until the Arch-based image boots, the shipped image stays Artix-built. Its own from-source base follows ([docs/OWN-BASE.md](docs/OWN-BASE.md)). |
 | **Licence** | **MIT** by default ([LICENSE](LICENSE)); the kernel packaging tree is GPL-2.0-only and the OpenZFS packaging tree CDDL-1.0, shipped as a separate module package. Every file is mapped in [REUSE.toml](REUSE.toml), and CI checks REUSE 3.3 compliance ([docs/LICENSING.md](docs/LICENSING.md)). |
 | **Governance** | Open and written down: [GOVERNANCE.md](GOVERNANCE.md) (lazy consensus, with a public TSC vote as the fallback), [MAINTAINERS.md](MAINTAINERS.md), a draft foundation [CHARTER.md](CHARTER.md). Today Runink River is a single-vendor project with one maintainer. Incubation at a vendor-neutral foundation is planned; **nothing has been submitted**. |
 | **Contribute** | [CONTRIBUTING.md](CONTRIBUTING.md): sign off every commit under the [DCO](CONTRIBUTING.md#developer-certificate-of-origin-dco) (`git commit -s`); there is no CLA. Ask in [Discussions](https://github.com/org-runink/river/discussions), report bugs in [Issues](https://github.com/org-runink/river/issues). |
@@ -288,8 +288,11 @@ Runink River builds on, and pins by version and checksum:
 * Firewall: [nftables](https://netfilter.org/projects/nftables/).
 * Boot: [GRUB](https://www.gnu.org/software/grub/).
 * Tooling: the [Go](https://go.dev) standard library (no third-party Go modules).
-* Transitional image tooling: [Artix Linux](https://artixlinux.org) artools/buildiso, on the
-  build host only, until the own base replaces it.
+* Transitional base: [Artix Linux](https://artixlinux.org) packages and its artools/buildiso ISO
+  tooling (build host only), until the migration to official [Arch Linux](https://archlinux.org)
+  packages plus Runink River's own s6 layer replaces them (in progress,
+  [docs/ARCH-BASE.md](docs/ARCH-BASE.md)). The CI workflows that build the kernel and OpenZFS
+  packages run in the official Arch Linux container; the local build still uses the Artix builder.
 
 ## Information for developers
 

@@ -56,7 +56,7 @@ DEsk desktop runs on elogind and dbus, the same way other non-systemd distributi
 **No.** Runink River is not made, reviewed or endorsed by Arch Linux. Today its image is
 assembled with a fork of **Artix Linux's** ISO tooling and Artix packages, as a
 **transitional** builder; the project is moving to its own from-source base
-([`docs/OWN-BASE.md`](https://github.com/org-runink/river/blob/main/docs/OWN-BASE.md)). An interim Arch Linux base was evaluated and deferred
+([`docs/OWN-BASE.md`](https://github.com/org-runink/river/blob/main/docs/OWN-BASE.md)). Moving off Artix to official Arch Linux packages plus Runink River's own s6 layer is in progress
 ([`docs/ARCH-BASE.md`](https://github.com/org-runink/river/blob/main/docs/ARCH-BASE.md)). It uses the pacman package format.
 
 ### Is the linux-runink AUR package official?

@@ -1,8 +1,8 @@
-name: build linux-runink — sovereign kernel (Artix container)
+name: build linux-runink — sovereign kernel (Arch container)
 
 # The golden node is a HARDENED runtime (no podman, no base-devel), so it cannot build its
-# own kernel. This builds linux-runink OFF-box on a CI runner inside an official
-# Artix container (pacman/makepkg native), and uploads the .pkg.tar.zst so it can be repo-add'd
+# own kernel. This builds linux-runink OFF-box on a CI runner inside the official
+# Arch Linux container (pacman/makepkg native), and uploads the .pkg.tar.zst so it can be repo-add'd
 # into localrepo + baked into the next golden ISO. Manual-dispatch only — a kernel build is heavy.
 #
 # Runs on the project's own `public-ci-vm` machines (workflow_dispatch only, so no
@@ -29,6 +29,12 @@ jobs:
     env:
       # Through env, never spliced into a script (template injection).
       PKGDIR: ${{ inputs.pkgdir }}
+      # The official Arch Linux image, pinned by digest (invariant 9; the same image
+      # builder/arch.Containerfile uses), and the Arch Linux Archive date every package comes from:
+      # ARCH_PIN_DATE in pacman/mirrorlist.pin. The image predates the snapshot, so -Syu brings it
+      # up to it. Bump with the pin. Same pair in zfs-build.yml.
+      ARCH_IMAGE: docker.io/library/archlinux:base-devel-20261122.0.629543@sha256:949ecb1661609ab7e8f6854ba03efd62792e7a796313738e94b040c095c20d91
+      ARCH_ARCHIVE_DATE: '2026/11/25'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -52,17 +58,22 @@ jobs:
           cp -a build /mnt/os-build/build
           echo "== after =="; df -h / /mnt
 
-      - name: makepkg linux-runink inside an Artix container
+      - name: makepkg linux-runink inside the Arch Linux container
         run: |
           set -euo pipefail
           # Mount the /mnt-staged tree as /os and pin the container's TMPDIR onto it too,
           # so the src, .o objects, and the compiler's /tmp .s files all land on /mnt.
-          docker run --rm -v "/mnt/os-build:/os" -e TMPDIR=/os/tmp -e PKGDIR \
+          case "$ARCH_ARCHIVE_DATE" in [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]) ;; *) echo "::error::bad ARCH_ARCHIVE_DATE"; exit 1 ;; esac
+          docker run --rm -v "/mnt/os-build:/os" -e TMPDIR=/os/tmp -e PKGDIR -e ARCH_ARCHIVE_DATE \
             -w "/os/build/pkgbuilds/${PKGDIR}" \
-            docker.io/artixlinux/artixlinux:latest bash -euo pipefail -c '
+            "$ARCH_IMAGE" bash -euo pipefail -c '
               echo "== refresh + toolchain (base-devel + kernel makedeps; go builds build/tools/bpfdoc; RUST is disabled in config.delta) =="
-              pacman-key --init >/dev/null 2>&1 || true
-              pacman -Sy --noconfirm --needed \
+              # Every package from ONE dated Arch Linux Archive snapshot (invariant 9), and -Syu
+              # so the image and the snapshot never mix (no partial upgrade).
+              printf "Server = https://archive.archlinux.org/repos/%s/\$repo/os/\$arch\n" "$ARCH_ARCHIVE_DATE" > /etc/pacman.d/mirrorlist
+              pacman-key --init >/dev/null 2>&1
+              pacman-key --populate archlinux >/dev/null
+              pacman -Syu --noconfirm --needed \
                 base-devel bc cpio go libelf pahole perl tar xz zstd kmod openssl \
                 xxhash zlib bison flex diffutils inetutils
               echo "== no Python: base-devel pulls it in (debugedit -> gdb); remove it (build/kernel-builder.Containerfile) =="

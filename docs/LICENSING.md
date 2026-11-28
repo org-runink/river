@@ -117,6 +117,10 @@ image build cannot run without it. After the move, the tree licensing is:
 
 **Files to rewrite or delete to get off Artix/artools:**
 
+Since 2026-11-28 this happens first through the move to official Arch Linux packages plus our
+own s6 layer (in progress; [ARCH-BASE.md](ARCH-BASE.md) §3 lists every Artix dependency and its
+replacement). The BSD-2-Clause and GPL-3.0 notes above stay true until those files are gone.
+
 - **Delete:** `scripts/patch-artools.go` (it patches artools `buildiso`, `common.yaml`,
   `initcpio.sh` and `grub.sh`), `scripts/fetch-iso-profiles.sh` (it clones Artix
   iso-profiles), and `iso-profiles/*/profile.conf` (legacy artools format, already marked

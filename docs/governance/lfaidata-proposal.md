@@ -87,7 +87,8 @@ anything vendor-specific kept out of the tree as optional, out-of-tree profiles 
 payloads. The kernel moved from a kernel.org LTS build to the zen stable fork in September
 2026; the installer planner, the graphical installer and the guide agent landed the same
 month, and on 2026-09-26 the project's scope became the developer workstation. The image is
-still assembled with transitional Artix tooling while the own base is built. Development is
+still assembled with transitional Artix tooling; the move to official Arch Linux packages plus
+the project's own s6 layer is in progress, and the own base follows. Development is
 active; the repository is public at <https://github.com/org-runink/river>.
 
 ## Statement on alignment with LF AI & Data's mission

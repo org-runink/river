@@ -1,5 +1,11 @@
 # Building the Runink River ISO
 
+> **Migrating from Artix (in progress).** Runink River is moving to official Arch Linux packages
+> plus its own s6 layer and its own ISO builder ([ARCH-BASE.md](ARCH-BASE.md)). Until the Arch-based
+> ISO boots, this page describes the build that ships: Artix packages and `artools`/`buildiso`.
+> The CI kernel and OpenZFS workflows (`kernel-build.yml`, `zfs-build.yml`) already run in the
+> official Arch Linux container.
+
 ## Flow
 
 ```bash

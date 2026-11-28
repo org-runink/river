@@ -11,7 +11,7 @@ Anyone can build the Runink River ISO from this repository. The result is
 `runink-river-<date>-x86_64.iso`, volume label `RIVER`, with its EFI partition labelled
 `RIVER_EFI`. The reference is [`docs/BUILD.md`](https://github.com/org-runink/river/blob/main/docs/BUILD.md); this page is the short path.
 
-> **Note:** The ISO is still assembled with Artix Linux's `buildiso`, the **transitional** builder. The
+> **Note:** The ISO is still assembled with Artix Linux's `buildiso`, the **transitional** builder. Runink River is migrating from Artix to official Arch Linux packages plus Runink River's own s6 layer (in progress, `docs/ARCH-BASE.md`): until the Arch-based ISO boots, the image stays Artix-built and the steps below are the current ones. The
 > own from-source base that replaces it is planned in [`docs/OWN-BASE.md`](https://github.com/org-runink/river/blob/main/docs/OWN-BASE.md)
 > ([Architecture](../architecture/README.md#the-transitional-builder-and-the-own-base)).
 
